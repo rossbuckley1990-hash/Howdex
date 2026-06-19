@@ -1,0 +1,79 @@
+[build-system]
+# setuptools >= 61 is the minimum that supports PEP 621 [project] table.
+# We deliberately keep this low so older environments (RHEL 8, Ubuntu 20.04,
+# Debian 11, macOS system Python) can install without a setuptools upgrade.
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "howdex-ai"
+version = "0.2.1"
+description = "Procedural memory for autonomous agents: turn repeated execution traces into reusable know-how."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{name = "Howdex Collective"}]
+requires-python = ">=3.9"
+keywords = [
+    "ai", "agents", "memory", "llm", "vector-database", "knowledge-graph",
+    "langchain", "crewai", "autogen", "mcp", "model-context-protocol",
+    "local-first", "crdt", "agent-memory", "long-term-memory",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+hnsw = ["hnswlib>=0.7"]
+st = ["sentence-transformers>=2.2"]
+openai = ["openai>=1.0"]
+full = ["hnswlib>=0.7", "sentence-transformers>=2.2"]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+    "ruff>=0.1",
+    "mypy>=1.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/rossbuckley1990-hash/Howdex"
+Repository = "https://github.com/rossbuckley1990-hash/Howdex"
+Documentation = "https://github.com/rossbuckley1990-hash/Howdex#readme"
+Issues = "https://github.com/rossbuckley1990-hash/Howdex/issues"
+Changelog = "https://github.com/rossbuckley1990-hash/Howdex/blob/main/CHANGELOG.md"
+
+[project.scripts]
+howdex = "howdex.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["howdex*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true

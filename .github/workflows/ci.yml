@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    env:
+      HOWDEX_EMBEDDER: hash
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[full]"
+          python -m pip install pytest
+
+      - name: Healthcheck
+        run: |
+          howdex health
+
+      - name: Unit tests
+        run: |
+          python -m pytest -q
+
+      - name: Production API tests
+        run: |
+          python -m pytest tests/test_production_api.py -q
+
+  benchmark-smoke:
+    name: Benchmark smoke test
+    runs-on: ubuntu-latest
+
+    env:
+      HOWDEX_EMBEDDER: hash
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[full]"
+          python -m pip install pytest
+
+      - name: Run SWE-repeat benchmark
+        run: |
+          howdex eval swe-repeat

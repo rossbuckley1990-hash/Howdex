@@ -1,0 +1,43 @@
+name: Nightly Benchmarks
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  swe-repeat:
+    name: SWE-repeat benchmark
+    runs-on: ubuntu-latest
+
+    env:
+      HOWDEX_EMBEDDER: hash
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Howdex
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[full]"
+          python -m pip install pytest
+
+      - name: Healthcheck
+        run: |
+          howdex health
+
+      - name: Run SWE-repeat benchmark
+        run: |
+          howdex eval swe-repeat

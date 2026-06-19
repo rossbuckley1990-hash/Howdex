@@ -1,0 +1,7 @@
+numpy>=1.21
+hnswlib>=0.7
+sentence-transformers>=2.2
+pytest>=7
+pytest-cov>=4
+ruff>=0.1
+mypy>=1.5

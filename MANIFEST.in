@@ -1,0 +1,30 @@
+# MANIFEST.in — controls what gets included in the source distribution (sdist).
+# The wheel (.whl) only includes Python code; the sdist (.tar.gz) needs these
+# explicit includes for non-Python files.
+
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include LICENSE
+include pyproject.toml
+include setup.py
+include requirements.txt
+
+recursive-include docs *.md
+recursive-include examples *.py
+recursive-include tests *.py
+
+# Exclude dev / build artifacts
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.egg-info
+global-exclude .pytest_cache
+global-exclude *.db
+global-exclude *.db-wal
+global-exclude *.db-shm
+global-exclude .DS_Store
+global-exclude .gitignore
+prune .github
+prune build
+prune dist
