@@ -20,6 +20,10 @@
   with match explanations and source episode evidence
 - Idempotent procedure suggestion/use/outcome feedback with automatic session
   resolution and deterministic success/confidence updates
+- Provider-neutral, idempotent verification receipts for procedures, including
+  optional defensive import of local BootProof-like attestations
+- Receipt-backed verification status in procedure suggestions and portable
+  procedure exports
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

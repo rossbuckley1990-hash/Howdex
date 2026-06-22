@@ -28,6 +28,11 @@ from howdex.core.guidance import (
     suggest_procedures,
 )
 from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
+from howdex.core.receipts import (
+    VerificationReceipt,
+    parse_bootproof_attestation,
+    procedure_verification_status,
+)
 from howdex.core.segmentation import (
     DEFAULT_IDLE_GAP_S,
     DEFAULT_MAX_SEGMENT_STEPS,
@@ -68,4 +73,6 @@ __all__ = [
     "SemanticExtractor", "SemanticRecord", "derive_tool_semantics",
     "ProcedureSuggestion", "suggest_procedures", "render_procedure_guidance",
     "procedure_feedback_confidence", "procedure_success_rate",
+    "VerificationReceipt", "parse_bootproof_attestation",
+    "procedure_verification_status",
 ]

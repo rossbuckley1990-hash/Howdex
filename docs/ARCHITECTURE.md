@@ -114,6 +114,14 @@ success rate, and a deterministic confidence blend of extraction confidence,
 observed success, and evidence volume. Successful or failed session close
 automatically resolves pending uses; partial sessions remain unverified.
 
+Independent verification receipts are stored separately from procedure
+feedback in `procedure_receipts`, keyed by procedure and a deterministic
+content digest. This makes attachment idempotent and leaves existing procedure
+rows portable. Receipts are provider-neutral; BootProof attestations are one
+optional JSON input, not a runtime dependency. Suggestions report receipt
+verification as `unverified`, `verified`, `failed_verification`, or `mixed`
+without conflating it with episode support or an unresolved procedure use.
+
 ## Storage: SQLite
 
 We chose SQLite for the v0.1 storage backend because:
@@ -129,6 +137,7 @@ Schema is in `howdex/storage/sqlite_store.py`. Key tables:
 - `memories` — all four layers, with embedding BLOB, relations JSON, vector_clock
 - `episodes` — denormalized session logs (for fast consolidation)
 - `procedures` — learned workflows (also mirrored into `memories` as procedural layer)
+- `procedure_receipts` — optional, idempotent verification evidence for procedures
 - `sync_log` — CRDT op log (every write/delete appended here)
 
 ### Tombstones

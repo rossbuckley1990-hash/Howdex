@@ -36,6 +36,11 @@ from howdex.core.guidance import (
     render_procedure_guidance,
     suggest_procedures,
 )
+from howdex.core.receipts import (
+    VerificationReceipt,
+    parse_bootproof_attestation,
+    procedure_verification_status,
+)
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -71,6 +76,7 @@ def _normalise_procedure_payload(payload):
         "preconditions",
         "raw_supporting_examples",
         "source_episode_ids",
+        "receipts",
     ):
         value = d.get(key)
 
@@ -796,6 +802,49 @@ class Howdex:
             outcome,
         )
         return self._procedure_by_id(procedure_id)
+
+    def attach_receipt(
+        self,
+        procedure_id: str,
+        receipt: VerificationReceipt | dict[str, Any],
+    ) -> VerificationReceipt:
+        """Attach a generic verification receipt idempotently."""
+        self._require_procedure_id(procedure_id)
+        normalized = (
+            receipt
+            if isinstance(receipt, VerificationReceipt)
+            else VerificationReceipt.from_dict(receipt)
+        )
+        self.store.attach_receipt(
+            procedure_id,
+            normalized.receipt_id,
+            normalized.to_dict(),
+        )
+        return normalized
+
+    def list_receipts(self, procedure_id: str) -> list[VerificationReceipt]:
+        """List generic verification receipts attached to a procedure."""
+        self._require_procedure_id(procedure_id)
+        return [
+            VerificationReceipt.from_dict(payload)
+            for payload in self.store.list_receipts(procedure_id)
+        ]
+
+    def import_bootproof_attestation(
+        self,
+        procedure_id: str,
+        path: Union[str, Path] = ".bootproof/attestation.json",
+    ) -> Optional[VerificationReceipt]:
+        """Attach a BootProof-like attestation when the optional file exists."""
+        self._require_procedure_id(procedure_id)
+        receipt = parse_bootproof_attestation(path)
+        if receipt is not None:
+            self.attach_receipt(procedure_id, receipt)
+        return receipt
+
+    def procedure_verification_status(self, procedure_id: str) -> str:
+        """Return the receipt-backed verification state for one procedure."""
+        return procedure_verification_status(self.list_receipts(procedure_id))
 
     def _require_procedure_id(self, procedure_id: str) -> None:
         if self.store.get_procedure_by_id(procedure_id) is None:

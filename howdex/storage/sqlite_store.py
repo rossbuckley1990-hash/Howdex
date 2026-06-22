@@ -24,7 +24,7 @@ from howdex.core.feedback import (
     procedure_success_rate,
 )
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 SCHEMA = """
@@ -118,6 +118,17 @@ CREATE TABLE IF NOT EXISTS procedure_feedback (
 
 CREATE INDEX IF NOT EXISTS idx_procedure_feedback_procedure
     ON procedure_feedback(procedure_id);
+
+CREATE TABLE IF NOT EXISTS procedure_receipts (
+    procedure_id     TEXT NOT NULL,
+    receipt_id       TEXT NOT NULL,
+    payload          TEXT NOT NULL,
+    created_at       REAL NOT NULL,
+    PRIMARY KEY (procedure_id, receipt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_procedure_receipts_procedure
+    ON procedure_receipts(procedure_id);
 
 -- CRDT sync log
 CREATE TABLE IF NOT EXISTS sync_log (
@@ -494,21 +505,66 @@ class Store:
         row = self._conn().execute(
             "SELECT * FROM procedures WHERE task_signature=?", (task_signature,)
         ).fetchone()
-        return _row_to_procedure(row) if row else None
+        return self._procedure_row(row) if row else None
 
     def get_procedure_by_id(self, procedure_id: str) -> Optional[dict[str, Any]]:
         row = self._conn().execute(
             "SELECT * FROM procedures WHERE id=?",
             (procedure_id,),
         ).fetchone()
-        return _row_to_procedure(row) if row else None
+        return self._procedure_row(row) if row else None
 
     def all_procedures(self) -> list[dict[str, Any]]:
         rows = self._conn().execute("SELECT * FROM procedures").fetchall()
         out = []
         for r in rows:
-            out.append(_row_to_procedure(r))
+            out.append(self._procedure_row(r))
         return out
+
+    def attach_receipt(
+        self,
+        procedure_id: str,
+        receipt_id: str,
+        payload: dict[str, Any],
+    ) -> bool:
+        """Attach one receipt idempotently to an existing procedure."""
+        with self.transaction() as conn:
+            self._require_procedure(conn, procedure_id)
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO procedure_receipts(
+                     procedure_id, receipt_id, payload, created_at
+                   ) VALUES (?, ?, ?, ?)""",
+                (
+                    procedure_id,
+                    receipt_id,
+                    json.dumps(payload, sort_keys=True),
+                    time.time(),
+                ),
+            )
+        return cursor.rowcount > 0
+
+    def list_receipts(self, procedure_id: str) -> list[dict[str, Any]]:
+        """Return attached receipt payloads in stable order."""
+        rows = self._conn().execute(
+            """SELECT payload FROM procedure_receipts
+               WHERE procedure_id=?
+               ORDER BY receipt_id""",
+            (procedure_id,),
+        ).fetchall()
+        receipts = []
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict):
+                receipts.append(payload)
+        return receipts
+
+    def _procedure_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        procedure = _row_to_procedure(row)
+        procedure["receipts"] = self.list_receipts(str(row["id"]))
+        return procedure
 
     def mark_procedure_suggested(
         self,

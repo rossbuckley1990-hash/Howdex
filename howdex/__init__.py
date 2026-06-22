@@ -29,6 +29,7 @@ from howdex.core.errors import (
     ConsolidationError,
     SyncError,
 )
+from howdex.core.receipts import VerificationReceipt
 
 __version__ = "0.3.0"
 __author__ = "Howdex Collective"
@@ -42,6 +43,7 @@ __all__ = [
     "HowdexResult",
     "Episode",
     "Procedure",
+    "VerificationReceipt",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",
