@@ -90,6 +90,15 @@ idle gaps, then maximum step count as a fallback. Children retain
 `parent_session_id`; consolidation prefers those children and excludes the raw
 parent from duplicate evidence counting.
 
+Observations and errors cross a typed ingestion boundary before entering an
+episode. The fixed default middleware order strips ANSI controls, redacts
+credentials, compresses progress updates and stack traces, collapses repeated
+lines, then bounds UTF-8 size while retaining both ends. Every changed record
+stores transformation names and redaction status beside the sanitized field.
+Because episode steps and provenance are JSON, this is additive and requires
+no SQLite schema migration. Explicit advanced opt-out bypasses formatting and
+compression only; final secret redaction is invariant.
+
 Before consolidation, canonical steps pass through deterministic
 parameterisation. Volatile paths, packages, URLs, ports, identifiers, branch
 names, environment values, and similar literals become stable typed

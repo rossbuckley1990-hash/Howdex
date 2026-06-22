@@ -31,6 +31,7 @@ from howdex.core.errors import (
 )
 from howdex.core.receipts import VerificationReceipt
 from howdex.core.parameterize import ParameterizedAction
+from howdex.ingest import IngestionPipeline, IngestionRecord
 
 __version__ = "0.3.0"
 __author__ = "Howdex Collective"
@@ -46,6 +47,8 @@ __all__ = [
     "Procedure",
     "VerificationReceipt",
     "ParameterizedAction",
+    "IngestionRecord",
+    "IngestionPipeline",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",

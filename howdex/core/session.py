@@ -27,14 +27,26 @@ class HowdexSession:
         self.success()
         return False
 
-    def step(self, action: str, observation: str, **extra: Any):
+    def step(
+        self,
+        action: str,
+        observation: str,
+        *,
+        sanitize: bool = True,
+        **extra: Any,
+    ):
         if not self.active:
             raise RuntimeError("Howdex session is not active.")
 
         if self.closed:
             raise RuntimeError("Howdex session is already closed.")
 
-        self.memory.log_step(action, observation, **extra)
+        self.memory.log_step(
+            action,
+            observation,
+            sanitize=sanitize,
+            **extra,
+        )
         return self
 
     def tool_call(
@@ -43,6 +55,7 @@ class HowdexSession:
         arguments: dict[str, Any] | None = None,
         observation: str = "",
         metadata: dict[str, Any] | None = None,
+        sanitize: bool = True,
         **extra: Any,
     ):
         """Record a typed tool call instead of a prose-only action."""
@@ -55,6 +68,7 @@ class HowdexSession:
             arguments=arguments,
             observation=observation,
             metadata=metadata,
+            sanitize=sanitize,
             **extra,
         )
         return self

@@ -350,6 +350,53 @@ tools—and any agent framework that emits a tool name plus arguments—use the
 same deterministic path. English command parsing is now a legacy compatibility
 adapter, not the primary canonicalisation mechanism.
 
+### Ingestion pipeline
+
+Howdex treats agent observations and errors as untrusted infrastructure input.
+Before episode storage, indexing, recall, or prompt rendering, step output
+passes through a deterministic typed middleware pipeline:
+
+```text
+ANSI stripping
+-> secret redaction
+-> progress update compression
+-> stack trace compression
+-> repeated line compression
+-> bounded UTF-8 truncation
+```
+
+Each input is represented as an `IngestionRecord` with source, content type,
+timestamp, metadata, redaction status, and an ordered list of transformations
+that actually changed the content. The default size limit is 65,536 bytes and
+retains both the beginning and end with an explicit truncation marker.
+
+```python
+from howdex.ingest import IngestionRecord, default_ingestion_pipeline
+
+record = default_ingestion_pipeline().transform(
+    IngestionRecord(
+        source="cli-agent",
+        content=terminal_output,
+        content_type="stderr",
+    )
+)
+
+print(record.content)
+print(record.transformations_applied)
+```
+
+`log_step()`, `log_tool_call()`, and session-level errors use this pipeline by
+default. Stored step JSON includes `observation_ingestion` and, when relevant,
+`error_ingestion` audit metadata. Existing databases need no migration because
+step records are already extensible JSON.
+
+Advanced callers may pass `sanitize=False` to `log_step()` or
+`log_tool_call()` when byte-for-byte terminal formatting is necessary.
+Compression and control-sequence stripping are then bypassed, but secret
+redaction remains mandatory. A custom `IngestionPipeline` may be supplied to
+`Howdex(ingestion_pipeline=...)`; Howdex still applies a final secret-redaction
+guard before storage.
+
 ### Parameterized procedure templates
 
 Howdex records three deliberately separate forms of every learned step:
