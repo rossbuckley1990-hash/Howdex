@@ -28,6 +28,10 @@
   arguments, with stable typed placeholders and redacted example bindings
 - Generalized procedure templates layered on canonical actions so repeated
   workflows learn reusable algorithms rather than hardcoded macros
+- Strictly typed deterministic ingestion records and middleware for dirty
+  terminal, stdout, stderr, observation, and error payloads
+- ANSI stripping, progress/stack/repeated-line compression, bounded payload
+  truncation, and mandatory secret redaction before episodic storage
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

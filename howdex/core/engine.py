@@ -47,12 +47,19 @@ from howdex.core.working import (
     DEFAULT_WORKING_MAX_ITEMS,
     select_working_context,
 )
+from howdex.ingest import (
+    IngestionPipeline,
+    IngestionRecord,
+    Secret_Redactor,
+    default_ingestion_pipeline,
+)
 from howdex.storage import Store
 from howdex.vectors import VectorIndex, Embedder, auto_embedder
 
 
 DEFAULT_HOME = Path(os.environ.get("HOWDEX_HOME", Path.home() / ".howdex"))
 DEFAULT_DIM = 384
+_MANDATORY_SECRET_REDACTOR = Secret_Redactor()
 
 
 
@@ -94,6 +101,18 @@ def _normalise_procedure_payload(payload):
     return d
 
 
+def _redact_uningested_text(content: Any, *, content_type: str) -> str:
+    """Redact secrets even when advanced callers bypass other middleware."""
+    baseline = str(redact_parameter_evidence(content) or "")
+    return _MANDATORY_SECRET_REDACTOR.transform(
+        IngestionRecord(
+            source="howdex",
+            content=baseline,
+            content_type=content_type,
+        )
+    ).content
+
+
 class Howdex:
     """Procedural memory for autonomous agents.
 
@@ -125,10 +144,14 @@ class Howdex:
         embedder: Union[str, Embedder, None] = None,
         agent_id: Optional[str] = None,
         embed_dim: int = DEFAULT_DIM,
+        ingestion_pipeline: Optional[IngestionPipeline] = None,
     ):
         self.path = Path(path) if path else DEFAULT_HOME / "howdex.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.agent_id = agent_id
+        self.ingestion_pipeline = (
+            ingestion_pipeline or default_ingestion_pipeline()
+        )
 
         # embedder
         if isinstance(embedder, Embedder):
@@ -520,7 +543,14 @@ class Howdex:
         )
         return self._current_session
 
-    def log_step(self, action: str, observation: str, **extra: Any) -> None:
+    def log_step(
+        self,
+        action: str,
+        observation: str,
+        *,
+        sanitize: bool = True,
+        **extra: Any,
+    ) -> None:
         """Record a prose step, or enrich structured fields when supplied."""
         if not self._current_session:
             raise HowdexError("no active session; call start_session() first")
@@ -540,19 +570,84 @@ class Howdex:
                 arguments=arguments,
                 observation=observation,
                 metadata=metadata,
+                sanitize=sanitize,
                 **structured,
             )
             return
-        safe_action = str(redact_parameter_evidence(action) or "")
-        safe_observation = str(
-            redact_parameter_evidence(observation) or ""
+        safe_action = _redact_uningested_text(
+            action,
+            content_type="action",
         )
-        safe_extra = redact_parameter_evidence(extra)
+        raw_extra = dict(extra)
+        has_error = "error" in raw_extra
+        raw_error = raw_extra.pop("error", None)
+        safe_extra = redact_parameter_evidence(raw_extra)
+        if sanitize:
+            observation_record = self._ingest_session_text(
+                str(observation or ""),
+                source=self._current_session.source,
+                content_type="observation",
+                metadata={
+                    "session_id": self._current_session.session_id,
+                    "action": safe_action,
+                },
+            )
+            safe_observation = observation_record.content
+            safe_extra["observation_ingestion"] = (
+                observation_record.audit_metadata()
+            )
+            if has_error and raw_error is not None:
+                error_record = self._ingest_session_text(
+                    str(raw_error),
+                    source=self._current_session.source,
+                    content_type="error",
+                    metadata={
+                        "session_id": self._current_session.session_id,
+                        "action": safe_action,
+                    },
+                )
+                safe_extra["error"] = error_record.content
+                safe_extra["error_ingestion"] = (
+                    error_record.audit_metadata()
+                )
+            elif has_error:
+                safe_extra["error"] = None
+        else:
+            safe_observation = _redact_uningested_text(
+                observation,
+                content_type="observation",
+            )
+            if has_error:
+                safe_extra["error"] = (
+                    None
+                    if raw_error is None
+                    else _redact_uningested_text(
+                        raw_error,
+                        content_type="error",
+                    )
+                )
         self._current_session.add_step(
             safe_action,
             safe_observation,
             **safe_extra,
         )
+
+    def _ingest_session_text(
+        self,
+        content: str,
+        *,
+        source: str,
+        content_type: str,
+        metadata: dict[str, Any],
+    ) -> IngestionRecord:
+        """Apply the configured pipeline plus mandatory final redaction."""
+        record = self.ingestion_pipeline.ingest(
+            content,
+            source=source,
+            content_type=content_type,
+            metadata=metadata,
+        )
+        return _MANDATORY_SECRET_REDACTOR.transform(record)
 
     def log_tool_call(
         self,
@@ -561,6 +656,7 @@ class Howdex:
         observation: str = "",
         metadata: Optional[dict[str, Any]] = None,
         derive_semantics: bool = True,
+        sanitize: bool = True,
         **extra: Any,
     ) -> None:
         """Record a canonical, structured tool step in the current session."""
@@ -586,7 +682,12 @@ class Howdex:
                 "metadata": safe_metadata,
             }
         )
-        self.log_step(canonical.raw_action, observation, **fields)
+        self.log_step(
+            canonical.raw_action,
+            observation,
+            sanitize=sanitize,
+            **fields,
+        )
         if derive_semantics:
             self._remember_tool_semantics(
                 canonical,
@@ -649,6 +750,7 @@ class Howdex:
         *,
         max_segment_steps: int = DEFAULT_MAX_SEGMENT_STEPS,
         idle_gap_s: float = DEFAULT_IDLE_GAP_S,
+        sanitize: bool = True,
     ) -> Episode:
         """Close the current session and persist it as an episodic memory."""
         if not self._current_session:
@@ -664,7 +766,26 @@ class Howdex:
             max_items=DEFAULT_WORKING_MAX_ITEMS,
             max_chars=DEFAULT_WORKING_MAX_CHARS,
         )
-        ep.close(outcome, error)
+        safe_error = error
+        if error is not None:
+            if sanitize:
+                error_record = self._ingest_session_text(
+                    str(error),
+                    source=ep.source,
+                    content_type="error",
+                    metadata={"session_id": ep.session_id},
+                )
+                safe_error = error_record.content
+                ep.provenance = {
+                    **ep.provenance,
+                    "error_ingestion": error_record.audit_metadata(),
+                }
+            else:
+                safe_error = _redact_uningested_text(
+                    error,
+                    content_type="error",
+                )
+        ep.close(outcome, safe_error)
         child_episodes = segment_episode(
             ep,
             max_steps=max_segment_steps,
