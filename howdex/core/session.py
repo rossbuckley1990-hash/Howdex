@@ -27,14 +27,14 @@ class HowdexSession:
         self.success()
         return False
 
-    def step(self, action: str, observation: str):
+    def step(self, action: str, observation: str, **extra: Any):
         if not self.active:
             raise RuntimeError("Howdex session is not active.")
 
         if self.closed:
             raise RuntimeError("Howdex session is already closed.")
 
-        self.memory.log_step(action, observation)
+        self.memory.log_step(action, observation, **extra)
         return self
 
     def tool_call(

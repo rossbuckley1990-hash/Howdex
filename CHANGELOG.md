@@ -12,6 +12,8 @@
   matched rules
 - Session-scoped working-memory context with deterministic importance/recency
   eviction, prompt budgeting, and bounded episodic snapshots
+- Structured episodic provenance and conservative task/target/idle/step-count
+  segmentation with raw-parent preservation
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

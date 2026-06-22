@@ -383,11 +383,19 @@ def test_legacy_episode_database_remains_readable_and_learnable(tmp_path):
     connection.close()
 
     memory = Howdex(path=path, embedder="hashing")
-    stored_steps = json.loads(memory.store.query_episodes()[0]["steps"])
+    migrated_episode = memory.store.query_episodes()[0]
+    stored_steps = json.loads(migrated_episode["steps"])
     reopened = Howdex(path=path, embedder="hashing")
     procedure = reopened.learn(min_samples=2)[0]
 
     assert "tool_name" not in stored_steps[0]
+    assert migrated_episode["step_count"] == 3
+    assert migrated_episode["source"] == "agent"
+    assert migrated_episode["provenance"] == {}
+    assert migrated_episode["parent_session_id"] is None
+    assert migrated_episode["is_segment"] is False
+    assert migrated_episode["start_time"] == migrated_episode["started_at"]
+    assert migrated_episode["end_time"] == migrated_episode["finished_at"]
     assert len(reopened.store.query_episodes()) == 2
     assert [step["action"] for step in procedure.steps] == [
         "inspect_package_manifest",
