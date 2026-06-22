@@ -629,6 +629,49 @@ if proc and proc.success_rate > 0.7:
     print(f"Try this sequence: {[s['action'] for s in proc.steps]}")
 ```
 
+### Using learned procedures before acting
+
+`suggest_procedure()` closes the learning loop by ranking relevant procedures
+against the current task and optional working/tool context before an agent
+acts. Ranking is deterministic and inspectable: task-signature similarity,
+canonical action overlap, target/domain hints, confidence, and success rate.
+Procedure recency is not used because Howdex does not currently treat newer
+procedures as inherently more applicable.
+
+```python
+suggestions = mem.suggest_procedure(
+    "publish release",
+    context={
+        "tool_name": "github.create_pr",
+        "tool_args": {"repo": "acme/service", "title": "Release v1"},
+    },
+    top_k=1,
+    min_confidence=0.7,
+)
+
+guidance = mem.render_procedure_guidance(suggestions)
+print(guidance)
+```
+
+Example:
+
+```text
+[Howdex procedure guidance]
+WARNING: Guidance only. Review preconditions and evidence; do not execute automatically.
+Suggestion 1: publish release
+Procedure: publish-release | match=0.9360 | confidence=0.9300 | success_rate=1.0000 | support=4
+Preconditions: tests_green
+Steps:
+1. github.create_pr (intent=create; target=repo=acme/service; side_effect_class=external_write)
+Proof status: observed_episode_support_not_independently_verified
+Source episodes: episode-a, episode-b
+```
+
+Suggestions include canonical steps, applicability/preconditions, source
+episode IDs, proof status, and a component-level match explanation. The
+rendered block is guidance only: Howdex never executes the procedure or treats
+historical success as current authorization.
+
 ---
 
 ## 📘 API Reference
@@ -664,6 +707,16 @@ Build deterministic prompt-ready working context for one session. If
 `session_id` is omitted, the active session is used. `token_budget` uses a
 four-characters-per-token approximation and is capped by `max_chars` when both
 are provided.
+
+### `.suggest_procedure(task, context=None, top_k=3, min_confidence=0.0)`
+
+Return up to three deterministic `ProcedureSuggestion` objects with canonical
+steps, evidence, provenance, and inspectable match components.
+
+### `.render_procedure_guidance(suggestions, *, max_chars=4000)`
+
+Render suggestions into a compact prompt block that explicitly warns against
+automatic execution.
 
 ### `.forget(memory_id)`
 

@@ -6,8 +6,9 @@ import json
 
 import os
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Optional, Union, Iterable
+from typing import Any, Optional, Union
 
 from howdex.core.types import (
     Memory,
@@ -30,6 +31,11 @@ from howdex.core.segmentation import (
     segment_episode,
 )
 from howdex.core.semantic import derive_tool_semantics
+from howdex.core.guidance import (
+    ProcedureSuggestion,
+    render_procedure_guidance,
+    suggest_procedures,
+)
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -413,51 +419,22 @@ class Howdex:
         min_confidence: float = 0.6,
     ) -> list[HowdexResult]:
         """Conservatively retrieve a small number of credible procedures."""
-        query_tokens = set(tokenize(query))
-        ranked: list[tuple[float, Procedure]] = []
-        for procedure in self.list_procedures(
+        suggestions = self.suggest_procedure(
+            query,
+            top_k=top_k,
             min_confidence=min_confidence,
-            limit=None,
-        ):
-            searchable = " ".join(
-                [
-                    procedure.task_signature,
-                    *[
-                        str(step.get("action", ""))
-                        for step in procedure.steps
-                        if isinstance(step, dict)
-                    ],
-                ]
-            )
-            procedure_tokens = set(tokenize(searchable))
-            lexical = (
-                len(query_tokens & procedure_tokens) / len(query_tokens)
-                if query_tokens
-                else 0.0
-            )
-            if query.lower().strip() in procedure.task_signature.lower():
-                lexical = max(lexical, 1.0)
-            score = (0.55 * procedure.confidence) + (0.45 * lexical)
-            if score >= min_score:
-                ranked.append((score, procedure))
-
-        ranked.sort(
-            key=lambda item: (
-                item[0],
-                item[1].confidence,
-                item[1].support_count,
-                item[1].task_signature,
-            ),
-            reverse=True,
         )
-        limit = min(3, max(1, top_k))
         return [
             HowdexResult(
-                memory=procedure.to_memory(),
-                score=round(score, 4),
+                memory=self.get_procedure(
+                    suggestion.task_signature,
+                    min_confidence=0.0,
+                ).to_memory(),
+                score=round(suggestion.score, 4),
                 matched_by="procedure",
             )
-            for score, procedure in ranked[:limit]
+            for suggestion in suggestions
+            if suggestion.score >= min_score
         ]
 
     def search(
@@ -752,6 +729,40 @@ class Howdex:
             reverse=True,
         )
         return procedures[:limit] if limit is not None else procedures
+
+    def suggest_procedure(
+        self,
+        task: str,
+        context: dict[str, Any] | str | None = None,
+        top_k: int = 3,
+        min_confidence: float = 0.0,
+    ) -> list[ProcedureSuggestion]:
+        """Suggest relevant learned procedures before an agent acts."""
+        resolved_context = context
+        if resolved_context is None and self._current_session is not None:
+            resolved_context = self.get_working_context(
+                self._current_session.session_id,
+                include_provenance=False,
+            )
+        return suggest_procedures(
+            self.list_procedures(min_confidence=0.0, limit=None),
+            task,
+            resolved_context,
+            top_k=top_k,
+            min_confidence=min_confidence,
+        )
+
+    def render_procedure_guidance(
+        self,
+        suggestions: ProcedureSuggestion | Iterable[ProcedureSuggestion],
+        *,
+        max_chars: int = 4_000,
+    ) -> str:
+        """Render compact procedure guidance for prompt injection."""
+        return render_procedure_guidance(
+            suggestions,
+            max_chars=max_chars,
+        )
 
     def export_procedures(
         self,

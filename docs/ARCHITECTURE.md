@@ -99,6 +99,13 @@ Optional `SemanticExtractor` implementations—including LLM-backed ones—are
 application-controlled, non-deterministic extensions rather than part of the
 default path.
 
+Procedural retrieval can run before an action. `suggest_procedure()` combines
+task-signature similarity, canonical action overlap, target/domain hints, and
+stored confidence/success evidence using fixed local weights. It returns
+structured suggestions with source episode IDs and match components.
+`render_procedure_guidance()` produces bounded prompt text with an explicit
+guidance-only warning; retrieval never authorizes or executes an action.
+
 ## Storage: SQLite
 
 We chose SQLite for the v0.1 storage backend because:
