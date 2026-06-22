@@ -53,9 +53,10 @@ def test_long_session_splits_by_max_step_count_without_data_loss(tmp_path):
     ]
 
 
-def test_session_splits_on_conservative_major_target_change(tmp_path):
-    memory = Howdex(path=tmp_path / "targets.db", embedder="hashing")
-    memory.start_session("prepare and publish release")
+def test_short_session_does_not_split_on_major_target_change(tmp_path):
+    memory = Howdex(path=str(tmp_path / "segments.db"), embedder="hashing")
+
+    memory.start_session("release_change")
     memory.log_tool_call(
         "filesystem.read_file",
         {"path": "pyproject.toml"},
@@ -80,19 +81,7 @@ def test_session_splits_on_conservative_major_target_change(tmp_path):
     memory.end_session("success", max_segment_steps=100)
     _, children = _episode_rows(memory)
 
-    assert len(children) == 2
-    assert [step["canonical_action"] for step in _steps(children[0])] == [
-        "filesystem.read_file",
-        "filesystem.write_file",
-    ]
-    assert [step["canonical_action"] for step in _steps(children[1])] == [
-        "github.create_pr",
-        "github.update_pr",
-    ]
-    assert (
-        children[1]["provenance"]["segmentation_rule"]
-        == "major_target_change"
-    )
+    assert children == []
 
 
 def test_explicit_task_boundary_sets_child_task_signature(tmp_path):
