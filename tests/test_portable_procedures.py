@@ -152,6 +152,42 @@ def test_procedure_import_restores_without_duplicates(tmp_path):
         restored.close()
 
 
+def test_portable_procedure_preserves_verification_receipts(tmp_path):
+    source_db = tmp_path / "source.db"
+    destination_db = tmp_path / "destination.db"
+    export_dir = tmp_path / "portable"
+    _seed_procedure(source_db)
+    source = Howdex(path=source_db, embedder="hashing")
+    procedure = source.list_procedures()[0]
+    source.attach_receipt(
+        procedure.id,
+        {
+            "receipt_type": "test",
+            "status": "pass",
+            "command": "pytest -q",
+            "digest": "sha256:portable",
+        },
+    )
+    source.export_procedures(export_dir)
+    source.close()
+
+    procedure_file = next(export_dir.glob("*.json"))
+    document = json.loads(procedure_file.read_text())
+    assert document["verification"]["status"] == "verified"
+    assert len(document["verification"]["receipts"]) == 1
+
+    destination = Howdex(path=destination_db, embedder="hashing")
+    first = destination.import_procedures(procedure_file)
+    second = destination.import_procedures(procedure_file)
+    restored = destination.list_procedures()[0]
+
+    assert first["imported"] == 1
+    assert second["unchanged"] == 1
+    assert len(destination.list_receipts(restored.id)) == 1
+    assert destination.procedure_verification_status(restored.id) == "verified"
+    destination.close()
+
+
 def test_v1_portable_procedure_remains_importable(tmp_path):
     source_db = tmp_path / "source.db"
     destination_db = tmp_path / "destination.db"

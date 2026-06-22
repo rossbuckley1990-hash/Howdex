@@ -713,6 +713,57 @@ uses 45% verified success rate, and 15% evidence volume (saturating at five
 verified examples). Suggested-only events never change success statistics;
 used-but-unresolved events are tracked as `unverified_use_count`.
 
+### Verified procedural memory
+
+Procedures can carry zero or more provider-neutral verification receipts.
+Receipts record a verification type (`test`, `build`, `bootproof`, or a custom
+type), pass/fail status, command or target, timestamp, digest, optional
+signature/source, metadata, and a redacted raw payload. Attaching the same
+receipt twice is idempotent.
+
+```python
+from howdex import VerificationReceipt
+
+receipt = VerificationReceipt(
+    receipt_type="test",
+    command="pytest -q",
+    status="pass",
+    digest="sha256:...",
+)
+mem.attach_receipt(suggestion.procedure_id, receipt)
+
+print(mem.procedure_verification_status(suggestion.procedure_id))
+# verified
+```
+
+Receipt-backed status is deliberately conservative:
+
+| Status | Meaning |
+|---|---|
+| `unverified` | No attached pass/fail receipt |
+| `verified` | At least one passing receipt and no failing receipt |
+| `failed_verification` | At least one failing receipt and no passing receipt |
+| `mixed` | Both passing and failing receipts exist |
+
+Procedure suggestions expose `verification_status`, `procedure_verified`, and
+the attached receipt payloads separately from the existing episode-evidence
+`proof_status`. Portable procedure exports include receipts without breaking
+v1 or receipt-free v2 imports.
+
+BootProof is optional. If a local attestation exists, Howdex can import its
+JSON without importing or installing BootProof:
+
+```python
+mem.import_bootproof_attestation(
+    suggestion.procedure_id,
+    ".bootproof/attestation.json",
+)
+```
+
+Missing files return `None`; malformed attestations are rejected rather than
+silently treated as proof. Obvious secrets in metadata, commands, URIs, and
+raw payloads are redacted before storage.
+
 ---
 
 ## 📘 API Reference

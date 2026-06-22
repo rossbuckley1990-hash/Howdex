@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from howdex.core.actions import canonicalize_steps
+from howdex.core.receipts import procedure_verification_status
 from howdex.core.retrieval import tokenize
 from howdex.core.types import Procedure
 
@@ -30,6 +31,9 @@ class ProcedureSuggestion:
     score: float
     match_explanation: dict[str, Any]
     proof_status: str
+    verification_status: str
+    procedure_verified: bool
+    verification_receipts: list[dict[str, Any]]
 
     @property
     def canonical_steps(self) -> list[dict[str, Any]]:
@@ -48,6 +52,9 @@ class ProcedureSuggestion:
             "score": self.score,
             "match_explanation": self.match_explanation,
             "proof_status": self.proof_status,
+            "verification_status": self.verification_status,
+            "procedure_verified": self.procedure_verified,
+            "verification_receipts": self.verification_receipts,
         }
 
 
@@ -123,6 +130,9 @@ def suggest_procedures(
             )
             if value > 0.0
         ]
+        verification_status = procedure_verification_status(
+            procedure.receipts
+        )
         ranked.append(
             ProcedureSuggestion(
                 procedure_id=procedure.id,
@@ -144,6 +154,9 @@ def suggest_procedures(
                     "recency_used": False,
                 },
                 proof_status=_proof_status(procedure),
+                verification_status=verification_status,
+                procedure_verified=verification_status == "verified",
+                verification_receipts=list(procedure.receipts),
             )
         )
 
@@ -227,6 +240,11 @@ def render_procedure_guidance(
         blocks.extend(
             [
                 f"Proof status: {suggestion.proof_status}",
+                (
+                    f"Verification status: "
+                    f"{suggestion.verification_status} "
+                    f"({len(suggestion.verification_receipts)} receipts)"
+                ),
                 (
                     "Source episodes: "
                     + (

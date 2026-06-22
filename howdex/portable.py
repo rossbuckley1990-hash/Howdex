@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from howdex.core.feedback import procedure_feedback_confidence
+from howdex.core.receipts import (
+    VerificationReceipt,
+    procedure_verification_status,
+)
 from howdex.core.types import Procedure
 from howdex.storage import Store
 
@@ -69,6 +73,7 @@ def import_procedures(store: Store, source: str | Path) -> dict[str, int]:
 
         if existing is None:
             store.put_procedure(dict(procedure.__dict__))
+            _store_receipts(store, procedure)
             counts["imported"] += 1
             continue
 
@@ -78,6 +83,7 @@ def import_procedures(store: Store, source: str | Path) -> dict[str, int]:
             continue
 
         store.put_procedure(dict(merged.__dict__))
+        _store_receipts(store, merged)
         counts["updated"] += 1
 
     return counts
@@ -193,6 +199,10 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
             "suggestion_count": procedure.suggestion_count,
             "unverified_use_count": procedure.unverified_use_count,
         },
+        "verification": {
+            "status": procedure_verification_status(procedure.receipts),
+            "receipts": procedure.receipts,
+        },
     }
 
 
@@ -223,6 +233,17 @@ def procedure_from_document(
     evidence = document.get("success_evidence") or {}
     timestamps = document.get("timestamps") or {}
     usage = document.get("usage") or {}
+    verification = document.get("verification") or {}
+    if not isinstance(verification, dict):
+        raise ValueError(f"{label} verification must be an object")
+    receipts = [
+        VerificationReceipt.from_dict(receipt).to_dict()
+        for receipt in _list_value(
+            verification.get("receipts"),
+            "verification.receipts",
+            label,
+        )
+    ]
     success_rate = float(evidence.get("success_rate", 0.0))
     sample_count = int(evidence.get("sample_count", 0))
     support_count = int(evidence.get("support_count", sample_count))
@@ -288,6 +309,7 @@ def procedure_from_document(
                 label,
             )
         ],
+        receipts=receipts,
         created_at=_parse_timestamp(timestamps.get("created_at")) or time.time(),
         last_used_at=_parse_timestamp(timestamps.get("last_used_at")),
         use_count=int(usage.get("use_count", 0)),
@@ -301,6 +323,7 @@ def _procedure_from_store(payload: dict[str, Any]) -> Procedure:
         "preconditions",
         "raw_supporting_examples",
         "source_episode_ids",
+        "receipts",
     ):
         value = data.get(key)
         if isinstance(value, str):
@@ -346,6 +369,10 @@ def _merge_with_existing(
             *map(str, incoming.source_episode_ids),
         }
     )
+    receipts = _merge_receipts(
+        existing_proc.receipts,
+        incoming.receipts,
+    )
     base_confidence = (
         incoming.base_confidence
         or existing_proc.base_confidence
@@ -388,6 +415,7 @@ def _merge_with_existing(
         ),
         raw_supporting_examples=incoming.raw_supporting_examples,
         source_episode_ids=source_episode_ids,
+        receipts=receipts,
         created_at=created_at,
         last_used_at=max(last_used_candidates) if last_used_candidates else None,
         use_count=max(existing_proc.use_count, incoming.use_count),
@@ -397,6 +425,28 @@ def _merge_with_existing(
 def _stored_procedure_equal(existing: dict[str, Any], candidate: Procedure) -> bool:
     current = _procedure_from_store(existing)
     return current == candidate
+
+
+def _store_receipts(store: Store, procedure: Procedure) -> None:
+    for payload in procedure.receipts:
+        receipt = VerificationReceipt.from_dict(payload)
+        store.attach_receipt(
+            procedure.id,
+            receipt.receipt_id,
+            receipt.to_dict(),
+        )
+
+
+def _merge_receipts(
+    existing: list[dict[str, Any]],
+    incoming: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    receipts = {
+        receipt.receipt_id: receipt.to_dict()
+        for payload in [*existing, *incoming]
+        for receipt in [VerificationReceipt.from_dict(payload)]
+    }
+    return [receipts[key] for key in sorted(receipts)]
 
 
 def _procedure_files(source: Path) -> list[Path]:

@@ -270,6 +270,7 @@ class Procedure:
     unverified_use_count: int = 0
     raw_supporting_examples: list[dict[str, Any]] = field(default_factory=list)
     source_episode_ids: list[str] = field(default_factory=list)
+    receipts: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_used_at: Optional[float] = None
     use_count: int = 0
@@ -305,6 +306,7 @@ class Procedure:
                 "unverified_use_count": self.unverified_use_count,
                 "raw_supporting_examples": self.raw_supporting_examples,
                 "source_episode_ids": self.source_episode_ids,
+                "verification_receipts": self.receipts,
                 "use_count": self.use_count,
                 "last_used_at": self.last_used_at,
             },
