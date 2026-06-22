@@ -7,7 +7,7 @@ Equivalent to invoking `howdex.cli:main`. Supports both:
 
 This means you can use Howdex straight after unzipping, WITHOUT installing:
 
-    unzip howdex-0.2.1.zip
+    unzip howdex-0.2.5.zip
     cd howdex
     python -m howdex init
     python -m howdex remember "hello"

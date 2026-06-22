@@ -152,11 +152,11 @@ pip install howdex-ai[full]
 ### From the zip (no PyPI needed)
 
 ```bash
-unzip howdex-0.2.1.zip
+unzip howdex-0.2.5.zip
 cd howdex
 
 # Option A — install from the prebuilt wheel (zero build tooling required):
-pip install dist/howdex_ai-0.2.1-py3-none-any.whl
+pip install dist/howdex_ai-0.2.5-py3-none-any.whl
 
 # Option B — install from source:
 pip install .
@@ -174,7 +174,7 @@ python -m howdex search "hello"
 **Verify it works:**
 
 ```bash
-howdex --version           # → howdex 0.2.1
+howdex --version           # → howdex 0.2.5
 howdex init                # creates ~/.howdex/howdex.db
 howdex remember "Hello, world"
 howdex search "hello" --min-score 0.0
@@ -188,7 +188,7 @@ howdex search "hello" --min-score 0.0
 Don't want to commit to an install? You can try Howdex straight from the unzipped source tree. The `howdex/__main__.py` entry point makes `python -m howdex` work without any install step:
 
 ```bash
-unzip howdex-0.2.1.zip
+unzip howdex-0.2.5.zip
 cd howdex
 
 # Zero install, zero config:
