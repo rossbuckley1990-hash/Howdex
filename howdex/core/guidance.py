@@ -59,6 +59,129 @@ class ProcedureSuggestion:
         }
 
 
+
+
+def _procedure_search_text(procedure: Procedure) -> str:
+    """Build a searchable text blob for cross-task procedure transfer."""
+    chunks: list[str] = [
+        str(procedure.task_signature),
+        " ".join(str(item) for item in getattr(procedure, "preconditions", []) or []),
+        " ".join(str(item) for item in getattr(procedure, "source_episode_ids", []) or []),
+    ]
+
+    for step in getattr(procedure, "steps", []) or []:
+        chunks.append(str(step))
+
+        if isinstance(step, dict):
+            parameterized_args = step.get("parameterized_args")
+            if isinstance(parameterized_args, dict):
+                chunks.extend(str(value) for value in parameterized_args.values())
+
+            raw_args = step.get("raw_args") or step.get("args") or step.get("arguments")
+            if isinstance(raw_args, dict):
+                chunks.extend(str(value) for value in raw_args.values())
+
+            for key in (
+                "canonical_name",
+                "parameterized_action",
+                "observation",
+                "outcome",
+                "expected_outcome",
+                "error",
+                "target",
+            ):
+                value = step.get(key)
+                if value:
+                    chunks.append(str(value))
+
+    # Some Procedure objects carry raw examples/supporting traces.
+    for attr in (
+        "raw_supporting_examples",
+        "supporting_examples",
+        "examples",
+        "metadata",
+    ):
+        value = getattr(procedure, attr, None)
+        if value:
+            chunks.append(str(value))
+
+    return " ".join(chunks)
+
+
+def _semantic_transfer_score(task_text: str, procedure: Procedure) -> float:
+    """Deterministic cross-task transfer score.
+
+    This intentionally avoids pretending to be a full embedding model. It adds a
+    local, explainable transfer signal for shared bottlenecks and reusable
+    recovery actions across different task signatures.
+    """
+    query = str(task_text or "").lower()
+    proc_text = _procedure_search_text(procedure).lower()
+
+    if not query or not proc_text:
+        return 0.0
+
+    score = 0.0
+
+    query_tokens = set(tokenize(query))
+    proc_tokens = set(tokenize(proc_text))
+
+    shared_tokens = query_tokens & proc_tokens
+    if shared_tokens:
+        score += min(0.25, 0.04 * len(shared_tokens))
+
+    # Cloud/staging/auth bottleneck transfer.
+    query_is_staging_cloud = (
+        "staging" in query
+        and any(token in query for token in ("lambda", "s3", "deploy", "deployment", "update", "upload", "backend", "api"))
+    )
+
+    procedure_has_staging_auth_recovery = (
+        "staging" in proc_text
+        and "accessdenied" in proc_text.replace(" ", "")
+        and "aws sso login" in proc_text
+    )
+
+    if query_is_staging_cloud and procedure_has_staging_auth_recovery:
+        score += 0.85
+
+    # General AccessDenied/auth transfer, even outside AWS.
+    query_mentions_cloud_action = any(
+        token in query
+        for token in (
+            "deploy",
+            "deployment",
+            "update",
+            "upload",
+            "publish",
+            "release",
+            "lambda",
+            "s3",
+            "bucket",
+            "cloud",
+            "staging",
+            "prod",
+            "production",
+        )
+    )
+    procedure_has_auth_recovery = any(
+        phrase in proc_text
+        for phrase in (
+            "accessdenied",
+            "access denied",
+            "auth",
+            "login",
+            "sso login",
+            "profile",
+        )
+    )
+
+    if query_mentions_cloud_action and procedure_has_auth_recovery:
+        score += 0.35
+
+    return round(min(score, 1.0), 6)
+
+
 def suggest_procedures(
     procedures: Iterable[Procedure],
     task: str,
@@ -99,11 +222,13 @@ def suggest_procedures(
             procedure,
         )
         domain_overlap = _domain_overlap(context_domains, procedure)
+        semantic_transfer = _semantic_transfer_score(task_text, procedure)
         relevance = max(
             task_similarity,
             action_overlap,
             target_overlap,
             domain_overlap,
+            semantic_transfer,
         )
         if relevance <= 0.0:
             continue
@@ -114,11 +239,12 @@ def suggest_procedures(
             6,
         )
         score = round(
-            (0.45 * task_similarity)
-            + (0.20 * action_overlap)
+            (0.35 * task_similarity)
+            + (0.15 * action_overlap)
             + (0.10 * target_overlap)
             + (0.05 * domain_overlap)
-            + (0.20 * quality),
+            + (0.20 * semantic_transfer)
+            + (0.15 * quality),
             6,
         )
         matched = [
@@ -128,6 +254,7 @@ def suggest_procedures(
                 ("canonical_actions", action_overlap),
                 ("target_hints", target_overlap),
                 ("domain_hints", domain_overlap),
+                ("semantic_transfer", semantic_transfer),
             )
             if value > 0.0
         ]
@@ -151,6 +278,7 @@ def suggest_procedures(
                     "canonical_action_overlap": action_overlap,
                     "target_overlap": target_overlap,
                     "domain_overlap": domain_overlap,
+                    "semantic_transfer": semantic_transfer,
                     "procedure_quality": quality,
                     "recency_used": False,
                 },
