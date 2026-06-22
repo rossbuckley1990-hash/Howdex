@@ -897,13 +897,26 @@ class Howdex:
                 self._current_session.session_id,
                 include_provenance=False,
             )
-        return suggest_procedures(
+        suggestions = suggest_procedures(
             self.list_procedures(min_confidence=0.0, limit=None),
             task,
             resolved_context,
             top_k=top_k,
             min_confidence=min_confidence,
         )
+
+        if self._current_session is not None:
+            for suggestion in suggestions:
+                self.mark_procedure_suggested(
+                    suggestion.procedure_id,
+                    self._current_session.session_id,
+                )
+                self.mark_procedure_used(
+                    suggestion.procedure_id,
+                    self._current_session.session_id,
+                )
+
+        return suggestions
 
     def mark_procedure_suggested(
         self,
