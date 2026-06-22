@@ -1,6 +1,7 @@
 """Deterministic canonicalisation for structured agent tool calls."""
 
 from __future__ import annotations
+import ast
 
 import hashlib
 import json
@@ -424,6 +425,84 @@ def tool_call_from_step(step: Any) -> CanonicalAction | None:
             metadata.setdefault("call_id", tool_call.get("id"))
             return canonicalize_tool_call(str(name), arguments, metadata)
 
+    # Support steps where the actual tool call is nested under "action",
+    # e.g. {"action": {"tool": "fs", "cmd": "write", "file": "app.js"}}.
+    # The stress harness and some agent logs use this shape.
+    action_value = step.get("action")
+
+    # Some storage paths stringify dict actions with Python repr, e.g.
+    # "{'tool': 'fs', 'cmd': 'write', 'file': 'app.js'}".
+    # Parse those safely before falling through to legacy prose.
+    if isinstance(action_value, str):
+        stripped_action = action_value.strip()
+        if stripped_action.startswith("{") and stripped_action.endswith("}"):
+            parsed_action = None
+            try:
+                parsed_action = json.loads(stripped_action)
+            except Exception:
+                try:
+                    parsed_action = ast.literal_eval(stripped_action)
+                except Exception:
+                    parsed_action = None
+
+            if isinstance(parsed_action, Mapping):
+                nested_step = dict(parsed_action)
+
+                for context_key in (
+                    "tool_metadata",
+                    "metadata",
+                    "observation",
+                    "outcome",
+                    "error",
+                    "ts",
+                    "timestamp",
+                    "start_time",
+                    "end_time",
+                    "started_at",
+                    "ended_at",
+                    "step_id",
+                    "span_id",
+                    "parallel_group_id",
+                    "parent_step_ids",
+                    "ordering_index",
+                ):
+                    if context_key in step and context_key not in nested_step:
+                        nested_step[context_key] = step[context_key]
+
+                nested_call = tool_call_from_step(nested_step)
+                if nested_call is not None:
+                    return nested_call
+
+    if isinstance(action_value, Mapping):
+        nested_step = dict(action_value)
+
+        # Preserve useful context/metadata from the outer step without letting
+        # it pollute the structured tool arguments.
+        for context_key in (
+            "tool_metadata",
+            "metadata",
+            "observation",
+            "outcome",
+            "error",
+            "ts",
+            "timestamp",
+            "start_time",
+            "end_time",
+            "started_at",
+            "ended_at",
+            "step_id",
+            "span_id",
+            "parallel_group_id",
+            "parent_step_ids",
+            "ordering_index",
+        ):
+            if context_key in step and context_key not in nested_step:
+                nested_step[context_key] = step[context_key]
+
+        nested_call = tool_call_from_step(nested_step)
+        if nested_call is not None:
+            return nested_call
+
     name = step.get("tool_name") or step.get("tool")
     arguments_value = (
         step.get("arguments")
@@ -433,6 +512,65 @@ def tool_call_from_step(step: Any) -> CanonicalAction | None:
             step.get("tool_input", step.get("args", step.get("input"))),
         )
     )
+
+    # Support flat tool-call dictionaries emitted by simple agents/tests, e.g.
+    # {"tool": "fs", "cmd": "write", "file": "app.js"}
+    # {"tool": "bash", "cmd": "npm install cors", "cwd": "./"}
+    #
+    # Without this, those records fall through to legacy prose parsing, losing
+    # structured arguments such as "file" and breaking parameterized learning.
+    if name and arguments_value is None:
+        excluded_keys = {
+            "tool",
+            "tool_name",
+            "name",
+            "metadata",
+            "tool_metadata",
+            "observation",
+            "outcome",
+            "error",
+            "ts",
+            "timestamp",
+            "start_time",
+            "end_time",
+            "started_at",
+            "ended_at",
+            "step_id",
+            "span_id",
+            "parallel_group_id",
+            "parent_step_ids",
+            "ordering_index",
+        }
+        flat_args = {
+            str(key): value
+            for key, value in step.items()
+            if key not in excluded_keys
+        }
+
+        command_value = flat_args.get("cmd") or flat_args.get("command")
+        tool_name = str(name).strip()
+
+        if command_value and tool_name.lower() in {"fs", "filesystem"}:
+            operation = str(command_value).strip()
+            raw_name = f"{tool_name}.{operation}" if operation else tool_name
+            arguments = {
+                key: value
+                for key, value in flat_args.items()
+                if key not in {"cmd", "command"}
+            }
+            return canonicalize_tool_call(
+                raw_name,
+                arguments,
+                _step_metadata(step),
+            )
+
+        if flat_args:
+            return canonicalize_tool_call(
+                tool_name,
+                flat_args,
+                _step_metadata(step),
+            )
+
     if name is None and arguments_value is not None:
         name = step.get("name")
     arguments = _arguments_dict(arguments_value)
