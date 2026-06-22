@@ -2,24 +2,24 @@
 
 # 🧠 Howdex
 
-### Procedural memory for autonomous agents
+### The know-how layer for autonomous agents
 
-**Give agents know-how from every run.**
+**Agents should not start every run cold.**
 
-Records attempts · Learns from failures · Reuses successful procedures · Local-first
+Portable agent know-how · Four-layer memory · Local-first · Framework-agnostic
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-43%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-59%20passing-brightgreen.svg)](#testing)
 [![Stars](https://img.shields.io/badge/goal-500k%20⭐-yellow.svg)](#why-this-exists)
 
 </div>
 
 ---
 
-> **Howdex is procedural memory for autonomous agents.** It records what agents
-> tried, what failed, and what worked, then turns repeated successful traces into
-> reusable procedures.
+> **Howdex is the know-how layer for autonomous agents.** It records episodes,
+> learns lessons from what failed and what worked, and turns repeated success
+> into reusable procedures.
 
 ---
 
@@ -31,6 +31,7 @@ Records attempts · Learns from failures · Reuses successful procedures · Loca
 - [Run Without Installing](#-run-without-installing)
 - [Dev Install Guide](DEV_INSTALL.md)
 - [Core Concepts](#-core-concepts)
+- [Portable Know-How](#-portable-know-how)
 - [Quickstart](#-quickstart)
 - [The Four Memory Layers](#-the-four-memory-layers)
 - [API Reference](#-api-reference)
@@ -52,7 +53,9 @@ Records attempts · Learns from failures · Reuses successful procedures · Loca
 
 ## 🎯 Why This Exists
 
-Every AI agent ships with **amnesia**. The conversation ends, the context window clears, and your agent is back to square one. Every existing "solution" is a patch:
+Agents should not start every run cold. Yet most agents lose the operational
+lessons from prior runs: the context window clears, successful action sequences
+disappear into logs, and the next attempt begins from scratch.
 
 | What people do today | Why it sucks |
 |---|---|
@@ -63,7 +66,10 @@ Every AI agent ships with **amnesia**. The conversation ends, the context window
 | Use Zep | Proprietary, SaaS-only, you don't own your data. |
 | Build it yourself | Every team rebuilds the same wheel. Badly. |
 
-**Howdex is the missing primitive.** It's not a vector DB. It's not a chat history. It's a **cognitive memory system** modeled on how human memory actually works — four distinct layers, each with a purpose, working together.
+**Howdex is the missing know-how primitive.** It gives agents four connected
+memory layers—working, semantic, episodic, and procedural. It records episodes,
+learns lessons, and promotes repeated successful traces into portable procedures
+that can guide future runs.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -228,6 +234,48 @@ Human memory isn't one thing — it's four systems that evolved for different pu
 | **Procedural** | How to do things (learned) | Forever | "To deploy: tests → build → ship" |
 
 The `learn()` command is where the magic happens: it analyzes your episodic memories, finds patterns across successful sessions, and writes **procedures** — your agent's "muscle memory."
+
+---
+
+## 📦 Portable Know-How
+
+Howdex turns agent experience into a small, inspectable portability chain:
+
+- **Episodes are raw runs:** what the agent tried, observed, and ultimately achieved.
+- **Lessons are candidate procedures:** repeated patterns extracted from successful episodes.
+- **Procedures are reusable know-how:** ordered steps, preconditions, and success evidence that can guide another run.
+- **Codex is the local portable registry:** a manifest plus versioned procedure JSON files under `.howdex/codex/`.
+
+Export and restore procedures directly:
+
+```bash
+# Writes one JSON file per learned procedure to .howdex/procedures/
+howdex procedure export
+
+# Export somewhere explicit
+howdex procedure export ./shared-procedures
+
+# Import one file or every JSON file in a directory
+howdex procedure import ./shared-procedures
+```
+
+Publish and share through a local Codex:
+
+```bash
+# Creates .howdex/codex/manifest.json and .howdex/codex/procedures/
+howdex codex init
+
+# Promotes locally learned procedures into the local Codex
+howdex codex publish
+
+# Pull procedures from another checkout, machine, or mounted team folder
+howdex codex pull /path/to/team-project/.howdex/codex
+```
+
+Imports are idempotent by canonical task signature, so repeating an import or
+pull does not create duplicate procedures. Today Codex is deliberately
+local-only. The same manifest-and-artifact model can later back a private
+enterprise registry with authentication, policy, review, and distribution.
 
 ---
 
@@ -435,6 +483,11 @@ howdex learn [--min-samples 3] [--dry-run]
 howdex sync <peer-url-or-json-file>
 howdex stats
 howdex procedures
+howdex procedure export [output-directory]
+howdex procedure import <file-or-directory>
+howdex codex init [codex-directory]
+howdex codex publish [codex-directory]
+howdex codex pull <codex-directory>
 howdex forget <memory-id>
 howdex vacuum
 howdex export <output.json>
@@ -678,6 +731,7 @@ Auto-selection: ST if installed, else hashing. Override with `Howdex(embedder="s
 | Variable | Default | Description |
 |---|---|---|
 | `HOWDEX_HOME` | `~/.howdex` | Directory for the database |
+| `HOWDEX_EMBEDDER` | auto | Embedding backend: `hash`, `hashing`, `st`, or `openai` |
 | `HOWDEX_SYNC_PEER` | (none) | Default sync peer URL/path |
 
 ### Python
@@ -696,7 +750,7 @@ mem = Howdex(
 
 | File | What it shows |
 |---|---|
-| [`examples/quickstart.py`](examples/quickstart.py) | 60-second tour: remember, recall, learn |
+| [`examples/quickstart.py`](examples/quickstart.py) | 60-second tour: remember, search, learn |
 | [`examples/langchain_agent.py`](examples/langchain_agent.py) | LangChain integration |
 | [`examples/multi_agent_sync.py`](examples/multi_agent_sync.py) | Two agents sharing memory via CRDT |
 | [`examples/mcp_client.py`](examples/mcp_client.py) | Calling Howdex over MCP |
@@ -734,6 +788,14 @@ Memory footprint: ~50 MB for 100K memories + embeddings.
 
 ## ⚖️ Comparison
 
+> **Mem0 remembers context. Howdex indexes know-how.**
+
+Context memory helps an agent remember facts, preferences, and prior
+conversations. Howdex focuses on portable agent know-how: what the agent tried,
+what failed, what worked, and which successful procedure should guide the next
+run. The categories are complementary; the distinction is operational memory
+versus reusable execution knowledge.
+
 | Feature | Howdex | LangChain Memory | MemGPT/Letta | Zep | Chroma |
 |---|---|---|---|---|---|
 | **4-layer cognitive model** | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -761,7 +823,7 @@ Memory footprint: ~50 MB for 100K memories + embeddings.
 - ✅ MCP server (stdio + HTTP)
 - ✅ CLI
 - ✅ LangChain, CrewAI, AutoGen, OpenAI adapters
-- ✅ 55 passing tests
+- ✅ 59 passing tests
 
 ### v0.2
 - ⬜ Rust core for 10x performance (`howdex-core` PyO3 bindings)

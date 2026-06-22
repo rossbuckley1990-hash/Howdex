@@ -307,11 +307,14 @@ def consolidate(store: Store, *, min_samples: int = 3, dry_run: bool = False) ->
         if not successes:
             continue
 
-        success_steps_lists = [_get(e, "steps", []) or [] for e in successes]
+        success_steps_lists = [
+            _normalise_steps(_get(e, "steps", []) or [])
+            for e in successes
+        ]
 
         fail_steps: list[Any] = []
         for e in failures:
-            fail_steps.extend(_get(e, "steps", []) or [])
+            fail_steps.extend(_normalise_steps(_get(e, "steps", []) or []))
 
         common_steps = _extract_common_prefix(success_steps_lists)
 

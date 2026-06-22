@@ -11,6 +11,11 @@ Usage:
     howdex sync http://peer:7331        # sync with peer
     howdex stats                        # show stats
     howdex procedures                   # list learned procedures
+    howdex procedure export             # export portable procedure JSON
+    howdex procedure import <path>      # import portable procedure JSON
+    howdex codex init                   # create .howdex/codex
+    howdex codex publish                # publish procedures to local Codex
+    howdex codex pull <path>            # import another local Codex
     howdex forget <id>                  # delete a memory
     howdex vacuum                       # GC expired + tombstoned
     howdex mcp                          # start MCP server (stdio)
@@ -171,6 +176,69 @@ def cmd_procedures(args: argparse.Namespace) -> int:
         mem.close()
 
 
+def cmd_procedure_export(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        result = mem.export_procedures(args.output)
+        print(f"✓ exported {result['exported']} procedure(s) to {result['output']}")
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_procedure_import(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        result = mem.import_procedures(args.source)
+        print(
+            "✓ processed "
+            f"{result['files']} file(s): "
+            f"{result['imported']} imported, "
+            f"{result['updated']} updated, "
+            f"{result['unchanged']} unchanged"
+        )
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_codex_init(args: argparse.Namespace) -> int:
+    from howdex.portable import init_codex
+
+    result = init_codex(args.codex_path)
+    print(f"✓ initialized local Codex at {result['root']}")
+    return 0
+
+
+def cmd_codex_publish(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        result = mem.publish_codex(args.codex_path)
+        print(
+            f"✓ published {result['exported']} procedure(s) "
+            f"to {result['procedures']}"
+        )
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_codex_pull(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        result = mem.pull_codex(args.source)
+        print(
+            "✓ pulled "
+            f"{result['files']} file(s): "
+            f"{result['imported']} imported, "
+            f"{result['updated']} updated, "
+            f"{result['unchanged']} unchanged"
+        )
+        return 0
+    finally:
+        mem.close()
+
+
 def cmd_forget(args: argparse.Namespace) -> int:
     mem = Howdex(path=args.path, embedder=args.embedder)
     try:
@@ -274,6 +342,68 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("stats", help="show database stats").set_defaults(func=cmd_stats)
     sub.add_parser("procedures", help="list learned procedures").set_defaults(func=cmd_procedures)
+
+    procedure_parser = sub.add_parser(
+        "procedure",
+        help="export or import portable procedures",
+    )
+    procedure_sub = procedure_parser.add_subparsers(
+        dest="procedure_cmd",
+        required=True,
+    )
+
+    sp = procedure_sub.add_parser(
+        "export",
+        help="export learned procedures as JSON",
+    )
+    sp.add_argument(
+        "output",
+        nargs="?",
+        default=None,
+        help="output directory (default: .howdex/procedures)",
+    )
+    sp.set_defaults(func=cmd_procedure_export)
+
+    sp = procedure_sub.add_parser(
+        "import",
+        help="import a procedure JSON file or directory",
+    )
+    sp.add_argument("source")
+    sp.set_defaults(func=cmd_procedure_import)
+
+    codex_parser = sub.add_parser(
+        "codex",
+        help="manage the local portable procedure registry",
+    )
+    codex_sub = codex_parser.add_subparsers(dest="codex_cmd", required=True)
+
+    sp = codex_sub.add_parser("init", help="create a local Codex folder")
+    sp.add_argument(
+        "codex_path",
+        nargs="?",
+        default=None,
+        help="Codex directory (default: .howdex/codex)",
+    )
+    sp.set_defaults(func=cmd_codex_init)
+
+    sp = codex_sub.add_parser(
+        "publish",
+        help="publish learned procedures to the local Codex",
+    )
+    sp.add_argument(
+        "codex_path",
+        nargs="?",
+        default=None,
+        help="Codex directory (default: .howdex/codex)",
+    )
+    sp.set_defaults(func=cmd_codex_publish)
+
+    sp = codex_sub.add_parser(
+        "pull",
+        help="import procedures from another local Codex",
+    )
+    sp.add_argument("source")
+    sp.set_defaults(func=cmd_codex_pull)
 
     sp = sub.add_parser("forget", help="delete a memory")
     sp.add_argument("memory_id")

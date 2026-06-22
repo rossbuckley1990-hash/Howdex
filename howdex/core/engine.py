@@ -447,6 +447,45 @@ class Howdex:
             for d in self.store.all_procedures()
         ]
 
+    def export_procedures(
+        self,
+        output: Optional[Union[str, Path]] = None,
+    ) -> dict[str, Any]:
+        """Export learned procedures as portable Howdex JSON documents."""
+        from howdex.portable import export_procedures
+
+        return export_procedures(self.store, output)
+
+    def import_procedures(self, source: Union[str, Path]) -> dict[str, int]:
+        """Import portable procedure documents without duplicating tasks."""
+        from howdex.portable import import_procedures
+
+        return import_procedures(self.store, source)
+
+    def init_codex(
+        self,
+        path: Optional[Union[str, Path]] = None,
+    ) -> dict[str, Any]:
+        """Create or reopen a local portable Howdex Codex registry."""
+        from howdex.portable import init_codex
+
+        return init_codex(path)
+
+    def publish_codex(
+        self,
+        path: Optional[Union[str, Path]] = None,
+    ) -> dict[str, Any]:
+        """Publish learned procedures into a local Howdex Codex registry."""
+        from howdex.portable import publish_codex
+
+        return publish_codex(self.store, path)
+
+    def pull_codex(self, path: Union[str, Path]) -> dict[str, int]:
+        """Import procedures from another local Howdex Codex registry."""
+        from howdex.portable import pull_codex
+
+        return pull_codex(self.store, path)
+
 
     # ------------------------------------------------------------------ #
     # sync
