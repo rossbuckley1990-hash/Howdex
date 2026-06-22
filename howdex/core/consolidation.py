@@ -17,13 +17,15 @@ from howdex.core.feedback import (
     procedure_feedback_confidence,
     procedure_success_rate,
 )
+from howdex.core.learning import (
+    NormalizedLearningStep,
+    normalize_steps_for_learning,
+)
 from howdex.core.parameterize import (
     ParameterizedAction,
     parameter_bindings,
-    parameterize_steps,
     redact_parameter_evidence,
 )
-from howdex.core.parallel import resolve_parallel_spans
 from howdex.core.types import Procedure
 from howdex.storage import Store
 
@@ -35,14 +37,29 @@ NON_PROCEDURAL_ACTIONS = {"unknown_action", "internal_memory_action"}
 
 @dataclass(frozen=True)
 class _TraceMember:
-    raw_step: dict[str, Any]
-    canonical_action: CanonicalAction
-    parameterized_action: ParameterizedAction
+    normalized: NormalizedLearningStep
+
+    @property
+    def raw_step(self) -> dict[str, Any]:
+        return self.normalized.raw_step
+
+    @property
+    def canonical_action(self) -> CanonicalAction:
+        return self.normalized.canonical
+
+    @property
+    def parameterized_action(self) -> ParameterizedAction:
+        return self.normalized.parameterized
+
+    @property
+    def identity(self) -> str:
+        return self.normalized.identity
 
 
 @dataclass(frozen=True)
 class _TraceNode:
     signature: str
+    label: str
     members: tuple[_TraceMember, ...]
 
 
@@ -56,6 +73,10 @@ class _EpisodeTrace:
     @property
     def action_names(self) -> list[str]:
         return [node.signature for node in self.nodes]
+
+    @property
+    def dag_labels(self) -> list[str]:
+        return [node.label for node in self.nodes]
 
     @property
     def canonical_actions(self) -> list[CanonicalAction]:
@@ -117,12 +138,12 @@ def _trace_from_episode(episode: Any) -> _EpisodeTrace | None:
         or _get(episode, "id")
         or f"episode-{_get(episode, 'started_at', 0)}"
     )
-    raw_steps = resolve_parallel_spans(
+    normalized_steps = normalize_steps_for_learning(
         _normalise_steps(_get(episode, "steps", []) or []),
         episode_id=episode_id,
     )
-    all_actions = canonicalize_steps(raw_steps)
-    all_parameterized = parameterize_steps(all_actions)
+    raw_steps = [step.raw_step for step in normalized_steps]
+    all_actions = [step.canonical for step in normalized_steps]
     non_internal = [
         action
         for action in all_actions
@@ -142,17 +163,9 @@ def _trace_from_episode(episode: Any) -> _EpisodeTrace | None:
         return None
 
     members = [
-        _TraceMember(
-            raw_step=dict(step),
-            canonical_action=action,
-            parameterized_action=parameterized,
-        )
-        for step, action, parameterized in zip(
-            raw_steps,
-            all_actions,
-            all_parameterized,
-        )
-        if action.canonical_name not in NON_PROCEDURAL_ACTIONS
+        _TraceMember(normalized=step)
+        for step in normalized_steps
+        if step.canonical.canonical_name not in NON_PROCEDURAL_ACTIONS
     ]
     nodes = _trace_nodes(members)
     if not nodes:
@@ -185,23 +198,35 @@ def _trace_nodes(members: list[_TraceMember]) -> list[_TraceNode]:
         node_members = grouped[node_key]
         if len(node_members) > 1:
             ordered = tuple(sorted(node_members, key=_trace_member_sort_key))
+            identities = "|".join(
+                member.identity for member in ordered
+            )
             names = "|".join(
                 member.canonical_action.canonical_name
                 for member in ordered
             )
-            signature = f"parallel[{names}]"
+            signature = f"parallel[{identities}]"
+            label = f"parallel[{names}]"
         else:
             ordered = tuple(node_members)
-            signature = ordered[0].canonical_action.canonical_name
-        nodes.append(_TraceNode(signature=signature, members=ordered))
+            signature = ordered[0].identity
+            label = ordered[0].canonical_action.canonical_name
+        nodes.append(
+            _TraceNode(
+                signature=signature,
+                label=label,
+                members=ordered,
+            )
+        )
     return nodes
 
 
 def _trace_member_sort_key(
     member: _TraceMember,
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     return (
         member.canonical_action.canonical_name,
+        member.identity,
         str(member.raw_step.get("step_id", "")),
     )
 
@@ -456,7 +481,7 @@ def _raw_examples(traces: list[_EpisodeTrace]) -> list[dict[str, Any]]:
                 "outcome": trace.outcome,
                 "steps": redact_parameter_evidence(trace.raw_steps),
                 "canonical_sequence": trace.canonical_action_names,
-                "dag_sequence": trace.action_names,
+                "dag_sequence": trace.dag_labels,
                 "parameterized_sequence": [
                     action.to_dict()
                     for action in trace.parameterized_actions

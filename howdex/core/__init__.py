@@ -46,6 +46,13 @@ from howdex.core.parallel import (
     render_dag_steps,
     resolve_parallel_spans,
 )
+from howdex.core.learning import (
+    NormalizedLearningStep,
+    canonical_json,
+    normalize_json_value,
+    normalize_step_for_learning,
+    normalize_steps_for_learning,
+)
 from howdex.core.segmentation import (
     DEFAULT_IDLE_GAP_S,
     DEFAULT_MAX_SEGMENT_STEPS,
@@ -93,4 +100,6 @@ __all__ = [
     "redact_parameter_evidence",
     "Parallel_Span_Resolver", "ParallelSpanResolver",
     "resolve_parallel_spans", "render_dag_steps",
+    "NormalizedLearningStep", "canonical_json", "normalize_json_value",
+    "normalize_step_for_learning", "normalize_steps_for_learning",
 ]

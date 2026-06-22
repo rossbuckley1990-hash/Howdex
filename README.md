@@ -434,6 +434,38 @@ memory: Howdex learns the stable operation sequence and its parameter slots,
 not one hardcoded replay. No LLM is used, and secrets become `[REDACTED]`
 rather than visible placeholders or exported bindings.
 
+### Canonical learning identity
+
+`learn()` never uses a raw dictionary representation or raw JSON string as
+procedure identity. Before LCS and DAG consolidation, every step becomes a
+typed `NormalizedLearningStep` containing normalized tool fields, canonical
+action metadata, and its parameterized template.
+
+JSON strings are parsed when safe, nested mappings are recursively
+key-sorted, and comparison uses canonical JSON:
+
+```python
+json.dumps(
+    normalized_step,
+    sort_keys=True,
+    separators=(",", ":"),
+    ensure_ascii=False,
+)
+```
+
+Consequently these calls have the same learning identity:
+
+```json
+{"tool":"bash","cmd":"npm install cors","cwd":"./"}
+{"cwd":"./","cmd":"npm install cors","tool":"bash"}
+```
+
+Command whitespace and volatile package/path literals are normalized through
+the parameterized command template before comparison. Invalid JSON remains a
+safe legacy prose step and cannot crash consolidation. The original episode
+record remains available as evidence, but its raw formatting is never part of
+procedure identity.
+
 ### Intent and side-effect classification
 
 Every canonical action carries a deterministic `intent`,

@@ -36,6 +36,10 @@
   step IDs, parent edges, spans, parallel groups, timing, and display ordering
 - Deterministic parallel-span resolution, order-insensitive consolidation
   nodes, portable DAG JSON, and grouped human guidance rendering
+- Canonical structured-step learning identities with recursive JSON
+  normalization, safe JSON-string decoding, and stable compact serialization
+- Structured shell-command adaptation so JSON key order, whitespace, and
+  parameterized package/path literals cannot fragment procedure extraction
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results
