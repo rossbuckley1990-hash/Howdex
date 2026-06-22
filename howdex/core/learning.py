@@ -9,7 +9,10 @@ from typing import Any
 
 from howdex.core.actions import CanonicalAction, canonicalize_action
 from howdex.core.parallel import resolve_parallel_spans
-from howdex.core.parameterize import ParameterizedAction, parameterize_steps
+from howdex.core.parameterize import (
+    ParameterizedStep,
+    parameterize_steps_for_learning,
+)
 from howdex.core.tool_calls import (
     normalize_tool_name,
     tool_call_from_step,
@@ -80,7 +83,7 @@ class NormalizedLearningStep:
     tool_name: str | None
     tool_args: dict[str, Any]
     canonical: CanonicalAction
-    parameterized: ParameterizedAction
+    parameterized: ParameterizedStep
     outcome: str | None
     canonical_payload: dict[str, Any]
     identity: str
@@ -133,7 +136,9 @@ def normalize_steps_for_learning(
     prepared = [_prepare_raw_step(step) for step in steps]
     resolved = resolve_parallel_spans(prepared, episode_id=episode_id)
     canonical_actions = [_canonicalize_learning_step(step) for step in resolved]
-    parameterized_actions = parameterize_steps(canonical_actions)
+    parameterized_actions = parameterize_steps_for_learning(
+        canonical_actions
+    )
     return [
         _normalized_learning_step(step, canonical, parameterized)
         for step, canonical, parameterized in zip(
@@ -259,67 +264,17 @@ def _canonicalize_learning_step(
 def _normalized_learning_step(
     raw_step: dict[str, Any],
     canonical: CanonicalAction,
-    parameterized: ParameterizedAction,
+    parameterized: ParameterizedStep,
 ) -> NormalizedLearningStep:
     tool_name = (
         normalize_tool_name(str(canonical.raw_name))
         if canonical.matched_by != "legacy_prose" and canonical.raw_name
         else None
     )
-    parameterized_args = normalize_json_value(
-        parameterized.parameterized_args
-    )
-    if canonical.matched_by == "structured_command":
-        parameterized_args = _replace_command_values(
-            parameterized_args,
-            (
-                parameterized.parameterized_action
-                if _contains_placeholder(
-                    parameterized.parameterized_action
-                )
-                else canonical.canonical_name
-            ),
-        )
     outcome = _normalize_outcome(raw_step.get("outcome"))
-    payload: dict[str, Any] = {
-        "canonical_action": canonical.canonical_name,
-        "intent": canonical.intent,
-        "side_effect_class": canonical.side_effect_class,
-        "outcome": outcome,
-    }
-    normalized_target = (
-        parameterized.parameterized_target
-        if parameterized.parameterized_target is not None
-        else canonical.target
+    canonical_payload = normalize_json_value(
+        json.loads(parameterized.learning_key)
     )
-    if (
-        tool_name is not None
-        or (
-            isinstance(normalized_target, str)
-            and "<" in normalized_target
-            and ">" in normalized_target
-        )
-    ):
-        payload["target"] = normalized_target
-    if tool_name is not None:
-        payload["tool_name"] = tool_name
-        payload["tool_args"] = parameterized_args
-    parameterized_payload: dict[str, Any] = {}
-    action_slots = _placeholder_slots(
-        parameterized.parameterized_action
-    )
-    if action_slots:
-        parameterized_payload["action_slots"] = action_slots
-    if parameterized.parameterized_args:
-        parameterized_payload["arguments"] = parameterized_args
-    if _contains_placeholder(parameterized.parameterized_target):
-        parameterized_payload["target"] = (
-            parameterized.parameterized_target
-        )
-    if parameterized_payload:
-        payload["parameterized"] = parameterized_payload
-
-    canonical_payload = normalize_json_value(payload)
     return NormalizedLearningStep(
         raw_step=normalize_json_value(raw_step),
         tool_name=tool_name,
@@ -328,49 +283,8 @@ def _normalized_learning_step(
         parameterized=parameterized,
         outcome=outcome,
         canonical_payload=canonical_payload,
-        identity=canonical_json(canonical_payload),
+        identity=parameterized.learning_key,
     )
-
-
-def _replace_command_values(
-    value: Any,
-    parameterized_action: str,
-) -> Any:
-    if not isinstance(value, Mapping):
-        return value
-    return {
-        str(key): (
-            parameterized_action
-            if str(key).lower() in _COMMAND_KEYS
-            else _replace_command_values(item, parameterized_action)
-        )
-        for key, item in value.items()
-    }
-
-
-def _contains_placeholder(value: Any) -> bool:
-    if isinstance(value, Mapping):
-        return any(
-            _contains_placeholder(item)
-            for item in value.values()
-        )
-    if isinstance(value, (list, tuple)):
-        return any(_contains_placeholder(item) for item in value)
-    return (
-        isinstance(value, str)
-        and "<" in value
-        and ">" in value
-    )
-
-
-def _placeholder_slots(value: str) -> list[str]:
-    """Return stable typed slots without making prose wording identity."""
-    slots: list[str] = []
-    for part in value.split("<")[1:]:
-        placeholder = part.split(">", 1)[0]
-        if placeholder and placeholder not in slots:
-            slots.append(placeholder)
-    return slots
 
 
 def _mapping_value(value: Any) -> dict[str, Any] | None:

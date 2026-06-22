@@ -166,6 +166,7 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
         "procedure": {
             "id": procedure.id,
             "task_signature": procedure.task_signature,
+            "extraction_method": procedure.extraction_method,
             "steps": procedure.steps,
             "canonical_steps": procedure.canonical_steps,
             "parameterized_steps": procedure.parameterized_steps,
@@ -286,6 +287,9 @@ def procedure_from_document(
     return Procedure(
         id=str(payload.get("id") or "").strip() or Procedure().id,
         task_signature=task_signature,
+        extraction_method=str(
+            payload.get("extraction_method") or "parameterized_lcs"
+        ),
         steps=_list_value(payload.get("steps"), "steps", label),
         preconditions=_list_value(payload.get("preconditions"), "preconditions", label),
         expected_outcome=str(payload.get("expected_outcome") or ""),
@@ -399,6 +403,7 @@ def _merge_with_existing(
     return Procedure(
         id=existing_proc.id,
         task_signature=existing_proc.task_signature,
+        extraction_method=incoming.extraction_method,
         steps=incoming.steps,
         preconditions=incoming.preconditions,
         expected_outcome=incoming.expected_outcome,

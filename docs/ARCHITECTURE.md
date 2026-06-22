@@ -120,11 +120,19 @@ placeholders within each trace. Canonical action identity remains unchanged,
 so existing clustering and retrieval APIs remain compatible. Consolidation
 stores the generalized template on each procedure step and keeps redacted
 per-episode bindings and raw evidence for inspection. Secret-like values are
-redacted before either evidence or portable procedure output is persisted.
+replaced with `<SECRET_REDACTED>` before either evidence or portable procedure
+output is persisted and are never retained as bindings.
 The LCS key combines the canonical operation with typed parameter slots and
 canonical structured arguments. It never compares concrete volatile values or
 the prose surrounding a legacy action, so equivalent traces align without
 weakening rejection of unrelated canonical workflows.
+
+`parameterize_step_for_learning()` is the boundary object for this stage. It
+emits the stable `learning_key`, parameterized action/arguments/target, safe
+example bindings, placeholder types, and redacted provenance. Structured write
+payloads such as `content` are masked as `<CONTENT_n>` so file writes with
+different bodies can still reveal the same reusable algorithm. Consolidated
+procedures record `extraction_method="parameterized_lcs"`.
 
 The learning boundary first converts each raw step into a
 `NormalizedLearningStep`. Safe JSON strings are decoded, mappings are

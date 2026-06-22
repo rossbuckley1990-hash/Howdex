@@ -279,12 +279,12 @@ def test_structured_tool_call_fields_are_stored_in_episode(tmp_path):
 
     assert step["tool_name"] == "filesystem.read_file"
     assert step["tool_args"] == {
-        "api_key": "[REDACTED]",
+        "api_key": "<SECRET_REDACTED>",
         "path": "settings.json",
     }
     assert step["tool_metadata"] == {
         "source": "mcp",
-        "token": "[REDACTED]",
+        "token": "<SECRET_REDACTED>",
     }
     assert step["canonical_action"] == "filesystem.read_file"
     assert step["target"] == "path=settings.json"
@@ -418,4 +418,4 @@ def test_structured_secrets_are_redacted_from_procedure_evidence(tmp_path):
     serialized = str(procedure.raw_supporting_examples)
 
     assert "secret-value" not in serialized
-    assert "[REDACTED]" in serialized
+    assert "<SECRET_REDACTED>" in serialized

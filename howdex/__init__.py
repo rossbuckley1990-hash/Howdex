@@ -14,24 +14,24 @@ Visit https://github.com/rossbuckley1990-hash/Howdex for full docs.
 """
 
 from howdex.core.engine import Howdex
+from howdex.core.errors import (
+    ConsolidationError,
+    HowdexError,
+    HowdexNotFoundError,
+    StoreError,
+    SyncError,
+)
+from howdex.core.parallel import ParallelSpanResolver
+from howdex.core.parameterize import ParameterizedAction, ParameterizedStep
+from howdex.core.receipts import VerificationReceipt
 from howdex.core.types import (
+    Episode,
+    HowdexResult,
     Memory,
     MemoryLayer,
     MemoryType,
-    HowdexResult,
-    Episode,
     Procedure,
 )
-from howdex.core.errors import (
-    HowdexError,
-    StoreError,
-    HowdexNotFoundError,
-    ConsolidationError,
-    SyncError,
-)
-from howdex.core.receipts import VerificationReceipt
-from howdex.core.parameterize import ParameterizedAction
-from howdex.core.parallel import ParallelSpanResolver
 from howdex.ingest import IngestionPipeline, IngestionRecord
 
 __version__ = "0.3.0"
@@ -48,6 +48,7 @@ __all__ = [
     "Procedure",
     "VerificationReceipt",
     "ParameterizedAction",
+    "ParameterizedStep",
     "ParallelSpanResolver",
     "IngestionRecord",
     "IngestionPipeline",

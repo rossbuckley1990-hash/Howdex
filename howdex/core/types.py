@@ -303,6 +303,7 @@ class Procedure:
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     task_signature: str = ""           # canonical task description
+    extraction_method: str = "parameterized_lcs"
     steps: list[dict[str, Any]] = field(default_factory=list)
     preconditions: list[str] = field(default_factory=list)
     expected_outcome: str = ""
@@ -363,6 +364,7 @@ class Procedure:
                         "parallel_group_id"
                     ),
                     "ordering_index": step.get("ordering_index"),
+                    "learning_key": step.get("learning_key"),
                     "action": step.get("parameterized_action"),
                     "arguments": step.get("parameterized_args", {}),
                     "target": step.get("parameterized_target"),
@@ -391,6 +393,7 @@ class Procedure:
             ),
             metadata={
                 "procedure_id": self.id,
+                "extraction_method": self.extraction_method,
                 "steps": self.steps,
                 "canonical_steps": self.canonical_steps,
                 "parameterized_steps": self.parameterized_steps,

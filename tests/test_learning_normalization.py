@@ -233,9 +233,12 @@ def test_changed_path_literals_use_parameterized_identity(tmp_path):
     procedure = memory.learn(min_samples=2)[0]
 
     assert procedure.steps[0]["canonical_name"] == "run_test_suite"
-    assert procedure.steps[0]["parameterized_action"] == "pytest <PATH_1>"
+    assert (
+        procedure.steps[0]["parameterized_action"]
+        == "pytest <FILE_PATH_1>"
+    )
     assert {
-        binding["bindings"]["<PATH_1>"]
+        binding["bindings"]["<FILE_PATH_1>"]
         for binding in procedure.parameter_bindings
     } == {"tests/test_auth.py", "tests/test_billing.py"}
 
@@ -273,7 +276,7 @@ def test_equivalent_workflows_learn_reusable_parameterized_template(
         step["parameterized_action"]
         for step in procedure.steps
     ] == [
-        "edit <PATH_1>",
+        "edit <FILE_PATH_1>",
         "npm install <PKG_1>",
         "run <TEST_COMMAND_1>",
     ]
@@ -289,12 +292,12 @@ def test_equivalent_workflows_learn_reusable_parameterized_template(
         step["action"]
         for step in procedure.parameterized_steps
     ] == [
-        "edit <PATH_1>",
+        "edit <FILE_PATH_1>",
         "npm install <PKG_1>",
         "run <TEST_COMMAND_1>",
     ]
     assert {
-        binding["bindings"]["<PATH_1>"]
+        binding["bindings"]["<FILE_PATH_1>"]
         for binding in procedure.example_bindings
     } == {"app.js", "server.js"}
     assert {
@@ -336,7 +339,7 @@ def test_key_order_and_changed_literals_share_learning_identity(tmp_path):
         step["parameterized_action"]
         for step in procedure.steps
     ] == [
-        "edit <PATH_1>",
+        "edit <FILE_PATH_1>",
         "npm install <PKG_1>",
         "run <TEST_COMMAND_1>",
     ]
@@ -368,9 +371,9 @@ def test_repeated_literal_binding_is_consistent_in_learned_template(
     assert [
         step["parameterized_action"]
         for step in procedure.steps
-    ] == ["edit <PATH_1>", "read <PATH_1>"]
+    ] == ["edit <FILE_PATH_1>", "read <FILE_PATH_1>"]
     assert all(
-        list(binding["bindings"]) == ["<PATH_1>"]
+        list(binding["bindings"]) == ["<FILE_PATH_1>"]
         for binding in procedure.example_bindings
     )
 
