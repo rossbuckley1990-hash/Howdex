@@ -106,6 +106,14 @@ structured suggestions with source episode IDs and match components.
 `render_procedure_guidance()` produces bounded prompt text with an explicit
 guidance-only warning; retrieval never authorizes or executes an action.
 
+Procedure feedback is stored as an idempotent event state keyed by procedure
+and session/episode reference: suggested, used-but-unverified, then observed
+success or failure. Suggestions do not affect efficacy statistics. Verified
+outcomes update aggregate success/failure counts, provenance episode IDs,
+success rate, and a deterministic confidence blend of extraction confidence,
+observed success, and evidence volume. Successful or failed session close
+automatically resolves pending uses; partial sessions remain unverified.
+
 ## Storage: SQLite
 
 We chose SQLite for the v0.1 storage backend because:

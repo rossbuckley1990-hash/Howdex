@@ -672,6 +672,47 @@ episode IDs, proof status, and a component-level match explanation. The
 rendered block is guidance only: Howdex never executes the procedure or treats
 historical success as current authorization.
 
+### Learning from procedure use
+
+The feedback loop is explicit and auditable:
+
+```text
+learn -> suggest -> mark used -> observe episode outcome -> update stats
+```
+
+`suggest_procedure()` is read-only. Surfacing guidance does not count as using
+it. Applications can record each state deliberately:
+
+```python
+suggestion = mem.suggest_procedure("deploy api", top_k=1)[0]
+session = mem.start_session("deploy api")
+
+mem.mark_procedure_suggested(suggestion.procedure_id, session.session_id)
+mem.mark_procedure_used(suggestion.procedure_id, session.session_id)
+
+# Run the agent...
+mem.end_session("success")
+```
+
+Closing a matching session with `success` or `failure` automatically resolves
+pending uses. `partial` sessions remain unverified. External evaluators can
+instead call:
+
+```python
+mem.record_procedure_outcome(
+    suggestion.procedure_id,
+    episode_id="evaluation-run-42",
+    outcome="failure",
+)
+```
+
+Verified outcomes increment support and success/failure counts, update
+`success_rate`, preserve the episode ID, and recompute confidence
+deterministically. Confidence keeps 40% of the original extraction confidence,
+uses 45% verified success rate, and 15% evidence volume (saturating at five
+verified examples). Suggested-only events never change success statistics;
+used-but-unresolved events are tracked as `unverified_use_count`.
+
 ---
 
 ## 📘 API Reference
@@ -717,6 +758,15 @@ steps, evidence, provenance, and inspectable match components.
 
 Render suggestions into a compact prompt block that explicitly warns against
 automatic execution.
+
+### Procedure feedback
+
+- `.mark_procedure_suggested(procedure_id, session_id)`
+- `.mark_procedure_used(procedure_id, session_id)`
+- `.record_procedure_outcome(procedure_id, episode_id, outcome)`
+
+Feedback events are idempotent by procedure and session/episode reference.
+Outcomes must be `"success"` or `"failure"`.
 
 ### `.forget(memory_id)`
 

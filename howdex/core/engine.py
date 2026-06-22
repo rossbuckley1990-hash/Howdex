@@ -664,6 +664,16 @@ class Howdex:
         self.store.put_episode(ep.to_record())
         for child in child_episodes:
             self.store.put_episode(child.to_record())
+        if outcome in {"success", "failure"}:
+            for procedure_id in self.store.pending_procedure_uses(
+                ep.session_id
+            ):
+                self.store.record_procedure_outcome(
+                    procedure_id,
+                    ep.session_id,
+                    outcome,
+                    now=ep.finished_at,
+                )
         # also store as episodic memory (searchable)
         episodic_memory = ep.to_memory()
         self.remember(
@@ -751,6 +761,51 @@ class Howdex:
             top_k=top_k,
             min_confidence=min_confidence,
         )
+
+    def mark_procedure_suggested(
+        self,
+        procedure_id: str,
+        session_id: str,
+    ) -> Procedure:
+        """Record that guidance was surfaced without claiming it was used."""
+        self._require_procedure_id(procedure_id)
+        self.store.mark_procedure_suggested(procedure_id, session_id)
+        return self._procedure_by_id(procedure_id)
+
+    def mark_procedure_used(
+        self,
+        procedure_id: str,
+        session_id: str,
+    ) -> Procedure:
+        """Record a pending, not-yet-verified procedure use."""
+        self._require_procedure_id(procedure_id)
+        self.store.mark_procedure_used(procedure_id, session_id)
+        return self._procedure_by_id(procedure_id)
+
+    def record_procedure_outcome(
+        self,
+        procedure_id: str,
+        episode_id: str,
+        outcome: str,
+    ) -> Procedure:
+        """Attach one verified success/failure outcome to a procedure use."""
+        self._require_procedure_id(procedure_id)
+        self.store.record_procedure_outcome(
+            procedure_id,
+            episode_id,
+            outcome,
+        )
+        return self._procedure_by_id(procedure_id)
+
+    def _require_procedure_id(self, procedure_id: str) -> None:
+        if self.store.get_procedure_by_id(procedure_id) is None:
+            raise HowdexNotFoundError(f"no procedure with id={procedure_id}")
+
+    def _procedure_by_id(self, procedure_id: str) -> Procedure:
+        payload = self.store.get_procedure_by_id(procedure_id)
+        if payload is None:
+            raise HowdexNotFoundError(f"no procedure with id={procedure_id}")
+        return Procedure(**_normalise_procedure_payload(payload))
 
     def render_procedure_guidance(
         self,
