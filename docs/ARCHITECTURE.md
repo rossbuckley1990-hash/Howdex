@@ -121,6 +121,10 @@ so existing clustering and retrieval APIs remain compatible. Consolidation
 stores the generalized template on each procedure step and keeps redacted
 per-episode bindings and raw evidence for inspection. Secret-like values are
 redacted before either evidence or portable procedure output is persisted.
+The LCS key combines the canonical operation with typed parameter slots and
+canonical structured arguments. It never compares concrete volatile values or
+the prose surrounding a legacy action, so equivalent traces align without
+weakening rejection of unrelated canonical workflows.
 
 The learning boundary first converts each raw step into a
 `NormalizedLearningStep`. Safe JSON strings are decoded, mappings are
@@ -129,8 +133,9 @@ recursively sorted, common structured command records such as
 and a canonical JSON identity is generated with sorted keys and compact
 separators. LCS and DAG clustering compare only these normalized identities.
 Dictionary insertion order, JSON whitespace, nested key order, and raw
-serialization are therefore not procedural signals. Legacy prose still uses
-the existing deterministic action canonicalizer.
+serialization are therefore not procedural signals. Parameterized slots are
+part of that identity, while concrete bindings remain evidence only. Legacy
+prose still uses the existing deterministic action canonicalizer.
 
 Semantic memory deliberately avoids implicit prose extraction. Explicit
 facts, preferences, entities, and relations retain source, provenance, and

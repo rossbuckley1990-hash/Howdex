@@ -325,6 +325,59 @@ class Procedure:
     last_used_at: Optional[float] = None
     use_count: int = 0
 
+    @property
+    def canonical_steps(self) -> list[dict[str, Any]]:
+        """Return the canonical DAG steps retained by the procedure."""
+        return [
+            {
+                key: step[key]
+                for key in (
+                    "step_id",
+                    "parent_step_ids",
+                    "span_id",
+                    "parallel_group_id",
+                    "ordering_index",
+                    "canonical_name",
+                    "intent",
+                    "side_effect_class",
+                    "target",
+                    "confidence",
+                )
+                if key in step
+            }
+            for step in self.steps
+            if isinstance(step, dict)
+        ]
+
+    @property
+    def parameterized_steps(self) -> list[dict[str, Any]]:
+        """Return reusable templates without concrete example bindings."""
+        return [
+            {
+                key: value
+                for key, value in {
+                    "step_id": step.get("step_id"),
+                    "parent_step_ids": step.get("parent_step_ids", []),
+                    "span_id": step.get("span_id"),
+                    "parallel_group_id": step.get(
+                        "parallel_group_id"
+                    ),
+                    "ordering_index": step.get("ordering_index"),
+                    "action": step.get("parameterized_action"),
+                    "arguments": step.get("parameterized_args", {}),
+                    "target": step.get("parameterized_target"),
+                }.items()
+                if value is not None
+            }
+            for step in self.steps
+            if isinstance(step, dict)
+        ]
+
+    @property
+    def example_bindings(self) -> list[dict[str, Any]]:
+        """Compatibility-friendly name for concrete template examples."""
+        return self.parameter_bindings
+
     def to_memory(self) -> Memory:
         from howdex.core.parallel import render_dag_steps
 
@@ -339,6 +392,8 @@ class Procedure:
             metadata={
                 "procedure_id": self.id,
                 "steps": self.steps,
+                "canonical_steps": self.canonical_steps,
+                "parameterized_steps": self.parameterized_steps,
                 "preconditions": self.preconditions,
                 "expected_outcome": self.expected_outcome,
                 "success_rate": self.success_rate,
@@ -354,6 +409,7 @@ class Procedure:
                 "unverified_use_count": self.unverified_use_count,
                 "raw_supporting_examples": self.raw_supporting_examples,
                 "parameter_bindings": self.parameter_bindings,
+                "example_bindings": self.example_bindings,
                 "source_episode_ids": self.source_episode_ids,
                 "verification_receipts": self.receipts,
                 "use_count": self.use_count,

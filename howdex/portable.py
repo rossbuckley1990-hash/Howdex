@@ -167,10 +167,13 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
             "id": procedure.id,
             "task_signature": procedure.task_signature,
             "steps": procedure.steps,
+            "canonical_steps": procedure.canonical_steps,
+            "parameterized_steps": procedure.parameterized_steps,
             "preconditions": procedure.preconditions,
             "expected_outcome": procedure.expected_outcome,
             "raw_supporting_examples": procedure.raw_supporting_examples,
             "parameter_bindings": procedure.parameter_bindings,
+            "example_bindings": procedure.example_bindings,
         },
         "success_evidence": {
             "success_rate": procedure.success_rate,

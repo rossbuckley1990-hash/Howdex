@@ -72,6 +72,9 @@ _BRANCH_COMMANDS = {
 
 _KEY_TYPES = {
     "path": "PATH",
+    "cwd": "PATH",
+    "directory": "PATH",
+    "working_directory": "PATH",
     "file": "PATH",
     "filename": "PATH",
     "url": "URL",
@@ -171,6 +174,17 @@ def parameterize_action(
         registry,
         parameter_map,
     )
+    if (
+        action.canonical_name == "run_test_suite"
+        and "<" not in parameterized_action
+    ):
+        placeholder = _bind(
+            "TEST_COMMAND",
+            safe_action or action.canonical_name,
+            registry,
+            parameter_map,
+        )
+        parameterized_action = f"run {placeholder}"
     if parameterized_target is not None:
         parameterized_target = str(parameterized_target)
 

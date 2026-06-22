@@ -236,7 +236,7 @@ def test_parallel_guidance_rendering_is_deterministic(tmp_path):
     assert "Step 1:" in first
     assert "Step 2a (parallel): filesystem.read_file" in first
     assert "Step 2b (parallel): inspect error log" in first
-    assert "Step 3: run pytest" in first
+    assert "Step 3: run <TEST_COMMAND_1>" in first
 
 
 def test_logged_steps_store_all_dag_fields(tmp_path):

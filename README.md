@@ -429,6 +429,26 @@ secret-redacted examples remain inspectable in `raw_supporting_examples`;
 `parameter_bindings` records per-episode examples such as
 `{"<PKG_1>": "cors"}`.
 
+For example, these two successful traces:
+
+```text
+edit app.js       | edit server.js
+npm install cors  | npm install express
+npm test          | npm test
+```
+
+consolidate into one reusable template:
+
+```text
+edit <PATH_1>
+npm install <PKG_1>
+run <TEST_COMMAND_1>
+```
+
+The procedure API exposes `canonical_steps`, `parameterized_steps`, and
+`example_bindings` as compatible derived views; existing `steps` and
+`parameter_bindings` remain unchanged.
+
 This is the distinction between dumb macro memory and reusable procedural
 memory: Howdex learns the stable operation sequence and its parameter slots,
 not one hardcoded replay. No LLM is used, and secrets become `[REDACTED]`
@@ -461,7 +481,9 @@ Consequently these calls have the same learning identity:
 ```
 
 Command whitespace and volatile package/path literals are normalized through
-the parameterized command template before comparison. Invalid JSON remains a
+the parameterized command template before comparison. LCS compares canonical
+operations, typed parameter slots, and normalized structured arguments—not
+concrete literals or the surrounding English wording. Invalid JSON remains a
 safe legacy prose step and cannot crash consolidation. The original episode
 record remains available as evidence, but its raw formatting is never part of
 procedure identity.

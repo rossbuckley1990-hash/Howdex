@@ -53,6 +53,14 @@
 - Internal memory calls and unknown-dominated traces are excluded
 - Package version advanced to `0.3.0`
 
+### Fixed
+
+- Procedure LCS now compares canonical parameter slots and normalized
+  structured arguments instead of concrete path, package, and command values
+- Equivalent traces such as `edit app.js` / `edit server.js` and
+  `npm install cors` / `npm install express` now consolidate into one reusable
+  template without making English phrasing part of identity
+
 ## 0.2.0 - Production Foundation
 
 ### Added

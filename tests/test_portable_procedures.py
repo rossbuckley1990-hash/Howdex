@@ -82,6 +82,12 @@ def test_procedure_export_creates_json_files_and_is_safe_to_repeat(tmp_path):
     assert document["success_evidence"]["feedback_failure_count"] == 0
     assert len(document["procedure"]["raw_supporting_examples"]) == 3
     assert "parameter_bindings" in document["procedure"]
+    assert document["procedure"]["canonical_steps"]
+    assert document["procedure"]["parameterized_steps"]
+    assert (
+        document["procedure"]["example_bindings"]
+        == document["procedure"]["parameter_bindings"]
+    )
     assert len(document["success_evidence"]["source_episode_ids"]) == 3
     assert document["source"]["system"] == "howdex"
     assert document["source"]["node_id"]
