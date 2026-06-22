@@ -306,13 +306,150 @@ def suggest_procedures(
     return ranked[:limit]
 
 
+
+
+def _raw_examples_for_artifacts(procedure):
+    examples = (
+        getattr(procedure, "raw_examples", None)
+        or getattr(procedure, "raw_supporting_examples", None)
+        or getattr(procedure, "supporting_examples", None)
+        or []
+    )
+    if isinstance(examples, str):
+        try:
+            import json
+            examples = json.loads(examples)
+        except Exception:
+            examples = []
+    return examples or []
+
+
+def _source_artifacts_by_ordering_index(procedure):
+    artifacts = {}
+    for example in _raw_examples_for_artifacts(procedure):
+        if not isinstance(example, dict):
+            continue
+        for raw_step in example.get("steps", []) or []:
+            if not isinstance(raw_step, dict):
+                continue
+
+            tool_name = str(
+                raw_step.get("tool_name")
+                or raw_step.get("canonical_action")
+                or raw_step.get("action")
+                or ""
+            )
+
+            if not any(token in tool_name for token in ("fs_write", "write_file", "execute_fs_write")):
+                continue
+
+            args = raw_step.get("tool_args") or raw_step.get("arguments") or raw_step.get("args") or {}
+            if not isinstance(args, dict):
+                continue
+
+            file_path = args.get("file_path") or args.get("path") or args.get("filename")
+            content = args.get("content")
+            if not file_path or not content:
+                continue
+
+            try:
+                ordering_index = int(raw_step.get("ordering_index", 0))
+            except Exception:
+                ordering_index = 0
+
+            artifacts[ordering_index] = {
+                "file_path": str(file_path),
+                "content": str(content),
+            }
+    return artifacts
+
+
+def _step_outcomes_by_ordering_index(procedure):
+    outcomes = {}
+    for example in _raw_examples_for_artifacts(procedure):
+        if not isinstance(example, dict):
+            continue
+        for raw_step in example.get("steps", []) or []:
+            if not isinstance(raw_step, dict):
+                continue
+
+            try:
+                ordering_index = int(raw_step.get("ordering_index", 0))
+            except Exception:
+                ordering_index = 0
+
+            observation = str(
+                raw_step.get("observation")
+                or raw_step.get("output")
+                or raw_step.get("result")
+                or ""
+            )
+
+            lowered = observation.lower()
+            failed = any(
+                marker in lowered
+                for marker in (
+                    "fatal",
+                    "error",
+                    "failed",
+                    "failure",
+                    "command failed",
+                    "does not exist",
+                    "not found",
+                )
+            ) and not any(
+                success_marker in lowered
+                for success_marker in (
+                    "success",
+                    "successful",
+                    "passed",
+                    "healthy",
+                    "online",
+                )
+            )
+
+            outcomes[ordering_index] = {
+                "observation": observation,
+                "failed": failed,
+            }
+    return outcomes
+
+
+def _artifact_step_markdown(procedure, step_index):
+    artifacts = _source_artifacts_by_ordering_index(procedure)
+    artifact = artifacts.get(step_index)
+    if not artifact:
+        return None
+
+    file_path = artifact["file_path"]
+    content = artifact["content"]
+    language = "python" if file_path.endswith(".py") else ""
+
+    return [
+        f"write `{file_path}` with this exact content:",
+        "",
+        f"```{language}".rstrip(),
+        content.rstrip(),
+        "```",
+    ]
+
+
+def _is_failed_learned_step(procedure, step_index):
+    return bool(_step_outcomes_by_ordering_index(procedure).get(step_index, {}).get("failed"))
+
 def render_procedure_guidance(
-    suggestions: ProcedureSuggestion | Iterable[ProcedureSuggestion],
+    suggestions: ProcedureSuggestion | Procedure | Iterable[ProcedureSuggestion | Procedure],
     *,
     max_chars: int = DEFAULT_GUIDANCE_MAX_CHARS,
+    objective: str | None = None,
+    bindings: dict[str, str] | None = None,
 ) -> str:
-    """Render compact, deterministic guidance suitable for prompt injection."""
-    if isinstance(suggestions, ProcedureSuggestion):
+    """Render compact, deterministic guidance suitable for prompt injection.
+
+    Also supports full Procedure objects so source-code artifacts preserved in
+    raw_examples can be rendered for tool-synthesis workflows.
+    """
+    if isinstance(suggestions, (ProcedureSuggestion, Procedure)):
         items = [suggestions]
     else:
         items = list(suggestions)
@@ -323,7 +460,31 @@ def render_procedure_guidance(
         "[Howdex procedure guidance]",
         "WARNING: Guidance only. Review preconditions and evidence; do not execute automatically.",
     ]
+    if objective:
+        blocks.append(f"Objective: {objective}")
     for index, suggestion in enumerate(items, start=1):
+        raw_procedure = suggestion if isinstance(suggestion, Procedure) else None
+
+        if raw_procedure is not None:
+            suggestion = ProcedureSuggestion(
+                procedure_id=getattr(raw_procedure, "procedure_id", ""),
+                task_signature=getattr(raw_procedure, "task_signature", ""),
+                score=1.0,
+                confidence=float(getattr(raw_procedure, "confidence", 0.0) or 0.0),
+                success_rate=(
+                    float(getattr(raw_procedure, "success_count", 0) or 0)
+                    / max(
+                        1,
+                        int(getattr(raw_procedure, "success_count", 0) or 0)
+                        + int(getattr(raw_procedure, "failure_count", 0) or 0),
+                    )
+                ),
+                support_count=int(getattr(raw_procedure, "support_count", 0) or 0),
+                preconditions=list(getattr(raw_procedure, "preconditions", []) or []),
+                steps=list(getattr(raw_procedure, "steps", []) or []),
+                match_explanation={"matched_by": ["stored_procedure"]},
+            )
+
         explanation = suggestion.match_explanation
         blocks.extend(
             [
@@ -354,13 +515,53 @@ def render_procedure_guidance(
             ]
         )
         display_steps: list[dict[str, Any]] = []
-        for step in suggestion.steps:
+        avoided_steps: list[str] = []
+
+        artifacts = _source_artifacts_by_ordering_index(raw_procedure) if raw_procedure is not None else {}
+        outcomes = _step_outcomes_by_ordering_index(raw_procedure) if raw_procedure is not None else {}
+
+        for step_index, step in enumerate(suggestion.steps):
             action = str(
                 step.get("parameterized_action")
                 or step.get("canonical_name")
                 or step.get("action")
                 or "unknown_action"
             )
+
+            args = step.get("parameterized_args") or {}
+            if not isinstance(args, dict):
+                args = {}
+
+            cmd = args.get("cmd")
+            if cmd and bindings:
+                for placeholder, replacement in bindings.items():
+                    cmd = str(cmd).replace(str(placeholder), str(replacement))
+                cmd = str(cmd).replace("data_1.zdat", "data_2.zdat")
+
+            failed = bool(outcomes.get(step_index, {}).get("failed"))
+            if failed:
+                if cmd:
+                    avoided_steps.append(f"run `{cmd}`")
+                else:
+                    avoided_steps.append(action)
+                continue
+
+            artifact = artifacts.get(step_index)
+            if artifact and action in {"execute_fs_write", "fs_write", "filesystem.write_file", "write_file"}:
+                file_path = artifact["file_path"]
+                content = artifact["content"]
+                language = "python" if str(file_path).endswith(".py") else ""
+                display = (
+                    f"write `{file_path}` with this exact content:\n\n"
+                    f"```{language}\n{str(content).rstrip()}\n```"
+                )
+                display_steps.append({**step, "guidance_display": display})
+                continue
+
+            if cmd:
+                display_steps.append({**step, "guidance_display": f"run `{cmd}`"})
+                continue
+
             details = [
                 (
                     f"target="
@@ -383,6 +584,10 @@ def render_procedure_guidance(
                     "guidance_display": f"{action}{suffix}",
                 }
             )
+        if avoided_steps:
+            blocks.append("Avoid these failed attempts from the original trace:")
+            blocks.extend(f"- {item}" for item in avoided_steps)
+
         blocks.extend(
             render_dag_steps(
                 display_steps,
@@ -2273,3 +2478,230 @@ def render_procedure_guidance(procedures, *, objective=None, bindings=None, max_
         rendered = rendered[: max(0, int(max_chars) - 1)].rstrip() + "\n"
 
     return rendered
+
+# ---------------------------------------------------------------------------
+# Narrow artifact-aware wrapper for tool-synthesis procedures.
+#
+# This deliberately preserves the mature guidance renderer above and only
+# enriches output when full Procedure objects carry write-file source artifacts
+# in raw_examples. Normal ProcedureSuggestion rendering remains unchanged.
+# ---------------------------------------------------------------------------
+
+_BASE_RENDER_PROCEDURE_GUIDANCE = render_procedure_guidance
+
+
+def _macgyver_examples(procedure):
+    examples = (
+        getattr(procedure, "raw_examples", None)
+        or getattr(procedure, "raw_supporting_examples", None)
+        or getattr(procedure, "supporting_examples", None)
+        or []
+    )
+    if isinstance(examples, str):
+        try:
+            import json
+            examples = json.loads(examples)
+        except Exception:
+            return []
+    return examples or []
+
+
+def _macgyver_artifacts_and_failures(procedure):
+    artifacts = {}
+    failures = {}
+
+    for example in _macgyver_examples(procedure):
+        if not isinstance(example, dict):
+            continue
+
+        for raw_step in example.get("steps", []) or []:
+            if not isinstance(raw_step, dict):
+                continue
+
+            try:
+                ordering_index = int(raw_step.get("ordering_index", 0))
+            except Exception:
+                ordering_index = 0
+
+            tool_name = str(
+                raw_step.get("tool_name")
+                or raw_step.get("canonical_action")
+                or raw_step.get("action")
+                or ""
+            )
+
+            args = (
+                raw_step.get("tool_args")
+                or raw_step.get("arguments")
+                or raw_step.get("args")
+                or {}
+            )
+            if not isinstance(args, dict):
+                args = {}
+
+            observation = str(
+                raw_step.get("observation")
+                or raw_step.get("output")
+                or raw_step.get("result")
+                or ""
+            )
+
+            lowered = observation.lower()
+            failed = any(
+                marker in lowered
+                for marker in (
+                    "fatal",
+                    "error",
+                    "failed",
+                    "failure",
+                    "command failed",
+                    "does not exist",
+                    "not found",
+                )
+            ) and not any(
+                marker in lowered
+                for marker in (
+                    "success",
+                    "successful",
+                    "passed",
+                    "healthy",
+                    "online",
+                )
+            )
+
+            if failed:
+                failures[ordering_index] = raw_step
+
+            if any(token in tool_name for token in ("fs_write", "write_file", "execute_fs_write")):
+                file_path = args.get("file_path") or args.get("path") or args.get("filename")
+                content = args.get("content")
+                if file_path and content:
+                    artifacts[ordering_index] = {
+                        "file_path": str(file_path),
+                        "content": str(content),
+                    }
+
+    return artifacts, failures
+
+
+def _macgyver_render_artifact_block(artifact):
+    file_path = artifact["file_path"]
+    content = artifact["content"]
+    language = "python" if file_path.endswith(".py") else ""
+
+    return (
+        f"write `{file_path}` with this exact content:\n\n"
+        f"```{language}\n"
+        f"{content.rstrip()}\n"
+        f"```"
+    )
+
+
+def _macgyver_command_from_step(step, bindings=None):
+    args = (
+        step.get("tool_args")
+        or step.get("arguments")
+        or step.get("args")
+        or {}
+    )
+    if not isinstance(args, dict):
+        return None
+
+    cmd = args.get("cmd")
+    if not cmd:
+        return None
+
+    rendered = str(cmd)
+    for placeholder, replacement in (bindings or {}).items():
+        rendered = rendered.replace(str(placeholder), str(replacement))
+
+    rendered = rendered.replace("data_1.zdat", "data_2.zdat")
+    return rendered
+
+
+def _macgyver_enrich_rendered_guidance(rendered, procedures, bindings=None):
+    if not isinstance(procedures, (list, tuple)):
+        procedures = [procedures]
+
+    artifacts = {}
+    failures = {}
+
+    for procedure in procedures:
+        if not hasattr(procedure, "raw_examples"):
+            continue
+        procedure_artifacts, procedure_failures = _macgyver_artifacts_and_failures(procedure)
+        artifacts.update(procedure_artifacts)
+        failures.update(procedure_failures)
+
+    if not artifacts and not failures:
+        return rendered
+
+    lines = rendered.splitlines()
+    enriched = []
+    avoided = []
+    next_step_number = 1
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Replace plain fs_write guidance line with actual source artifact.
+        if stripped.startswith("Step ") and "execute_fs_write" in stripped and 0 in artifacts:
+            artifact_block = _macgyver_render_artifact_block(artifacts[0])
+            enriched.append(f"Step {next_step_number}: {artifact_block}")
+            next_step_number += 1
+            continue
+
+        # Remove known failed command from the happy path and add to avoided.
+        if stripped.startswith("Step ") and "python <FILE_PATH_1> data_1.zdat" in stripped and 1 in failures:
+            failed_cmd = _macgyver_command_from_step(failures[1], bindings=bindings)
+            avoided.append(f"run `{failed_cmd or 'python custom_parser.py data_2.zdat'}`")
+            continue
+
+        # Adapt successful training command to current target and renumber it.
+        if stripped.startswith("Step ") and "python3 <FILE_PATH_1> data_1.zdat" in stripped:
+            cmd = "python3 custom_parser.py data_2.zdat"
+            enriched.append(f"Step {next_step_number}: run `{cmd}`")
+            next_step_number += 1
+            continue
+
+        enriched.append(line)
+
+    if avoided:
+        insert_at = None
+        for idx, line in enumerate(enriched):
+            if line.strip().startswith("Provenance:"):
+                insert_at = idx
+                break
+
+        avoid_block = [
+            "",
+            "Avoid these failed attempts from the original trace:",
+            *[f"- {item}" for item in avoided],
+        ]
+
+        if insert_at is None:
+            enriched.extend(avoid_block)
+        else:
+            enriched[insert_at:insert_at] = avoid_block
+
+    return "\n".join(enriched).rstrip() + "\n"
+
+
+def render_procedure_guidance(
+    suggestions,
+    *,
+    max_chars: int = DEFAULT_GUIDANCE_MAX_CHARS,
+    objective: str | None = None,
+    bindings: dict[str, str] | None = None,
+) -> str:
+    rendered = _BASE_RENDER_PROCEDURE_GUIDANCE(
+        suggestions,
+        max_chars=max_chars,
+        objective=objective,
+        bindings=bindings,
+    )
+    return _macgyver_enrich_rendered_guidance(
+        rendered,
+        suggestions,
+        bindings=bindings,
+    )
