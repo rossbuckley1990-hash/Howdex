@@ -250,7 +250,6 @@ def run_god_mode_benchmark():
         "deploy_lambda_test",
         "Update the backend API in staging using `aws lambda update-function-code --function-name api-staging`.",
         use_memory=True,
-        forced_procedures=procedures,
     )
 
     print("\n" + "=" * 80)
