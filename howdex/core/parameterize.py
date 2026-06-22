@@ -371,6 +371,44 @@ def redact_parameter_evidence(value: Any) -> Any:
     return redacted
 
 
+
+_PACKAGE_INSTALL_PATTERNS = [
+    r"\bnpm\s+(?:install|i|add)\s+([^\s;&|]+)",
+    r"\bpnpm\s+(?:install|add)\s+([^\s;&|]+)",
+    r"\byarn\s+(?:add|install)\s+([^\s;&|]+)",
+    r"\bpip3?\s+install\s+([^\s;&|]+)",
+    r"\bpython\s+-m\s+pip\s+install\s+([^\s;&|]+)",
+    r"\bpoetry\s+add\s+([^\s;&|]+)",
+    r"\buv\s+add\s+([^\s;&|]+)",
+    r"\bcargo\s+add\s+([^\s;&|]+)",
+    r"\bgo\s+get\s+([^\s;&|]+)",
+]
+
+def _parameterize_package_installs(
+    command: str,
+    registry: "_PlaceholderRegistry",
+    parameter_map: dict[str, Any],
+) -> str:
+    def replace_match(match):
+        package = match.group(1)
+        if package.startswith("-"):
+            return match.group(0)
+        placeholder = _bind(
+            "PKG",
+            package,
+            registry,
+            parameter_map,
+            preserve_binding=True,
+        )
+        return match.group(0).replace(package, str(placeholder), 1)
+
+    output = command
+    for pattern in _PACKAGE_INSTALL_PATTERNS:
+        output = re.sub(pattern, replace_match, output)
+    return output
+
+
+
 def _parameterize_command(
     command: str,
     registry: _PlaceholderRegistry,
@@ -424,6 +462,7 @@ def _parameterize_command(
             break
         return " ".join(tokens)
 
+    command = _parameterize_package_installs(command, registry, parameter_map)
     return _parameterize_text(command, registry, parameter_map)
 
 
