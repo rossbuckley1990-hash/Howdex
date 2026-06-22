@@ -326,6 +326,8 @@ with memory.session("publish release") as session:
         {"path": "pyproject.toml"},
         observation="version read",
         metadata={"source": "mcp"},
+        outcome="success",
+        duration_s=0.08,
     )
     session.tool_call(
         "github.create_pr",
@@ -335,10 +337,18 @@ with memory.session("publish release") as session:
     )
 ```
 
+Each structured episode step stores the original `tool_name`, secret-redacted
+`tool_args` and `tool_metadata`, plus its deterministic `canonical_action`,
+`target`, `intent`, observation, outcome, error, and supplied timing fields.
+The original `session.step("plain action", "observation")` API remains
+supported, and older prose-only episode rows continue through the legacy
+canonicalisation adapter without a database rewrite.
+
 This makes procedural memory domain-portable without an LLM dependency:
 healthcare, payments, bioinformatics, infrastructure, and private enterprise
-tools all use the same deterministic path. English command parsing is now a
-legacy compatibility adapter, not the primary canonicalisation mechanism.
+tools—and any agent framework that emits a tool name plus arguments—use the
+same deterministic path. English command parsing is now a legacy compatibility
+adapter, not the primary canonicalisation mechanism.
 
 ---
 

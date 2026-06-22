@@ -23,6 +23,7 @@ from howdex.core.safety import memory_safety_multiplier
 from howdex.core.session import HowdexSession
 from howdex.core.trust import TrustMetadata
 from howdex.core.consolidation import consolidate
+from howdex.core.tool_calls import canonicalize_tool_call, redact_secrets
 from howdex.storage import Store
 from howdex.vectors import VectorIndex, Embedder, auto_embedder
 
@@ -468,9 +469,28 @@ class Howdex:
         return self._current_session
 
     def log_step(self, action: str, observation: str, **extra: Any) -> None:
-        """Record a step in the current session."""
+        """Record a prose step, or enrich structured fields when supplied."""
         if not self._current_session:
             raise HowdexError("no active session; call start_session() first")
+        if extra.get("tool_name") and not extra.get("canonical_action"):
+            structured = dict(extra)
+            tool_name = str(structured.pop("tool_name"))
+            arguments = structured.pop("tool_args", None)
+            legacy_arguments = structured.pop("arguments", None)
+            if arguments is None:
+                arguments = legacy_arguments
+            metadata = structured.pop("tool_metadata", None)
+            legacy_metadata = structured.pop("metadata", None)
+            if metadata is None:
+                metadata = legacy_metadata
+            self.log_tool_call(
+                tool_name,
+                arguments=arguments,
+                observation=observation,
+                metadata=metadata,
+                **structured,
+            )
+            return
         self._current_session.add_step(action, observation, **extra)
 
     def log_tool_call(
@@ -481,15 +501,29 @@ class Howdex:
         metadata: Optional[dict[str, Any]] = None,
         **extra: Any,
     ) -> None:
-        """Record a structured tool call for domain-portable consolidation."""
-        self.log_step(
-            name,
-            observation,
-            tool_name=name,
-            arguments=arguments or {},
-            metadata=metadata or {},
-            **extra,
+        """Record a canonical, structured tool step in the current session."""
+        canonical = canonicalize_tool_call(name, arguments, metadata)
+        safe_metadata = redact_secrets(metadata or {})[0]
+        fields = dict(extra)
+        fields.update(
+            {
+                "tool_name": canonical.raw_name,
+                "tool_args": canonical.raw_args,
+                "tool_metadata": safe_metadata,
+                "canonical_action": canonical.canonical_name,
+                "target": canonical.target,
+                "intent": canonical.intent,
+                "outcome": extra.get("outcome"),
+                "error": extra.get("error"),
+                "canonical_confidence": canonical.confidence,
+                "canonical_evidence": canonical.evidence,
+                "provenance": canonical.provenance,
+                # Compatibility aliases for existing stored evidence/readers.
+                "arguments": canonical.raw_args,
+                "metadata": safe_metadata,
+            }
         )
+        self.log_step(canonical.raw_action, observation, **fields)
 
     def end_session(self, outcome: str = "success", error: Optional[str] = None) -> Episode:
         """Close the current session and persist it as an episodic memory."""
