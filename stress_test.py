@@ -11,15 +11,15 @@ def run_stress_tests():
     print("🚀 TEST 1: Canonicalization (JSON Key Swap)")
     print("="*50)
     
-    memory.start_session("test_canonicalization_1")
-    memory.log_step(json.dumps({"tool": "bash", "cmd": "npm install cors", "cwd": "./"}), "success")
+    memory.start_session("test_canonicalization")
+    memory.log_step({"tool": "bash", "cmd": "npm install cors", "cwd": "./"}, "success")
     memory.end_session("success")
 
-    memory.start_session("test_canonicalization_2")
-    memory.log_step(json.dumps({"cwd": "./", "cmd": "npm install cors", "tool": "bash"}), "success")
+    memory.start_session("test_canonicalization")
+    memory.log_step({"cwd": "./", "cmd": "npm install cors", "tool": "bash"}, "success")
     memory.end_session("success")
 
-    procedures = memory.learn()
+    procedures = memory.learn(min_samples=2)
     print(f"-> Extracted Procedures: {len(procedures)}")
     if len(procedures) > 0:
         print("✅ PASS: Howdex successfully canonicalized the swapped JSON keys.")
@@ -30,15 +30,15 @@ def run_stress_tests():
     print("🚀 TEST 2: AST Parameterization (Variable Masking)")
     print("="*50)
     
-    memory.start_session("test_param_1")
-    memory.log_step(json.dumps({"tool": "fs", "cmd": "write", "file": "app.js"}), "success")
+    memory.start_session("test_parameterization")
+    memory.log_step({"tool": "fs", "cmd": "write", "file": "app.js"}, "success")
     memory.end_session("success")
 
-    memory.start_session("test_param_2")
-    memory.log_step(json.dumps({"tool": "fs", "cmd": "write", "file": "server.js"}), "success")
+    memory.start_session("test_parameterization")
+    memory.log_step({"tool": "fs", "cmd": "write", "file": "server.js"}, "success")
     memory.end_session("success")
 
-    procedures = memory.learn()
+    procedures = memory.learn(min_samples=2)
     print("-> Current Learned Procedures:")
     for i, proc in enumerate(procedures):
         print(f"   [{i}] {proc}")
