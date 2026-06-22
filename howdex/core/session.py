@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any
 
 
 @dataclass
@@ -37,13 +37,35 @@ class HowdexSession:
         self.memory.log_step(action, observation)
         return self
 
+    def tool_call(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        observation: str = "",
+        metadata: dict[str, Any] | None = None,
+        **extra: Any,
+    ):
+        """Record a typed tool call instead of a prose-only action."""
+        if not self.active:
+            raise RuntimeError("Howdex session is not active.")
+        if self.closed:
+            raise RuntimeError("Howdex session is already closed.")
+        self.memory.log_tool_call(
+            name,
+            arguments=arguments,
+            observation=observation,
+            metadata=metadata,
+            **extra,
+        )
+        return self
+
     def success(self):
         if not self.closed:
             self.memory.end_session("success")
             self.closed = True
         return self
 
-    def failure(self, error: Optional[str] = None):
+    def failure(self, error: str | None = None):
         if not self.closed:
             self.memory.end_session("failure", error=error)
             self.closed = True

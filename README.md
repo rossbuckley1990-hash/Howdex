@@ -10,7 +10,7 @@ Portable agent know-how · Four-layer memory · Local-first · Framework-agnosti
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-71%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)](#testing)
 [![Stars](https://img.shields.io/badge/goal-500k%20⭐-yellow.svg)](#why-this-exists)
 
 </div>
@@ -286,17 +286,26 @@ Howdex does not claim magic procedural extraction. Real agent traces are noisy:
 equivalent actions use different words, internal memory calls leak into logs,
 and unrelated successful runs can share a task label.
 
-In v0.3, `learn()` uses a local deterministic pipeline:
+In v0.3, `learn()` uses a local deterministic pipeline. Structured tool calls
+are the primary input: Howdex derives action identity from the tool/function
+name, typed arguments, and optional metadata exposed by OpenAI, Anthropic,
+LangChain, MCP, and similar frameworks.
 
-1. Raw actions are canonicalised into stable names such as
+1. Structured calls retain normalized names such as `github.create_pr`,
+   `filesystem.write_file`, or any custom namespaced tool. The vocabulary
+   emerges from the agent's tools instead of a hardcoded domain registry.
+2. Typed arguments deterministically project a stable, secret-redacted target,
+   while a small open ontology classifies intent and side effects.
+3. Legacy prose/command traces remain supported through the SWE-oriented
+   fallback adapter, which maps text into names such as
    `inspect_package_manifest`, `repair_test_command`, and `run_test_suite`.
-2. Successful episodes are grouped using exact canonical sequence matching or
+4. Successful episodes are grouped using exact canonical sequence matching or
    deterministic subsequence/Jaccard similarity.
-3. Internal memory calls, introspection, and unknown-action-dominated traces are
+5. Internal memory calls, introspection, and unknown-action-dominated traces are
    excluded from executable procedures.
-4. Every learned procedure stores confidence, support and success counts,
+6. Every learned procedure stores confidence, support and success counts,
    source episode IDs, and raw supporting examples.
-5. Procedural retrieval filters low-confidence results and returns at most
+7. Procedural retrieval filters low-confidence results and returns at most
    three procedures.
 
 Raw evidence remains available for inspection; canonicalisation never erases
@@ -307,6 +316,29 @@ Semantic conflict detection is similarly conservative: obvious contradictory
 assertions such as “User prefers Python” and “User prefers Rust” are marked
 `semantic_conflict_detected` and `requires_review`. Howdex does not attempt
 automatic reconciliation.
+
+Record typed calls directly:
+
+```python
+with memory.session("publish release") as session:
+    session.tool_call(
+        "filesystem.read_file",
+        {"path": "pyproject.toml"},
+        observation="version read",
+        metadata={"source": "mcp"},
+    )
+    session.tool_call(
+        "github.create_pr",
+        {"repo": "acme/service", "title": "Release v0.3"},
+        observation="pull request created",
+        metadata={"source": "openai"},
+    )
+```
+
+This makes procedural memory domain-portable without an LLM dependency:
+healthcare, payments, bioinformatics, infrastructure, and private enterprise
+tools all use the same deterministic path. English command parsing is now a
+legacy compatibility adapter, not the primary canonicalisation mechanism.
 
 ---
 
@@ -860,7 +892,7 @@ versus reusable execution knowledge.
 - ✅ Conservative procedural retrieval
 - ✅ Semantic conflict review flags
 - ✅ Portable procedure JSON and local Codex registry
-- ✅ 71 passing tests
+- ✅ 83 passing tests
 
 ### Next
 - ⬜ Persistent HNSW index (no rebuild on startup)

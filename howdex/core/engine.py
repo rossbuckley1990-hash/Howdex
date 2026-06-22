@@ -473,6 +473,24 @@ class Howdex:
             raise HowdexError("no active session; call start_session() first")
         self._current_session.add_step(action, observation, **extra)
 
+    def log_tool_call(
+        self,
+        name: str,
+        arguments: Optional[dict[str, Any]] = None,
+        observation: str = "",
+        metadata: Optional[dict[str, Any]] = None,
+        **extra: Any,
+    ) -> None:
+        """Record a structured tool call for domain-portable consolidation."""
+        self.log_step(
+            name,
+            observation,
+            tool_name=name,
+            arguments=arguments or {},
+            metadata=metadata or {},
+            **extra,
+        )
+
     def end_session(self, outcome: str = "success", error: Optional[str] = None) -> Episode:
         """Close the current session and persist it as an episodic memory."""
         if not self._current_session:

@@ -13,6 +13,7 @@ from howdex.core.actions import (
     canonical_sequence_similarity,
     canonicalize_steps,
 )
+from howdex.core.tool_calls import redact_secrets
 from howdex.core.types import Procedure
 from howdex.storage import Store
 
@@ -284,7 +285,7 @@ def _raw_examples(traces: list[_EpisodeTrace]) -> list[dict[str, Any]]:
             {
                 "episode_id": trace.episode_id,
                 "outcome": trace.outcome,
-                "steps": trace.raw_steps,
+                "steps": redact_secrets(trace.raw_steps)[0],
                 "canonical_sequence": trace.action_names,
             }
         )

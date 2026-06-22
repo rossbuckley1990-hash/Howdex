@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 _SPACE_RE = re.compile(r"\s+")
@@ -23,6 +23,10 @@ class CanonicalAction:
     target: str | None
     confidence: float
     evidence: dict[str, Any]
+    raw_name: str | None = None
+    raw_args: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+    matched_by: str = "legacy_prose"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -224,9 +228,15 @@ def canonicalize_action(
 
 
 def canonicalize_steps(steps: list[Any]) -> list[CanonicalAction]:
-    """Canonicalise list-based trace steps while preserving their raw text."""
+    """Canonicalise trace steps, preferring structured tool-call fields."""
+    from howdex.core.tool_calls import tool_call_from_step
+
     canonical: list[CanonicalAction] = []
     for step in steps:
+        structured = tool_call_from_step(step)
+        if structured is not None:
+            canonical.append(structured)
+            continue
         action, observation = _step_parts(step)
         canonical.append(canonicalize_action(action, observation))
     return canonical
@@ -276,6 +286,9 @@ def _canonical(
         target=target,
         confidence=confidence,
         evidence=evidence,
+        raw_name=raw_action,
+        provenance={"source": "legacy_prose"},
+        matched_by="legacy_prose",
     )
 
 
