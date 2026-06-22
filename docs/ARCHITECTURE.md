@@ -90,6 +90,20 @@ idle gaps, then maximum step count as a fallback. Children retain
 `parent_session_id`; consolidation prefers those children and excludes the raw
 parent from duplicate evidence counting.
 
+Step records are additive DAG nodes. Every new step has a stable `step_id`,
+zero or more `parent_step_ids`, optional `span_id` and `parallel_group_id`,
+start/end timestamps, and a display-only `ordering_index`. The parallel span
+resolver preserves explicit relationships, groups overlapping timestamp
+intervals, and otherwise infers the legacy linear chain. This metadata lives
+inside the existing episode `steps` JSON, so old databases and linear rows
+need no schema migration.
+
+Consolidation serializes each parallel group as one order-insensitive node for
+sequence comparison. Group members are sorted by canonical action identity;
+the learned procedure is emitted as a flat compatible step array with shared
+parallel metadata and parent edges. Guidance renders grouped members as
+`Step 2a`, `Step 2b`, and so on, never as an invented serial order.
+
 Observations and errors cross a typed ingestion boundary before entering an
 episode. The fixed default middleware order strips ANSI controls, redacts
 credentials, compresses progress updates and stack traces, collapses repeated

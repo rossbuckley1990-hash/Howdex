@@ -148,16 +148,51 @@ class Episode:
             step.pop("start_time", step.pop("started_at", timestamp))
         )
         duration_s = step.get("duration_s")
-        end_time = step.pop("end_time", step.pop("finished_at", None))
+        end_time = step.pop(
+            "end_time",
+            step.pop("ended_at", step.pop("finished_at", None)),
+        )
         if end_time is None and duration_s is not None:
             end_time = start_time + max(0.0, float(duration_s))
+        ordering_index = int(
+            step.pop("ordering_index", len(self.steps))
+        )
+        step_id = str(
+            step.pop(
+                "step_id",
+                f"{self.session_id}:step:{len(self.steps) + 1:04d}",
+            )
+        )
+        parents = step.pop("parent_step_ids", [])
+        if isinstance(parents, str):
+            parent_step_ids = [parents]
+        elif isinstance(parents, (list, tuple, set)):
+            parent_step_ids = sorted(
+                {
+                    str(parent)
+                    for parent in parents
+                    if parent not in (None, "")
+                }
+            )
+        else:
+            parent_step_ids = []
         self.steps.append(
             {
+                "step_id": step_id,
+                "parent_step_ids": parent_step_ids,
+                "span_id": step.pop("span_id", None),
+                "parallel_group_id": step.pop(
+                    "parallel_group_id",
+                    None,
+                ),
+                "ordering_index": ordering_index,
                 "action": action,
                 "observation": observation,
                 "ts": timestamp,
                 "start_time": start_time,
                 "end_time": end_time,
+                "started_at": start_time,
+                "ended_at": end_time,
                 **step,
             }
         )
@@ -170,6 +205,8 @@ class Episode:
 
     def to_memory(self) -> Memory:
         """Convert into a storable episodic Memory."""
+        from howdex.core.parallel import render_dag_steps
+
         content = (
             f"Task: {self.task}\n"
             f"Outcome: {self.outcome}\n"
@@ -178,9 +215,21 @@ class Episode:
         )
         if self.error:
             content += f"Error: {self.error}\n"
+        display_steps = [
+            {
+                **step,
+                "episode_display": (
+                    f"{step.get('action', 'unknown_action')} "
+                    f"→ {step.get('observation', '')}"
+                ),
+            }
+            for step in self.steps
+        ]
         content += "\n".join(
-            f"  {i+1}. {s['action']} → {s['observation']}"
-            for i, s in enumerate(self.steps)
+            render_dag_steps(
+                display_steps,
+                action_key="episode_display",
+            )
         )
         return Memory(
             layer=MemoryLayer.EPISODIC,
@@ -277,17 +326,15 @@ class Procedure:
     use_count: int = 0
 
     def to_memory(self) -> Memory:
-        action_names = [
-            str(step.get("action", ""))
-            for step in self.steps
-            if isinstance(step, dict) and step.get("action")
-        ]
+        from howdex.core.parallel import render_dag_steps
+
+        rendered_steps = render_dag_steps(self.steps)
         return Memory(
             layer=MemoryLayer.PROCEDURAL,
             type=MemoryType.WORKFLOW,
             content=(
                 f"{self.task_signature}\n"
-                f"Procedure: {' -> '.join(action_names)}"
+                f"Procedure:\n" + "\n".join(rendered_steps)
             ),
             metadata={
                 "procedure_id": self.id,

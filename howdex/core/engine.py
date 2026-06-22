@@ -42,6 +42,7 @@ from howdex.core.receipts import (
     procedure_verification_status,
 )
 from howdex.core.parameterize import redact_parameter_evidence
+from howdex.core.parallel import resolve_parallel_spans
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -786,6 +787,10 @@ class Howdex:
                     content_type="error",
                 )
         ep.close(outcome, safe_error)
+        ep.steps = resolve_parallel_spans(
+            ep.steps,
+            episode_id=ep.session_id,
+        )
         child_episodes = segment_episode(
             ep,
             max_steps=max_segment_steps,

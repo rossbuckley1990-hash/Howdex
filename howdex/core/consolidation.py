@@ -23,6 +23,7 @@ from howdex.core.parameterize import (
     parameterize_steps,
     redact_parameter_evidence,
 )
+from howdex.core.parallel import resolve_parallel_spans
 from howdex.core.types import Procedure
 from howdex.storage import Store
 
@@ -33,16 +34,50 @@ NON_PROCEDURAL_ACTIONS = {"unknown_action", "internal_memory_action"}
 
 
 @dataclass(frozen=True)
+class _TraceMember:
+    raw_step: dict[str, Any]
+    canonical_action: CanonicalAction
+    parameterized_action: ParameterizedAction
+
+
+@dataclass(frozen=True)
+class _TraceNode:
+    signature: str
+    members: tuple[_TraceMember, ...]
+
+
+@dataclass(frozen=True)
 class _EpisodeTrace:
     episode_id: str
     outcome: str
     raw_steps: list[Any]
-    canonical_actions: list[CanonicalAction]
-    parameterized_actions: list[ParameterizedAction]
+    nodes: tuple[_TraceNode, ...]
 
     @property
     def action_names(self) -> list[str]:
-        return [action.canonical_name for action in self.canonical_actions]
+        return [node.signature for node in self.nodes]
+
+    @property
+    def canonical_actions(self) -> list[CanonicalAction]:
+        return [
+            member.canonical_action
+            for node in self.nodes
+            for member in node.members
+        ]
+
+    @property
+    def canonical_action_names(self) -> list[str]:
+        return [
+            action.canonical_name for action in self.canonical_actions
+        ]
+
+    @property
+    def parameterized_actions(self) -> list[ParameterizedAction]:
+        return [
+            member.parameterized_action
+            for node in self.nodes
+            for member in node.members
+        ]
 
 
 def _get(obj: Any, key: str, default: Any = None) -> Any:
@@ -77,8 +112,17 @@ def is_procedural_action(action: str | None) -> bool:
 
 
 def _trace_from_episode(episode: Any) -> _EpisodeTrace | None:
-    raw_steps = _normalise_steps(_get(episode, "steps", []) or [])
+    episode_id = str(
+        _get(episode, "session_id")
+        or _get(episode, "id")
+        or f"episode-{_get(episode, 'started_at', 0)}"
+    )
+    raw_steps = resolve_parallel_spans(
+        _normalise_steps(_get(episode, "steps", []) or []),
+        episode_id=episode_id,
+    )
     all_actions = canonicalize_steps(raw_steps)
+    all_parameterized = parameterize_steps(all_actions)
     non_internal = [
         action
         for action in all_actions
@@ -97,17 +141,68 @@ def _trace_from_episode(episode: Any) -> _EpisodeTrace | None:
     if known_ratio < 0.5:
         return None
 
-    episode_id = str(
-        _get(episode, "session_id")
-        or _get(episode, "id")
-        or f"episode-{_get(episode, 'started_at', 0)}"
-    )
+    members = [
+        _TraceMember(
+            raw_step=dict(step),
+            canonical_action=action,
+            parameterized_action=parameterized,
+        )
+        for step, action, parameterized in zip(
+            raw_steps,
+            all_actions,
+            all_parameterized,
+        )
+        if action.canonical_name not in NON_PROCEDURAL_ACTIONS
+    ]
+    nodes = _trace_nodes(members)
+    if not nodes:
+        return None
     return _EpisodeTrace(
         episode_id=episode_id,
         outcome=str(_get(episode, "outcome", "") or ""),
         raw_steps=raw_steps,
-        canonical_actions=actionable,
-        parameterized_actions=parameterize_steps(actionable),
+        nodes=tuple(nodes),
+    )
+
+
+def _trace_nodes(members: list[_TraceMember]) -> list[_TraceNode]:
+    grouped: dict[str, list[_TraceMember]] = {}
+    node_order: list[str] = []
+    for member in members:
+        group_id = member.raw_step.get("parallel_group_id")
+        node_key = (
+            f"group:{group_id}"
+            if group_id
+            else f"step:{member.raw_step.get('step_id')}"
+        )
+        if node_key not in grouped:
+            grouped[node_key] = []
+            node_order.append(node_key)
+        grouped[node_key].append(member)
+
+    nodes: list[_TraceNode] = []
+    for node_key in node_order:
+        node_members = grouped[node_key]
+        if len(node_members) > 1:
+            ordered = tuple(sorted(node_members, key=_trace_member_sort_key))
+            names = "|".join(
+                member.canonical_action.canonical_name
+                for member in ordered
+            )
+            signature = f"parallel[{names}]"
+        else:
+            ordered = tuple(node_members)
+            signature = ordered[0].canonical_action.canonical_name
+        nodes.append(_TraceNode(signature=signature, members=ordered))
+    return nodes
+
+
+def _trace_member_sort_key(
+    member: _TraceMember,
+) -> tuple[str, str]:
+    return (
+        member.canonical_action.canonical_name,
+        str(member.raw_step.get("step_id", "")),
     )
 
 
@@ -206,98 +301,133 @@ def _canonical_steps(
 ) -> list[dict[str, Any]]:
     steps: list[dict[str, Any]] = []
     occurrences: dict[str, int] = {}
-    for name in names:
+    previous_step_ids: list[str] = []
+    flat_index = 0
+    for ordering_index, name in enumerate(names):
         occurrence = occurrences.get(name, 0)
         occurrences[name] = occurrence + 1
-        examples = [
+        node_examples = [
             matching[occurrence]
             for trace in cluster
             if len(
                 matching := [
-                    action
-                    for action in trace.canonical_actions
-                    if action.canonical_name == name
+                    node
+                    for node in trace.nodes
+                    if node.signature == name
                 ]
             )
             > occurrence
         ]
-        if not examples:
+        if not node_examples:
             continue
 
-        representative = max(
-            examples,
-            key=lambda action: (
-                action.confidence,
-                action.intent,
-                action.target or "",
-                action.raw_action,
-            ),
+        member_count = len(node_examples[0].members)
+        group_id = (
+            f"parallel-{ordering_index + 1:04d}"
+            if member_count > 1
+            else None
         )
-        raw_actions = sorted(
-            {
-                str(redact_parameter_evidence(action.raw_action))
-                for action in examples
-                if action.raw_action
-            }
-        )
-        observations = sorted(
-            {
-                str(
-                    redact_parameter_evidence(
-                        action.evidence.get("observation")
-                    )
+        current_step_ids: list[str] = []
+        for member_index in range(member_count):
+            member_examples = [
+                node.members[member_index]
+                for node in node_examples
+                if len(node.members) > member_index
+            ]
+            if not member_examples:
+                continue
+            step_id = f"procedure-step-{flat_index + 1:04d}"
+            steps.append(
+                _procedure_step(
+                    member_examples,
+                    step_id=step_id,
+                    parent_step_ids=previous_step_ids,
+                    ordering_index=ordering_index,
+                    parallel_group_id=group_id,
+                    occurrence=occurrence + 1,
+                    support_count=len(node_examples),
                 )
-                for action in examples
-                if action.evidence.get("observation")
-            }
-        )
-        parameterized_examples = [
-            matching[occurrence]
-            for trace in cluster
-            if len(
-                matching := [
-                    action
-                    for action in trace.parameterized_actions
-                    if action.canonical_name == name
-                ]
             )
-            > occurrence
-        ]
-        template = _representative_template(parameterized_examples)
-        steps.append(
-            {
-                "action": name,
-                "canonical_name": name,
-                "intent": representative.intent,
-                "side_effect_class": representative.side_effect_class,
-                "target": representative.target,
-                "confidence": round(
-                    sum(action.confidence for action in examples) / len(examples),
-                    4,
-                ),
-                "parameterized_action": template["action"],
-                "parameterized_args": template["arguments"],
-                "parameterized_target": template["target"],
-                "template": template,
-                "evidence": {
-                    "support_count": len(
-                        {
-                            trace.episode_id
-                            for trace in cluster
-                            if sum(
-                                action.canonical_name == name
-                                for action in trace.canonical_actions
-                            )
-                            > occurrence
-                        }
-                    ),
-                    "occurrence": occurrence + 1,
-                    "raw_actions": raw_actions,
-                    "observations": observations[:5],
-                },
-            }
-        )
+            current_step_ids.append(step_id)
+            flat_index += 1
+        previous_step_ids = current_step_ids
     return steps
+
+
+def _procedure_step(
+    examples: list[_TraceMember],
+    *,
+    step_id: str,
+    parent_step_ids: list[str],
+    ordering_index: int,
+    parallel_group_id: str | None,
+    occurrence: int,
+    support_count: int,
+) -> dict[str, Any]:
+    actions = [example.canonical_action for example in examples]
+    representative = max(
+        actions,
+        key=lambda action: (
+            action.confidence,
+            action.intent,
+            action.target or "",
+            action.raw_action,
+        ),
+    )
+    raw_actions = sorted(
+        {
+            str(redact_parameter_evidence(action.raw_action))
+            for action in actions
+            if action.raw_action
+        }
+    )
+    observations = sorted(
+        {
+            str(
+                redact_parameter_evidence(
+                    action.evidence.get("observation")
+                )
+            )
+            for action in actions
+            if action.evidence.get("observation")
+        }
+    )
+    template = _representative_template(
+        [example.parameterized_action for example in examples]
+    )
+    span_ids = sorted(
+        {
+            str(example.raw_step["span_id"])
+            for example in examples
+            if example.raw_step.get("span_id")
+        }
+    )
+    return {
+        "step_id": step_id,
+        "parent_step_ids": list(parent_step_ids),
+        "span_id": span_ids[0] if len(span_ids) == 1 else None,
+        "parallel_group_id": parallel_group_id,
+        "ordering_index": ordering_index,
+        "action": representative.canonical_name,
+        "canonical_name": representative.canonical_name,
+        "intent": representative.intent,
+        "side_effect_class": representative.side_effect_class,
+        "target": representative.target,
+        "confidence": round(
+            sum(action.confidence for action in actions) / len(actions),
+            4,
+        ),
+        "parameterized_action": template["action"],
+        "parameterized_args": template["arguments"],
+        "parameterized_target": template["target"],
+        "template": template,
+        "evidence": {
+            "support_count": support_count,
+            "occurrence": occurrence,
+            "raw_actions": raw_actions,
+            "observations": observations[:5],
+        },
+    }
 
 
 def _matching_traces(
@@ -325,7 +455,8 @@ def _raw_examples(traces: list[_EpisodeTrace]) -> list[dict[str, Any]]:
                 "episode_id": trace.episode_id,
                 "outcome": trace.outcome,
                 "steps": redact_parameter_evidence(trace.raw_steps),
-                "canonical_sequence": trace.action_names,
+                "canonical_sequence": trace.canonical_action_names,
+                "dag_sequence": trace.action_names,
                 "parameterized_sequence": [
                     action.to_dict()
                     for action in trace.parameterized_actions
@@ -384,7 +515,7 @@ def _preconditions(
     failed_actions = {
         name
         for trace in failure_traces
-        for name in trace.action_names
+        for name in trace.canonical_action_names
     }
     return sorted({name for name in canonical_names if name not in failed_actions})
 
@@ -486,11 +617,11 @@ def consolidate(
                 tuple(_medoid(candidate).action_names),
             ),
         )
-        canonical_names = _common_canonical_names(cluster)
-        if not canonical_names:
+        canonical_nodes = _common_canonical_names(cluster)
+        if not canonical_nodes:
             continue
 
-        steps = _canonical_steps(canonical_names, cluster)
+        steps = _canonical_steps(canonical_nodes, cluster)
         if not steps:
             continue
 
@@ -549,7 +680,14 @@ def consolidate(
             id=str(_get(existing, "id") or Procedure().id),
             task_signature=task,
             steps=steps,
-            preconditions=_preconditions(canonical_names, failure_traces),
+            preconditions=_preconditions(
+                [
+                    str(step["canonical_name"])
+                    for step in steps
+                    if step.get("canonical_name")
+                ],
+                failure_traces,
+            ),
             expected_outcome="success",
             success_rate=success_rate,
             sample_count=learned_support_count,

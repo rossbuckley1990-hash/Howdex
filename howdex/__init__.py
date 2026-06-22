@@ -31,6 +31,7 @@ from howdex.core.errors import (
 )
 from howdex.core.receipts import VerificationReceipt
 from howdex.core.parameterize import ParameterizedAction
+from howdex.core.parallel import ParallelSpanResolver
 from howdex.ingest import IngestionPipeline, IngestionRecord
 
 __version__ = "0.3.0"
@@ -47,6 +48,7 @@ __all__ = [
     "Procedure",
     "VerificationReceipt",
     "ParameterizedAction",
+    "ParallelSpanResolver",
     "IngestionRecord",
     "IngestionPipeline",
     "HowdexError",

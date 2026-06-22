@@ -340,6 +340,9 @@ with memory.session("publish release") as session:
 Each structured episode step stores the original `tool_name`, secret-redacted
 `tool_args` and `tool_metadata`, plus its deterministic `canonical_action`,
 `target`, `intent`, observation, outcome, error, and supplied timing fields.
+Steps also carry additive DAG metadata: `step_id`, `parent_step_ids`,
+`span_id`, `parallel_group_id`, `started_at`, `ended_at`, and an
+`ordering_index` used only for deterministic display.
 The original `session.step("plain action", "observation")` API remains
 supported, and older prose-only episode rows continue through the legacy
 canonicalisation adapter without a database rewrite.
@@ -656,13 +659,51 @@ which agent or framework produced it, every raw/canonical step, and the final
 outcome or error. This evidence is the substrate that `learn()` turns into
 procedures, so the original session is always retained.
 
+Agent episodes are DAGs, not necessarily lists. When two tool calls have
+overlapping `started_at`/`ended_at` intervals, Howdex assigns them a shared
+`parallel_group_id`. Explicit `parent_step_ids`, span IDs, and caller-provided
+parallel groups are preserved. Without timing or DAG metadata, Howdex falls
+back to the original linear order.
+
 ```python
 mem.start_session("onboard new customer")
-mem.log_step("create account", "success, user_id=42")
-mem.log_step("send welcome email", "queued")
-mem.log_step("provision resources", "FAILED: quota exceeded")
+mem.log_step(
+    "create account",
+    "success, user_id=42",
+    step_id="account",
+    started_at=0.0,
+    ended_at=1.0,
+)
+mem.log_step(
+    "send welcome email",
+    "queued",
+    step_id="email",
+    started_at=1.0,
+    ended_at=3.0,
+)
+mem.log_step(
+    "provision resources",
+    "ready",
+    step_id="provision",
+    started_at=1.2,
+    ended_at=4.0,
+)
 mem.end_session("failure", error="quota exceeded")
 ```
+
+The email and provisioning calls form one parallel node. Human guidance
+renders this without inventing an order:
+
+```text
+Step 1: create account
+Step 2a (parallel): provision resources
+Step 2b (parallel): send welcome email
+```
+
+Procedure JSON remains a flat, backwards-compatible `steps` array, but every
+step retains its DAG fields. Parallel members share `parallel_group_id` and
+`ordering_index`; the following sequential node lists all parallel members in
+`parent_step_ids`.
 
 Long sessions are segmented deterministically into child episodes when Howdex
 sees:
@@ -691,6 +732,12 @@ for one close with `end_session(..., max_segment_steps=50, idle_gap_s=900)`.
 ### Procedural Memory
 
 Learned workflows. **You don't write these — `learn()` writes them for you** by analyzing many episodes of the same task.
+
+Consolidation serializes a parallel group as one deterministic internal node
+whose member action names are sorted. LCS and near-match grouping therefore
+compare the true DAG shape without depending on whichever parallel tool
+finished or was logged first. Learned procedure output then restores the
+individual member steps with shared parallel metadata.
 
 ```python
 procs = mem.learn(min_samples=3)
