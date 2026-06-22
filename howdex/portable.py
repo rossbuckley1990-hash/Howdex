@@ -170,6 +170,7 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
             "preconditions": procedure.preconditions,
             "expected_outcome": procedure.expected_outcome,
             "raw_supporting_examples": procedure.raw_supporting_examples,
+            "parameter_bindings": procedure.parameter_bindings,
         },
         "success_evidence": {
             "success_rate": procedure.success_rate,
@@ -301,6 +302,11 @@ def procedure_from_document(
             "raw_supporting_examples",
             label,
         ),
+        parameter_bindings=_list_value(
+            payload.get("parameter_bindings"),
+            "parameter_bindings",
+            label,
+        ),
         source_episode_ids=[
             str(value)
             for value in _list_value(
@@ -322,6 +328,7 @@ def _procedure_from_store(payload: dict[str, Any]) -> Procedure:
         "steps",
         "preconditions",
         "raw_supporting_examples",
+        "parameter_bindings",
         "source_episode_ids",
         "receipts",
     ):
@@ -414,6 +421,7 @@ def _merge_with_existing(
             incoming.unverified_use_count,
         ),
         raw_supporting_examples=incoming.raw_supporting_examples,
+        parameter_bindings=incoming.parameter_bindings,
         source_episode_ids=source_episode_ids,
         receipts=receipts,
         created_at=created_at,

@@ -90,6 +90,15 @@ idle gaps, then maximum step count as a fallback. Children retain
 `parent_session_id`; consolidation prefers those children and excludes the raw
 parent from duplicate evidence counting.
 
+Before consolidation, canonical steps pass through deterministic
+parameterisation. Volatile paths, packages, URLs, ports, identifiers, branch
+names, environment values, and similar literals become stable typed
+placeholders within each trace. Canonical action identity remains unchanged,
+so existing clustering and retrieval APIs remain compatible. Consolidation
+stores the generalized template on each procedure step and keeps redacted
+per-episode bindings and raw evidence for inspection. Secret-like values are
+redacted before either evidence or portable procedure output is persisted.
+
 Semantic memory deliberately avoids implicit prose extraction. Explicit
 facts, preferences, entities, and relations retain source, provenance, and
 optional confidence metadata. Structured tool calls may deterministically

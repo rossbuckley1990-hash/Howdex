@@ -41,6 +41,7 @@ from howdex.core.receipts import (
     parse_bootproof_attestation,
     procedure_verification_status,
 )
+from howdex.core.parameterize import redact_parameter_evidence
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -75,6 +76,7 @@ def _normalise_procedure_payload(payload):
         "steps",
         "preconditions",
         "raw_supporting_examples",
+        "parameter_bindings",
         "source_episode_ids",
         "receipts",
     ):
@@ -541,7 +543,16 @@ class Howdex:
                 **structured,
             )
             return
-        self._current_session.add_step(action, observation, **extra)
+        safe_action = str(redact_parameter_evidence(action) or "")
+        safe_observation = str(
+            redact_parameter_evidence(observation) or ""
+        )
+        safe_extra = redact_parameter_evidence(extra)
+        self._current_session.add_step(
+            safe_action,
+            safe_observation,
+            **safe_extra,
+        )
 
     def log_tool_call(
         self,

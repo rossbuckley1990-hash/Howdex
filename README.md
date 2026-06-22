@@ -350,6 +350,40 @@ tools—and any agent framework that emits a tool name plus arguments—use the
 same deterministic path. English command parsing is now a legacy compatibility
 adapter, not the primary canonicalisation mechanism.
 
+### Parameterized procedure templates
+
+Howdex records three deliberately separate forms of every learned step:
+
+| Form | Purpose |
+|---|---|
+| Raw action | Concrete episode evidence, retained with provenance and secret redaction |
+| Canonical action | Stable operation identity such as `install_dependencies` or `filesystem.read_file` |
+| Parameterized template | Reusable algorithm with volatile literals replaced by placeholders |
+
+Parameterisation runs deterministically after canonicalisation and before
+procedure consolidation. A shared placeholder registry is used for each trace:
+the same literal reuses the same placeholder, new values of a type increment
+predictably, and structured argument dictionaries are traversed in sorted-key
+order.
+
+```text
+npm install cors                 -> npm install <PKG_1>
+pytest tests/test_auth.py        -> pytest <PATH_1>
+curl http://localhost:3000/health -> curl <URL_1>
+{"repo": "acme/app"}             -> {"repo": "<REPO_1>"}
+```
+
+Learned procedure steps retain their canonical action and add a `template`
+containing parameterized action text, arguments, and target. Concrete,
+secret-redacted examples remain inspectable in `raw_supporting_examples`;
+`parameter_bindings` records per-episode examples such as
+`{"<PKG_1>": "cors"}`.
+
+This is the distinction between dumb macro memory and reusable procedural
+memory: Howdex learns the stable operation sequence and its parameter slots,
+not one hardcoded replay. No LLM is used, and secrets become `[REDACTED]`
+rather than visible placeholders or exported bindings.
+
 ### Intent and side-effect classification
 
 Every canonical action carries a deterministic `intent`,

@@ -30,6 +30,7 @@ from howdex.core.errors import (
     SyncError,
 )
 from howdex.core.receipts import VerificationReceipt
+from howdex.core.parameterize import ParameterizedAction
 
 __version__ = "0.3.0"
 __author__ = "Howdex Collective"
@@ -44,6 +45,7 @@ __all__ = [
     "Episode",
     "Procedure",
     "VerificationReceipt",
+    "ParameterizedAction",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",
