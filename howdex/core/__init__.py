@@ -12,6 +12,7 @@ from howdex.core.actions import (
     canonicalize_action,
     canonicalize_steps,
 )
+from howdex.core.tool_calls import canonicalize_tool_call, normalize_tool_name
 
 __all__ = [
     "Howdex",
@@ -19,4 +20,5 @@ __all__ = [
     "HowdexError", "StoreError", "HowdexNotFoundError", "ConsolidationError", "SyncError", "EmbeddingError",
     "consolidate", "tokenize", "keyword_score", "graph_neighbors",
     "CanonicalAction", "canonicalize_action", "canonicalize_steps",
+    "canonicalize_tool_call", "normalize_tool_name",
 ]
