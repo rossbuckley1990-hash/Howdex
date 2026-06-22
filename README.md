@@ -350,6 +350,47 @@ tools—and any agent framework that emits a tool name plus arguments—use the
 same deterministic path. English command parsing is now a legacy compatibility
 adapter, not the primary canonicalisation mechanism.
 
+### Intent and side-effect classification
+
+Every canonical action carries a deterministic `intent`,
+`side_effect_class`, and the exact matched rules in its evidence. Explicit
+metadata overrides take precedence for side effects; otherwise Howdex uses
+normalized tool-name verbs, schema hints, and argument names. Unknown cases
+stay `unknown` rather than being silently treated as safe.
+
+| Intent | Meaning |
+|---|---|
+| `read` | Read or inspect one resource |
+| `search` | Query or find matching resources |
+| `list` | Enumerate resources |
+| `create` | Create a new resource |
+| `update` | Modify an existing resource |
+| `write` | Persist or replace content |
+| `delete` | Remove a resource |
+| `execute` | Run a command, job, build, test, or deployment |
+| `transfer` | Move funds or value |
+| `notify` | Send or publish a message |
+| `approve` | Approve or accept a request |
+| `reject` | Reject or deny a request |
+| `authenticate` | Establish or verify an identity |
+| `unknown` | No deterministic intent rule matched |
+
+| Side-effect class | Meaning |
+|---|---|
+| `read_only` | Observes state without changing it |
+| `local_write` | Changes local files or local execution state |
+| `external_write` | Changes or notifies an external system |
+| `destructive` | Deletes, drops, purges, or destroys state |
+| `financial` | Moves money or changes a financial resource |
+| `security_sensitive` | Handles authentication, credentials, or permissions |
+| `unknown` | Consequences cannot be classified deterministically |
+
+This inspectable signal is useful for audit logs today and creates a stable
+boundary for future Actenon-style approval and BootProof verification
+integrations. Classification does not grant permission or claim verification;
+it only describes the action deterministically so downstream policy can decide
+what evidence or approval is required.
+
 ---
 
 ## 🚀 Quickstart

@@ -17,6 +17,7 @@ def test_github_create_pr_uses_normalized_name_and_repo_target():
 
     assert action.canonical_name == "github.create_pr"
     assert action.intent == "create"
+    assert action.side_effect_class == "external_write"
     assert action.target == "repo=openai/howdex"
     assert action.raw_name == "GitHub.Create-PR"
     assert action.raw_args["title"] == "Ship structured calls"
@@ -40,6 +41,7 @@ def test_stripe_refund_projects_payment_identifier():
     )
 
     assert payment_intent.intent == "transfer"
+    assert payment_intent.side_effect_class == "financial"
     assert payment_intent.target == "payment_intent=pi_123"
     assert charge.target == "charge=ch_123"
     assert payment_intent.evidence["side_effecting"] is True
@@ -56,9 +58,11 @@ def test_filesystem_read_and_write_are_distinguished():
     )
 
     assert read.intent == "read"
+    assert read.side_effect_class == "read_only"
     assert read.target == "path=src/howdex.py"
     assert read.evidence["side_effecting"] is False
     assert write.intent == "write"
+    assert write.side_effect_class == "local_write"
     assert write.target == "path=src/howdex.py"
     assert write.evidence["side_effecting"] is True
 
@@ -220,6 +224,7 @@ def test_stored_canonical_structured_action_is_preferred():
     assert action.canonical_name == "custom.stable_operation"
     assert action.target == "id=job-7"
     assert action.intent == "execute"
+    assert action.side_effect_class == "unknown"
     assert action.confidence == 0.94
     assert action.matched_by == "structured_tool_call"
 
@@ -246,6 +251,10 @@ def test_structured_tool_calls_flow_into_learned_procedure(tmp_path):
     assert [step["action"] for step in procedure.steps] == [
         "filesystem.read_file",
         "github.create_pr",
+    ]
+    assert [step["side_effect_class"] for step in procedure.steps] == [
+        "read_only",
+        "external_write",
     ]
     raw_call = procedure.raw_supporting_examples[0]["steps"][0]
     assert raw_call["arguments"] == {"path": "pyproject.toml"}
@@ -280,6 +289,7 @@ def test_structured_tool_call_fields_are_stored_in_episode(tmp_path):
     assert step["canonical_action"] == "filesystem.read_file"
     assert step["target"] == "path=settings.json"
     assert step["intent"] == "read"
+    assert step["side_effect_class"] == "security_sensitive"
     assert step["observation"] == "configuration loaded"
     assert step["outcome"] == "success"
     assert step["error"] is None
@@ -307,6 +317,7 @@ def test_log_step_structured_fields_use_the_canonical_tool_path(tmp_path):
     assert episode.steps[0]["canonical_action"] == "filesystem.read_file"
     assert episode.steps[0]["target"] == "path=settings.json"
     assert episode.steps[0]["intent"] == "read"
+    assert episode.steps[0]["side_effect_class"] == "read_only"
     assert episode.steps[0]["tool_metadata"]["source"] == "langchain"
 
 
