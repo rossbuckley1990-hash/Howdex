@@ -43,8 +43,8 @@ def test_inspect_howdex_is_not_learned_as_procedure_step():
     assert "inspect_howdex" not in learned
     assert "unknown" not in learned
     assert learned == [
-        "check_DATABASE_URL",
-        "check_migration_file",
+        "inspect_file",
+        "inspect_file",
         "run_database_migration",
         "deploy_service",
     ]

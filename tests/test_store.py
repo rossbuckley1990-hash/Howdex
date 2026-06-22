@@ -1,6 +1,7 @@
 """Tests for the SQLite store."""
 
 import json
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -90,3 +91,47 @@ def test_stats(store):
     assert s["per_layer"]["semantic"] == 1
     assert s["per_layer"]["working"] == 1
     assert "node_id" in s
+
+
+def test_v1_procedure_schema_migrates_with_evidence_defaults(tmp_path):
+    path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE schema_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1');
+        CREATE TABLE procedures (
+            id TEXT PRIMARY KEY,
+            task_signature TEXT NOT NULL UNIQUE,
+            steps TEXT NOT NULL DEFAULT '[]',
+            preconditions TEXT NOT NULL DEFAULT '[]',
+            expected_outcome TEXT NOT NULL DEFAULT '',
+            success_rate REAL NOT NULL DEFAULT 0,
+            sample_count INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL,
+            last_used_at REAL,
+            use_count INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO procedures(
+            id, task_signature, steps, preconditions, expected_outcome,
+            success_rate, sample_count, created_at, last_used_at, use_count
+        ) VALUES (
+            'legacy', 'repair tests', '[]', '[]', 'success',
+            0.75, 4, 1.0, NULL, 0
+        );
+        """
+    )
+    connection.close()
+
+    migrated = Store(path)
+    procedure = migrated.get_procedure("repair tests")
+
+    assert procedure is not None
+    assert procedure["support_count"] == 4
+    assert procedure["success_count"] == 3
+    assert procedure["confidence"] == 0.75
+    assert procedure["raw_supporting_examples"] == []
+    assert procedure["source_episode_ids"] == []

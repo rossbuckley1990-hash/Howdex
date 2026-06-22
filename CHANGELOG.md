@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 - Inspectable Procedural Extraction
+
+### Added
+
+- Deterministic canonical action vocabulary for common software-agent traces
+- Near-match grouping using canonical subsequence and Jaccard similarity
+- Procedure confidence, support/success counts, source episode IDs, and raw evidence
+- Conservative procedural retrieval capped at three high-confidence results
+- Semantic conflict flags for obvious contradictory preferences
+- Additive SQLite migration for v0.3 procedure evidence
+- Portable procedure format v2 with backward-compatible v1 imports
+
+### Changed
+
+- Learned procedure steps now use stable canonical action names
+- Internal memory calls and unknown-dominated traces are excluded
+- Package version advanced to `0.3.0`
+
 ## 0.2.0 - Production Foundation
 
 ### Added

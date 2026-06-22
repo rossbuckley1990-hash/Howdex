@@ -4,10 +4,10 @@ Howdex ships in three forms. Pick whichever matches your environment.
 
 ## 1. From a wheel (zero build tooling required)
 
-If you have `howdex_ai-0.2.1-py3-none-any.whl` (in `dist/` of the zip), you can install it without any build backend:
+If you have `howdex_ai-0.3.0-py3-none-any.whl` (in `dist/` of the zip), you can install it without any build backend:
 
 ```bash
-pip install howdex_ai-0.2.1-py3-none-any.whl
+pip install howdex_ai-0.3.0-py3-none-any.whl
 ```
 
 This works on any pip ≥ 19 and requires **no setuptools, no wheel, no internet** (after download). Use this for:
@@ -18,7 +18,7 @@ This works on any pip ≥ 19 and requires **no setuptools, no wheel, no internet
 ## 2. From source (PEP 517)
 
 ```bash
-unzip howdex-0.2.1.zip
+unzip howdex-0.3.0.zip
 cd howdex
 pip install .
 ```
@@ -35,7 +35,7 @@ pip install .
 ## 3. Editable / development install
 
 ```bash
-unzip howdex-0.2.1.zip
+unzip howdex-0.3.0.zip
 cd howdex
 pip install -e ".[dev]"
 ```
@@ -47,7 +47,7 @@ The `-e` flag installs in "editable" mode — edits to the source take effect im
 You can run Howdex straight from the unzipped source tree, no install needed:
 
 ```bash
-unzip howdex-0.2.1.zip
+unzip howdex-0.3.0.zip
 cd howdex
 
 # The `python -m howdex` form works because howdex/__main__.py exists
@@ -79,7 +79,7 @@ You can combine extras: `pip install ".[hnsw,openai]"`.
 ## Verify the install
 
 ```bash
-howdex --version          # should print: howdex 0.2.1
+howdex --version          # should print: howdex 0.3.0
 howdex init               # creates ~/.howdex/howdex.db
 howdex remember "test"
 howdex search "test" --min-score 0.0

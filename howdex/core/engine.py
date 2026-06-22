@@ -48,7 +48,12 @@ def _normalise_procedure_payload(payload):
     else:
         d = dict(payload)
 
-    for key in ("steps", "preconditions"):
+    for key in (
+        "steps",
+        "preconditions",
+        "raw_supporting_examples",
+        "source_episode_ids",
+    ):
         value = d.get(key)
 
         if isinstance(value, str):
@@ -180,13 +185,23 @@ class Howdex:
         if ttl is None and layer == MemoryLayer.WORKING:
             ttl = 300.0
 
+        memory_metadata = dict(metadata or {})
+        if layer == MemoryLayer.SEMANTIC:
+            from howdex.core.conflicts import semantic_conflict_metadata
+
+            conflict_metadata = semantic_conflict_metadata(
+                content,
+                self.store.query(layer=MemoryLayer.SEMANTIC, limit=10_000),
+            )
+            memory_metadata.update(conflict_metadata)
+
         embedding = self.embedder.embed(content) if embed else None
 
         m = Memory(
             layer=layer,
             type=type,
             content=content,
-            metadata=metadata or {},
+            metadata=memory_metadata,
             embedding=embedding,
             relations=relations or [],
             source=source,
@@ -237,6 +252,13 @@ class Howdex:
         """
         if layer and isinstance(layer, str):
             layer = MemoryLayer(layer)
+
+        if layer == MemoryLayer.PROCEDURAL:
+            return self._recall_procedures(
+                query,
+                top_k=top_k,
+                min_score=min_score,
+            )
 
         now = time.time()
         candidates: dict[str, dict[str, Any]] = {}
@@ -322,6 +344,62 @@ class Howdex:
             self.store.touch(r.memory.id)
 
         return results[:top_k]
+
+    def _recall_procedures(
+        self,
+        query: str,
+        *,
+        top_k: int,
+        min_score: float,
+        min_confidence: float = 0.6,
+    ) -> list[HowdexResult]:
+        """Conservatively retrieve a small number of credible procedures."""
+        query_tokens = set(tokenize(query))
+        ranked: list[tuple[float, Procedure]] = []
+        for procedure in self.list_procedures(
+            min_confidence=min_confidence,
+            limit=None,
+        ):
+            searchable = " ".join(
+                [
+                    procedure.task_signature,
+                    *[
+                        str(step.get("action", ""))
+                        for step in procedure.steps
+                        if isinstance(step, dict)
+                    ],
+                ]
+            )
+            procedure_tokens = set(tokenize(searchable))
+            lexical = (
+                len(query_tokens & procedure_tokens) / len(query_tokens)
+                if query_tokens
+                else 0.0
+            )
+            if query.lower().strip() in procedure.task_signature.lower():
+                lexical = max(lexical, 1.0)
+            score = (0.55 * procedure.confidence) + (0.45 * lexical)
+            if score >= min_score:
+                ranked.append((score, procedure))
+
+        ranked.sort(
+            key=lambda item: (
+                item[0],
+                item[1].confidence,
+                item[1].support_count,
+                item[1].task_signature,
+            ),
+            reverse=True,
+        )
+        limit = min(3, max(1, top_k))
+        return [
+            HowdexResult(
+                memory=procedure.to_memory(),
+                score=round(score, 4),
+                matched_by="procedure",
+            )
+            for score, procedure in ranked[:limit]
+        ]
 
     def search(
         self,
@@ -432,20 +510,45 @@ class Howdex:
     # ------------------------------------------------------------------ #
     # procedures
     # ------------------------------------------------------------------ #
-    def get_procedure(self, task_signature: str) -> Optional[Procedure]:
-        """Retrieve a learned procedure for a task."""
+    def get_procedure(
+        self,
+        task_signature: str,
+        *,
+        min_confidence: float = 0.6,
+    ) -> Optional[Procedure]:
+        """Retrieve a learned procedure only when it clears confidence guardrails."""
         key = " ".join(task_signature.lower().split())[:200]
         d = self.store.get_procedure(key)
         if not d:
             return None
-        return Procedure(**_normalise_procedure_payload(d))
+        procedure = Procedure(**_normalise_procedure_payload(d))
+        if procedure.confidence < min_confidence:
+            return None
+        return procedure
 
 
-    def list_procedures(self) -> list[Procedure]:
-        return [
+    def list_procedures(
+        self,
+        *,
+        min_confidence: float = 0.6,
+        limit: Optional[int] = None,
+    ) -> list[Procedure]:
+        procedures = [
             Procedure(**_normalise_procedure_payload(d))
             for d in self.store.all_procedures()
+            if float(d.get("confidence", d.get("success_rate", 0.0)))
+            >= min_confidence
         ]
+        procedures.sort(
+            key=lambda procedure: (
+                procedure.confidence,
+                procedure.support_count,
+                procedure.success_rate,
+                procedure.task_signature,
+            ),
+            reverse=True,
+        )
+        return procedures[:limit] if limit is not None else procedures
 
     def export_procedures(
         self,

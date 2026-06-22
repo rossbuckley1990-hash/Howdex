@@ -117,8 +117,11 @@ def cmd_learn(args: argparse.Namespace) -> int:
         print(f"✓ {verb} {len(procs)} procedure(s):")
         for p in procs:
             print(f"  • {p.task_signature}")
-            print(f"    success_rate={p.success_rate:.2f}  samples={p.sample_count}  "
-                  f"steps={len(p.steps)}")
+            print(
+                f"    confidence={p.confidence:.2f}  "
+                f"success={p.success_count}/{p.support_count}  "
+                f"steps={len(p.steps)}"
+            )
             if p.preconditions:
                 print(f"    preconditions: {p.preconditions}")
         return 0
@@ -163,8 +166,10 @@ def cmd_procedures(args: argparse.Namespace) -> int:
             return 0
         for p in procs:
             print(f"• {p.task_signature}")
-            print(f"  id={p.id[:8]}  success_rate={p.success_rate:.2f}  "
-                  f"samples={p.sample_count}  uses={p.use_count}")
+            print(
+                f"  id={p.id[:8]}  confidence={p.confidence:.2f}  "
+                f"success={p.success_count}/{p.support_count}  uses={p.use_count}"
+            )
             if p.steps:
                 for i, s in enumerate(p.steps):
                     print(f"  {i+1}. {s.get('action', '?')} → {s.get('observation', '?')[:80]}")

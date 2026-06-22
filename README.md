@@ -10,7 +10,7 @@ Portable agent know-how · Four-layer memory · Local-first · Framework-agnosti
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-59%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-71%20passing-brightgreen.svg)](#testing)
 [![Stars](https://img.shields.io/badge/goal-500k%20⭐-yellow.svg)](#why-this-exists)
 
 </div>
@@ -32,6 +32,7 @@ Portable agent know-how · Four-layer memory · Local-first · Framework-agnosti
 - [Dev Install Guide](DEV_INSTALL.md)
 - [Core Concepts](#-core-concepts)
 - [Portable Know-How](#-portable-know-how)
+- [Deterministic Procedural Extraction](#-procedural-extraction-is-deterministic-and-inspectable)
 - [Quickstart](#-quickstart)
 - [The Four Memory Layers](#-the-four-memory-layers)
 - [API Reference](#-api-reference)
@@ -152,11 +153,11 @@ pip install howdex-ai[full]
 ### From the zip (no PyPI needed)
 
 ```bash
-unzip howdex-0.2.5.zip
+unzip howdex-0.3.0.zip
 cd howdex
 
 # Option A — install from the prebuilt wheel (zero build tooling required):
-pip install dist/howdex_ai-0.2.5-py3-none-any.whl
+pip install dist/howdex_ai-0.3.0-py3-none-any.whl
 
 # Option B — install from source:
 pip install .
@@ -174,7 +175,7 @@ python -m howdex search "hello"
 **Verify it works:**
 
 ```bash
-howdex --version           # → howdex 0.2.5
+howdex --version           # → howdex 0.3.0
 howdex init                # creates ~/.howdex/howdex.db
 howdex remember "Hello, world"
 howdex search "hello" --min-score 0.0
@@ -188,7 +189,7 @@ howdex search "hello" --min-score 0.0
 Don't want to commit to an install? You can try Howdex straight from the unzipped source tree. The `howdex/__main__.py` entry point makes `python -m howdex` work without any install step:
 
 ```bash
-unzip howdex-0.2.5.zip
+unzip howdex-0.3.0.zip
 cd howdex
 
 # Zero install, zero config:
@@ -276,6 +277,36 @@ Imports are idempotent by canonical task signature, so repeating an import or
 pull does not create duplicate procedures. Today Codex is deliberately
 local-only. The same manifest-and-artifact model can later back a private
 enterprise registry with authentication, policy, review, and distribution.
+
+---
+
+## 🔬 Procedural Extraction Is Deterministic and Inspectable
+
+Howdex does not claim magic procedural extraction. Real agent traces are noisy:
+equivalent actions use different words, internal memory calls leak into logs,
+and unrelated successful runs can share a task label.
+
+In v0.3, `learn()` uses a local deterministic pipeline:
+
+1. Raw actions are canonicalised into stable names such as
+   `inspect_package_manifest`, `repair_test_command`, and `run_test_suite`.
+2. Successful episodes are grouped using exact canonical sequence matching or
+   deterministic subsequence/Jaccard similarity.
+3. Internal memory calls, introspection, and unknown-action-dominated traces are
+   excluded from executable procedures.
+4. Every learned procedure stores confidence, support and success counts,
+   source episode IDs, and raw supporting examples.
+5. Procedural retrieval filters low-confidence results and returns at most
+   three procedures.
+
+Raw evidence remains available for inspection; canonicalisation never erases
+the original trace. LLM-assisted consolidation may come later, but the core path
+will remain local, deterministic, reproducible, and testable.
+
+Semantic conflict detection is similarly conservative: obvious contradictory
+assertions such as “User prefers Python” and “User prefers Rust” are marked
+`semantic_conflict_detected` and `requires_review`. Howdex does not attempt
+automatic reconciliation.
 
 ---
 
@@ -813,7 +844,7 @@ versus reusable execution knowledge.
 
 ## 🗺️ Roadmap
 
-### v0.1 (current)
+### v0.3 (current)
 - ✅ Four-layer memory (working, semantic, episodic, procedural)
 - ✅ SQLite storage with WAL
 - ✅ Hybrid retrieval (vector + keyword + graph)
@@ -823,20 +854,19 @@ versus reusable execution knowledge.
 - ✅ MCP server (stdio + HTTP)
 - ✅ CLI
 - ✅ LangChain, CrewAI, AutoGen, OpenAI adapters
-- ✅ 59 passing tests
+- ✅ Deterministic action canonicalisation
+- ✅ Near-match procedural clustering
+- ✅ Inspectable confidence and supporting evidence
+- ✅ Conservative procedural retrieval
+- ✅ Semantic conflict review flags
+- ✅ Portable procedure JSON and local Codex registry
+- ✅ 71 passing tests
 
-### v0.2
-- ⬜ Rust core for 10x performance (`howdex-core` PyO3 bindings)
+### Next
 - ⬜ Persistent HNSW index (no rebuild on startup)
-- ⬜ Howdex Cloud (managed sync + backup, $0.10/GB/month)
+- ⬜ Cross-framework trace conformance benchmark
+- ⬜ Signed procedure bundles and review policy
 - ⬜ TypeScript SDK
-- ⬜ Rust SDK
-
-### v0.3
-- ⬜ WASM plugin system (custom embedders, custom consolidation)
-- ⬜ Graph query language (Cypher-subset)
-- ⬜ Web UI (`howdex ui` — local dashboard)
-- ⬜ Redis storage backend
 
 ### v1.0
 - ⬜ Distributed mode (multi-node Howdex cluster)
@@ -869,7 +899,10 @@ python examples/quickstart.py
 
 **Q: Is this production-ready?**
 
-A: v0.1 is beta-quality. The core API is stable. The SQLite backend is rock-solid (it's SQLite). The vector index has two well-tested backends. We use it internally. For mission-critical production, wait for v0.2 (Rust core) or run with HNSW + sentence-transformers.
+A: v0.3 is beta-quality. The core API is stable, procedure extraction is
+deterministic and evidence-backed, and SQLite remains the durable local store.
+For mission-critical use, review learned procedures before executing them and
+run with HNSW plus sentence-transformers where retrieval quality matters.
 
 **Q: How is this different from a vector database?**
 

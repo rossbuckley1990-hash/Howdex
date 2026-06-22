@@ -62,17 +62,22 @@ def test_procedure_export_creates_json_files_and_is_safe_to_repeat(tmp_path):
 
     document = json.loads(files[0].read_text())
     assert document["format"] == "howdex.procedure"
-    assert document["format_version"] == 1
+    assert document["format_version"] == 2
     assert document["procedure"]["id"]
     assert document["procedure"]["task_signature"] == "deploy api"
     assert document["procedure"]["steps"]
     assert document["procedure"]["preconditions"] == [
-        "check_database_url",
         "deploy_service",
-        "run_tests",
+        "inspect_file",
+        "run_test_suite",
     ]
     assert document["success_evidence"]["success_rate"] == 1.0
     assert document["success_evidence"]["sample_count"] == 3
+    assert document["success_evidence"]["support_count"] == 3
+    assert document["success_evidence"]["success_count"] == 3
+    assert document["success_evidence"]["confidence"] >= 0.6
+    assert len(document["procedure"]["raw_supporting_examples"]) == 3
+    assert len(document["success_evidence"]["source_episode_ids"]) == 3
     assert document["source"]["system"] == "howdex"
     assert document["source"]["node_id"]
     assert document["timestamps"]["created_at"]
@@ -135,6 +140,63 @@ def test_procedure_import_restores_without_duplicates(tmp_path):
         assert len(procedures) == 1
         assert procedures[0].task_signature == "deploy api"
         assert procedures[0].steps[-1]["action"] == "deploy_service"
+        assert procedures[0].support_count == 3
+        assert procedures[0].confidence >= 0.6
+    finally:
+        restored.close()
+
+
+def test_v1_portable_procedure_remains_importable(tmp_path):
+    source_db = tmp_path / "source.db"
+    destination_db = tmp_path / "destination.db"
+    export_dir = tmp_path / "portable"
+    _seed_procedure(source_db)
+
+    _run(
+        tmp_path,
+        [
+            "--path",
+            str(source_db),
+            "--embedder",
+            "hashing",
+            "procedure",
+            "export",
+            str(export_dir),
+        ],
+    )
+    procedure_file = next(export_dir.glob("*.json"))
+    document = json.loads(procedure_file.read_text())
+    document["format_version"] = 1
+    document["procedure"].pop("raw_supporting_examples", None)
+    for field in (
+        "support_count",
+        "success_count",
+        "confidence",
+        "source_episode_ids",
+    ):
+        document["success_evidence"].pop(field, None)
+    procedure_file.write_text(json.dumps(document))
+
+    imported = _run(
+        tmp_path,
+        [
+            "--path",
+            str(destination_db),
+            "--embedder",
+            "hashing",
+            "procedure",
+            "import",
+            str(procedure_file),
+        ],
+    )
+
+    assert imported.returncode == 0, imported.stderr
+    restored = Howdex(path=destination_db, embedder="hashing")
+    try:
+        procedure = restored.get_procedure("deploy api")
+        assert procedure is not None
+        assert procedure.confidence == procedure.success_rate
+        assert procedure.support_count == procedure.sample_count
     finally:
         restored.close()
 

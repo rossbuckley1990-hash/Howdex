@@ -81,7 +81,11 @@ def test_learn_produces_procedure(mem):
     assert procs[0].success_rate == 1.0
     assert procs[0].sample_count == 3
     assert len(procs[0].steps) >= 1
-    assert procs[0].preconditions == ["build image", "deploy", "run tests"]
+    assert procs[0].preconditions == [
+        "build_artifact",
+        "deploy_service",
+        "run_test_suite",
+    ]
 
 
 def test_learn_no_episodes(mem):

@@ -30,7 +30,7 @@ from howdex.core.errors import (
     SyncError,
 )
 
-__version__ = "0.2.5"
+__version__ = "0.3.0"
 __author__ = "Howdex Collective"
 __license__ = "Apache-2.0"
 

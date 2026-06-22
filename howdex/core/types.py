@@ -196,15 +196,28 @@ class Procedure:
     expected_outcome: str = ""
     success_rate: float = 0.0          # 0.0 – 1.0
     sample_count: int = 0
+    support_count: int = 0
+    success_count: int = 0
+    confidence: float = 0.0
+    raw_supporting_examples: list[dict[str, Any]] = field(default_factory=list)
+    source_episode_ids: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_used_at: Optional[float] = None
     use_count: int = 0
 
     def to_memory(self) -> Memory:
+        action_names = [
+            str(step.get("action", ""))
+            for step in self.steps
+            if isinstance(step, dict) and step.get("action")
+        ]
         return Memory(
             layer=MemoryLayer.PROCEDURAL,
             type=MemoryType.WORKFLOW,
-            content=self.task_signature,
+            content=(
+                f"{self.task_signature}\n"
+                f"Procedure: {' -> '.join(action_names)}"
+            ),
             metadata={
                 "procedure_id": self.id,
                 "steps": self.steps,
@@ -212,7 +225,12 @@ class Procedure:
                 "expected_outcome": self.expected_outcome,
                 "success_rate": self.success_rate,
                 "sample_count": self.sample_count,
+                "support_count": self.support_count,
+                "success_count": self.success_count,
+                "confidence": self.confidence,
+                "raw_supporting_examples": self.raw_supporting_examples,
+                "source_episode_ids": self.source_episode_ids,
             },
             source="system",
-            importance=max(0.7, self.success_rate),
+            importance=max(0.7, self.success_rate, self.confidence),
         )

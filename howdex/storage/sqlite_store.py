@@ -20,7 +20,7 @@ from typing import Any, Iterator, Optional
 from howdex.core.types import Memory, MemoryLayer, MemoryType
 from howdex.core.errors import StoreError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 SCHEMA = """
@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS procedures (
     expected_outcome TEXT NOT NULL DEFAULT '',
     success_rate     REAL NOT NULL DEFAULT 0,
     sample_count     INTEGER NOT NULL DEFAULT 0,
+    support_count    INTEGER NOT NULL DEFAULT 0,
+    success_count    INTEGER NOT NULL DEFAULT 0,
+    confidence       REAL NOT NULL DEFAULT 0,
+    raw_examples     TEXT NOT NULL DEFAULT '[]',
+    source_episode_ids TEXT NOT NULL DEFAULT '[]',
     created_at       REAL NOT NULL,
     last_used_at     REAL,
     use_count        INTEGER NOT NULL DEFAULT 0
@@ -140,14 +145,49 @@ class Store:
         with self._lock:
             conn = self._conn()
             conn.executescript(SCHEMA)
+            self._migrate_schema(conn)
             conn.execute(
-                "INSERT OR IGNORE INTO schema_meta(key, value) VALUES (?, ?)",
+                """INSERT INTO schema_meta(key, value) VALUES (?, ?)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
                 ("schema_version", str(SCHEMA_VERSION)),
             )
             conn.execute(
                 "INSERT OR IGNORE INTO schema_meta(key, value) VALUES (?, ?)",
                 ("node_id", str(uuid.uuid4())),
             )
+
+    def _migrate_schema(self, conn: sqlite3.Connection) -> None:
+        """Apply additive local migrations for older Howdex databases."""
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(procedures)").fetchall()
+        }
+        additions = {
+            "support_count": "INTEGER NOT NULL DEFAULT 0",
+            "success_count": "INTEGER NOT NULL DEFAULT 0",
+            "confidence": "REAL NOT NULL DEFAULT 0",
+            "raw_examples": "TEXT NOT NULL DEFAULT '[]'",
+            "source_episode_ids": "TEXT NOT NULL DEFAULT '[]'",
+        }
+        for name, definition in additions.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE procedures ADD COLUMN {name} {definition}")
+
+        conn.execute(
+            """UPDATE procedures
+               SET support_count=CASE
+                     WHEN support_count=0 THEN sample_count
+                     ELSE support_count
+                   END,
+                   success_count=CASE
+                     WHEN success_count=0 THEN CAST(ROUND(success_rate * sample_count) AS INTEGER)
+                     ELSE success_count
+                   END,
+                   confidence=CASE
+                     WHEN confidence=0 THEN success_rate
+                     ELSE confidence
+                   END"""
+        )
 
     @property
     def node_id(self) -> str:
@@ -314,12 +354,22 @@ class Store:
             conn.execute(
                 """INSERT OR REPLACE INTO procedures
                    (id, task_signature, steps, preconditions, expected_outcome,
-                    success_rate, sample_count, created_at, last_used_at, use_count)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    success_rate, sample_count, support_count, success_count,
+                    confidence, raw_examples, source_episode_ids, created_at,
+                    last_used_at, use_count)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     p["id"], p["task_signature"], json.dumps(p.get("steps", [])),
                     json.dumps(p.get("preconditions", [])), p.get("expected_outcome", ""),
                     p.get("success_rate", 0), p.get("sample_count", 0),
+                    p.get("support_count", p.get("sample_count", 0)),
+                    p.get(
+                        "success_count",
+                        round(p.get("success_rate", 0) * p.get("sample_count", 0)),
+                    ),
+                    p.get("confidence", p.get("success_rate", 0)),
+                    json.dumps(p.get("raw_supporting_examples", [])),
+                    json.dumps(p.get("source_episode_ids", [])),
                     p.get("created_at", time.time()), p.get("last_used_at"),
                     p.get("use_count", 0),
                 ),
@@ -334,6 +384,8 @@ class Store:
         d = dict(row)
         d["steps"] = json.loads(d["steps"])
         d["preconditions"] = json.loads(d["preconditions"])
+        d["raw_supporting_examples"] = json.loads(d.pop("raw_examples"))
+        d["source_episode_ids"] = json.loads(d["source_episode_ids"])
         return d
 
     def all_procedures(self) -> list[dict[str, Any]]:
@@ -343,6 +395,8 @@ class Store:
             d = dict(r)
             d["steps"] = json.loads(d["steps"])
             d["preconditions"] = json.loads(d["preconditions"])
+            d["raw_supporting_examples"] = json.loads(d.pop("raw_examples"))
+            d["source_episode_ids"] = json.loads(d["source_episode_ids"])
             out.append(d)
         return out
 

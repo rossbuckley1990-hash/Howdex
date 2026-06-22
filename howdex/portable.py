@@ -14,7 +14,7 @@ from howdex.core.types import Procedure
 from howdex.storage import Store
 
 PROCEDURE_FORMAT = "howdex.procedure"
-PROCEDURE_FORMAT_VERSION = 1
+PROCEDURE_FORMAT_VERSION = 2
 CODEX_FORMAT = "howdex.codex"
 CODEX_FORMAT_VERSION = 1
 
@@ -162,10 +162,15 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
             "steps": procedure.steps,
             "preconditions": procedure.preconditions,
             "expected_outcome": procedure.expected_outcome,
+            "raw_supporting_examples": procedure.raw_supporting_examples,
         },
         "success_evidence": {
             "success_rate": procedure.success_rate,
             "sample_count": procedure.sample_count,
+            "support_count": procedure.support_count,
+            "success_count": procedure.success_count,
+            "confidence": procedure.confidence,
+            "source_episode_ids": procedure.source_episode_ids,
         },
         "source": {
             "system": "howdex",
@@ -193,7 +198,8 @@ def procedure_from_document(
     label = str(source_path) if source_path is not None else "procedure document"
     if document.get("format") != PROCEDURE_FORMAT:
         raise ValueError(f"{label} is not a Howdex procedure document")
-    if document.get("format_version") != PROCEDURE_FORMAT_VERSION:
+    format_version = document.get("format_version")
+    if format_version not in {1, PROCEDURE_FORMAT_VERSION}:
         raise ValueError(
             f"{label} uses unsupported procedure format version "
             f"{document.get('format_version')!r}"
@@ -212,10 +218,19 @@ def procedure_from_document(
     usage = document.get("usage") or {}
     success_rate = float(evidence.get("success_rate", 0.0))
     sample_count = int(evidence.get("sample_count", 0))
+    support_count = int(evidence.get("support_count", sample_count))
+    success_count = int(
+        evidence.get("success_count", round(success_rate * support_count))
+    )
+    confidence = float(evidence.get("confidence", success_rate))
     if not 0.0 <= success_rate <= 1.0:
         raise ValueError(f"{label} success_rate must be between 0 and 1")
     if sample_count < 0:
         raise ValueError(f"{label} sample_count must be non-negative")
+    if support_count < 0 or success_count < 0:
+        raise ValueError(f"{label} support counts must be non-negative")
+    if not 0.0 <= confidence <= 1.0:
+        raise ValueError(f"{label} confidence must be between 0 and 1")
 
     return Procedure(
         id=str(payload.get("id") or "").strip() or Procedure().id,
@@ -225,6 +240,22 @@ def procedure_from_document(
         expected_outcome=str(payload.get("expected_outcome") or ""),
         success_rate=success_rate,
         sample_count=sample_count,
+        support_count=support_count,
+        success_count=success_count,
+        confidence=confidence,
+        raw_supporting_examples=_list_value(
+            payload.get("raw_supporting_examples"),
+            "raw_supporting_examples",
+            label,
+        ),
+        source_episode_ids=[
+            str(value)
+            for value in _list_value(
+                evidence.get("source_episode_ids"),
+                "source_episode_ids",
+                label,
+            )
+        ],
         created_at=_parse_timestamp(timestamps.get("created_at")) or time.time(),
         last_used_at=_parse_timestamp(timestamps.get("last_used_at")),
         use_count=int(usage.get("use_count", 0)),
@@ -233,7 +264,12 @@ def procedure_from_document(
 
 def _procedure_from_store(payload: dict[str, Any]) -> Procedure:
     data = dict(payload)
-    for key in ("steps", "preconditions"):
+    for key in (
+        "steps",
+        "preconditions",
+        "raw_supporting_examples",
+        "source_episode_ids",
+    ):
         value = data.get(key)
         if isinstance(value, str):
             data[key] = json.loads(value)
@@ -259,6 +295,11 @@ def _merge_with_existing(
         expected_outcome=incoming.expected_outcome,
         success_rate=incoming.success_rate,
         sample_count=incoming.sample_count,
+        support_count=incoming.support_count,
+        success_count=incoming.success_count,
+        confidence=incoming.confidence,
+        raw_supporting_examples=incoming.raw_supporting_examples,
+        source_episode_ids=incoming.source_episode_ids,
         created_at=created_at,
         last_used_at=max(last_used_candidates) if last_used_candidates else None,
         use_count=max(existing_proc.use_count, incoming.use_count),

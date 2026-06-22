@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "howdex-ai"
-version = "0.2.5"
+version = "0.3.0"
 description = "Procedural memory for autonomous agents: turn repeated execution traces into reusable know-how."
 readme = "README.md"
 license = {text = "Apache-2.0"}
