@@ -272,7 +272,13 @@ def _normalized_learning_step(
     if canonical.matched_by == "structured_command":
         parameterized_args = _replace_command_values(
             parameterized_args,
-            parameterized.parameterized_action,
+            (
+                parameterized.parameterized_action
+                if _contains_placeholder(
+                    parameterized.parameterized_action
+                )
+                else canonical.canonical_name
+            ),
         )
     outcome = _normalize_outcome(raw_step.get("outcome"))
     payload: dict[str, Any] = {
@@ -298,10 +304,20 @@ def _normalized_learning_step(
     if tool_name is not None:
         payload["tool_name"] = tool_name
         payload["tool_args"] = parameterized_args
-    if canonical.matched_by == "structured_command":
-        payload["parameterized_action"] = (
-            parameterized.parameterized_action
+    parameterized_payload: dict[str, Any] = {}
+    action_slots = _placeholder_slots(
+        parameterized.parameterized_action
+    )
+    if action_slots:
+        parameterized_payload["action_slots"] = action_slots
+    if parameterized.parameterized_args:
+        parameterized_payload["arguments"] = parameterized_args
+    if _contains_placeholder(parameterized.parameterized_target):
+        parameterized_payload["target"] = (
+            parameterized.parameterized_target
         )
+    if parameterized_payload:
+        payload["parameterized"] = parameterized_payload
 
     canonical_payload = normalize_json_value(payload)
     return NormalizedLearningStep(
@@ -330,6 +346,31 @@ def _replace_command_values(
         )
         for key, item in value.items()
     }
+
+
+def _contains_placeholder(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            _contains_placeholder(item)
+            for item in value.values()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_placeholder(item) for item in value)
+    return (
+        isinstance(value, str)
+        and "<" in value
+        and ">" in value
+    )
+
+
+def _placeholder_slots(value: str) -> list[str]:
+    """Return stable typed slots without making prose wording identity."""
+    slots: list[str] = []
+    for part in value.split("<")[1:]:
+        placeholder = part.split(">", 1)[0]
+        if placeholder and placeholder not in slots:
+            slots.append(placeholder)
+    return slots
 
 
 def _mapping_value(value: Any) -> dict[str, Any] | None:

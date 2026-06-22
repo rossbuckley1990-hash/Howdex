@@ -240,6 +240,170 @@ def test_changed_path_literals_use_parameterized_identity(tmp_path):
     } == {"tests/test_auth.py", "tests/test_billing.py"}
 
 
+def test_equivalent_workflows_learn_reusable_parameterized_template(
+    tmp_path,
+):
+    memory = Howdex(
+        path=tmp_path / "workflow-template.db",
+        embedder="hashing",
+    )
+    for episode_id, path, package in (
+        ("workflow-1", "app.js", "cors"),
+        ("workflow-2", "server.js", "express"),
+    ):
+        _store_episode(
+            memory,
+            episode_id=episode_id,
+            task="repair application dependency",
+            steps=[
+                f"edit {path}",
+                f"npm install {package}",
+                "npm test",
+            ],
+        )
+
+    procedure = memory.learn(min_samples=2)[0]
+
+    assert procedure.support_count == 2
+    assert procedure.source_episode_ids == [
+        "workflow-1",
+        "workflow-2",
+    ]
+    assert [
+        step["parameterized_action"]
+        for step in procedure.steps
+    ] == [
+        "edit <PATH_1>",
+        "npm install <PKG_1>",
+        "run <TEST_COMMAND_1>",
+    ]
+    assert [
+        step["canonical_name"]
+        for step in procedure.canonical_steps
+    ] == [
+        "repair_file",
+        "install_dependencies",
+        "run_test_suite",
+    ]
+    assert [
+        step["action"]
+        for step in procedure.parameterized_steps
+    ] == [
+        "edit <PATH_1>",
+        "npm install <PKG_1>",
+        "run <TEST_COMMAND_1>",
+    ]
+    assert {
+        binding["bindings"]["<PATH_1>"]
+        for binding in procedure.example_bindings
+    } == {"app.js", "server.js"}
+    assert {
+        binding["bindings"]["<PKG_1>"]
+        for binding in procedure.example_bindings
+    } == {"cors", "express"}
+
+
+def test_key_order_and_changed_literals_share_learning_identity(tmp_path):
+    memory = Howdex(
+        path=tmp_path / "key-order-and-literals.db",
+        embedder="hashing",
+    )
+    _store_episode(
+        memory,
+        episode_id="first",
+        task="repair javascript service",
+        steps=[
+            {"tool": "bash", "cmd": "edit app.js", "cwd": "./"},
+            {"tool": "bash", "cmd": "npm install cors", "cwd": "./"},
+            {"tool": "bash", "cmd": "npm test", "cwd": "./"},
+        ],
+    )
+    _store_episode(
+        memory,
+        episode_id="second",
+        task="repair javascript service",
+        steps=[
+            {"cwd": "./", "cmd": "edit server.js", "tool": "bash"},
+            {"cmd": "npm install express", "tool": "bash", "cwd": "./"},
+            {"cwd": "./", "tool": "bash", "cmd": "npm test"},
+        ],
+    )
+
+    procedure = memory.learn(min_samples=2)[0]
+
+    assert procedure.support_count == 2
+    assert [
+        step["parameterized_action"]
+        for step in procedure.steps
+    ] == [
+        "edit <PATH_1>",
+        "npm install <PKG_1>",
+        "run <TEST_COMMAND_1>",
+    ]
+
+
+def test_repeated_literal_binding_is_consistent_in_learned_template(
+    tmp_path,
+):
+    memory = Howdex(
+        path=tmp_path / "repeated-literal.db",
+        embedder="hashing",
+    )
+    for episode_id, path in (
+        ("repeat-1", "app.js"),
+        ("repeat-2", "server.js"),
+    ):
+        _store_episode(
+            memory,
+            episode_id=episode_id,
+            task="edit and execute application",
+            steps=[
+                f"edit {path}",
+                f"read {path}",
+            ],
+        )
+
+    procedure = memory.learn(min_samples=2)[0]
+
+    assert [
+        step["parameterized_action"]
+        for step in procedure.steps
+    ] == ["edit <PATH_1>", "read <PATH_1>"]
+    assert all(
+        list(binding["bindings"]) == ["<PATH_1>"]
+        for binding in procedure.example_bindings
+    )
+
+
+def test_unrelated_literal_bearing_workflows_do_not_merge(tmp_path):
+    memory = Howdex(
+        path=tmp_path / "unrelated-templates.db",
+        embedder="hashing",
+    )
+    _store_episode(
+        memory,
+        episode_id="repair",
+        task="maintain application",
+        steps=[
+            "edit app.js",
+            "npm install cors",
+            "npm test",
+        ],
+    )
+    _store_episode(
+        memory,
+        episode_id="deploy",
+        task="maintain application",
+        steps=[
+            "read deploy.yaml",
+            "curl https://example.test/health",
+            "delete old release",
+        ],
+    )
+
+    assert memory.learn(min_samples=2) == []
+
+
 def test_legacy_prose_learning_remains_supported(tmp_path):
     memory = Howdex(path=tmp_path / "legacy.db", embedder="hashing")
     for _ in range(2):
