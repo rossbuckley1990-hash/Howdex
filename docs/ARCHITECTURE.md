@@ -90,6 +90,15 @@ idle gaps, then maximum step count as a fallback. Children retain
 `parent_session_id`; consolidation prefers those children and excludes the raw
 parent from duplicate evidence counting.
 
+Semantic memory deliberately avoids implicit prose extraction. Explicit
+facts, preferences, entities, and relations retain source, provenance, and
+optional confidence metadata. Structured tool calls may deterministically
+project the tool system, canonical action, salient target entities, and
+action-target relations. Free-form text and secret arguments are excluded.
+Optional `SemanticExtractor` implementations—including LLM-backed ones—are
+application-controlled, non-deterministic extensions rather than part of the
+default path.
+
 ## Storage: SQLite
 
 We chose SQLite for the v0.1 storage backend because:
@@ -142,7 +151,10 @@ Three backends:
 | `sentence-transformers` | 384 | high | ~15ms | free, offline, ~80MB model |
 | `openai` | 1536 | highest | ~100ms | $0.02/1M tokens |
 
-`auto_embedder()` picks: ST if installed → hashing fallback. Override with `Howdex(embedder="openai")`.
+`auto_embedder()` picks a local sentence-transformer when the optional backend
+is available, then falls back to hashing. Override with
+`Howdex(embedder="hashing")` for deterministic CI/offline use or pass any
+custom `Embedder`.
 
 The `hashing` embedder is intentionally simple — char n-gram hashing into 384-dim space, L2-normalized. It's deterministic, dependency-free, and good enough for testing and small datasets. For production, use ST.
 

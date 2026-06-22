@@ -513,11 +513,25 @@ normal TTL and are not destructively deleted by context-window eviction.
 
 ### Semantic Memory
 
-The knowledge base. Facts, preferences, entities, relations. This is what your agent *knows*.
+Semantic memory is explicit, structured, provenance-rich knowledge. Howdex is
+not trying to out-Mem0 or Zep at personalised prose extraction. By default,
+semantic records come from facts/preferences deliberately written by the agent
+or from a narrow deterministic projection of structured tool calls.
 
 ```python
-mem.remember("User's name is Alice", layer="semantic", type="fact")
-mem.remember("Alice prefers email over Slack", layer="semantic", type="preference")
+mem.remember(
+    "User's name is Alice",
+    layer="semantic",
+    type="fact",
+    source="agent",
+    confidence=1.0,
+    provenance={"run_id": "onboarding-42"},
+)
+mem.remember(
+    "Alice prefers email over Slack",
+    layer="semantic",
+    type="preference",
+)
 
 # Relations build a knowledge graph
 mem.remember(
@@ -526,6 +540,33 @@ mem.remember(
     relations=[{"type": "works_at", "target": "acme_corp_id"}]
 )
 ```
+
+Typed tool calls derive only inspectable entities already present in the
+canonical target. For example:
+
+```python
+session.tool_call(
+    "github.create_pr",
+    {"repo": "acme/service", "title": "Release v1"},
+    outcome="success",
+)
+```
+
+creates stable semantic records such as `system:github`,
+`action:github.create_pr`, `repo:acme/service`, and the relation
+`action:github.create_pr -> repo:acme/service`. Free-form titles and
+observations are not promoted into facts. Obvious secret fields are redacted,
+and repeated calls reuse deterministic semantic IDs. Applications can disable
+this per call with `derive_semantics=False`.
+
+Sentence-transformers remains the preferred local embedding backend when the
+optional dependency and model are available. The deterministic hashing
+embedder remains the dependency-free CI/offline fallback. Custom embedders
+continue to implement `Embedder.embed(text)`.
+
+The core also exposes a `SemanticExtractor` protocol for optional application
+integrations. LLM-backed implementations must be treated as explicitly
+non-deterministic and opt-in; Howdex does not invoke one automatically.
 
 ### Episodic Memory
 
@@ -603,7 +644,7 @@ The main class. Zero-config: `Howdex()` creates `~/.howdex/howdex.db`.
 | `agent_id` | `None` | Tags all memories with this agent ID |
 | `embed_dim` | `384` | Embedding dimension (must match embedder) |
 
-### `.remember(content, *, layer="semantic", type="fact", metadata={}, importance=0.5, ttl=None, relations=[], source="user")`
+### `.remember(content, *, layer="semantic", type="fact", metadata={}, importance=0.5, ttl=None, relations=[], source="user", confidence=None, provenance=None)`
 
 Store a memory. Returns the created `Memory` object.
 

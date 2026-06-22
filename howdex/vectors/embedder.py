@@ -1,8 +1,8 @@
-"""Embedding backends.
+"""Pluggable embedding backends.
 
-Pluggable: a default hashing-based embedder (no deps, deterministic, OK
-for prototypes) is provided, plus optional adapters for sentence-transformers
-and OpenAI.
+Howdex prefers the optional local sentence-transformers backend when available.
+The hashing backend is deterministic, dependency-free, and retained as the
+CI/offline fallback. OpenAI embeddings remain an explicit opt-in adapter.
 """
 
 from __future__ import annotations
