@@ -136,10 +136,30 @@ class Episode:
     duration_s: float = 0.0
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
+    source: str = "agent"
+    provenance: dict[str, Any] = field(default_factory=dict)
+    parent_session_id: Optional[str] = None
+    is_segment: bool = False
 
     def add_step(self, action: str, observation: str, **extra: Any) -> None:
+        step = dict(extra)
+        timestamp = float(step.pop("ts", time.time()))
+        start_time = float(
+            step.pop("start_time", step.pop("started_at", timestamp))
+        )
+        duration_s = step.get("duration_s")
+        end_time = step.pop("end_time", step.pop("finished_at", None))
+        if end_time is None and duration_s is not None:
+            end_time = start_time + max(0.0, float(duration_s))
         self.steps.append(
-            {"action": action, "observation": observation, "ts": time.time(), **extra}
+            {
+                "action": action,
+                "observation": observation,
+                "ts": timestamp,
+                "start_time": start_time,
+                "end_time": end_time,
+                **step,
+            }
         )
 
     def close(self, outcome: str, error: Optional[str] = None) -> None:
@@ -170,15 +190,58 @@ class Episode:
                 "session_id": self.session_id,
                 "agent_id": self.agent_id,
                 "task": self.task,
+                "task_signature": self.task,
                 "outcome": self.outcome,
                 "error": self.error,
+                "error_summary": self.error,
                 "duration_s": self.duration_s,
                 "step_count": len(self.steps),
+                "start_time": self.started_at,
+                "end_time": self.finished_at,
+                "source": self.source,
+                "provenance": self.provenance,
+                "parent_session_id": self.parent_session_id,
+                "is_segment": self.is_segment,
             },
-            source="agent",
+            source=self.source,
             agent_id=self.agent_id,
             session_id=self.session_id,
         )
+
+    @property
+    def task_signature(self) -> str:
+        return self.task
+
+    @property
+    def start_time(self) -> float:
+        return self.started_at
+
+    @property
+    def end_time(self) -> Optional[float]:
+        return self.finished_at
+
+    @property
+    def step_count(self) -> int:
+        return len(self.steps)
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "id": self.session_id,
+            "session_id": self.session_id,
+            "agent_id": self.agent_id,
+            "task": self.task,
+            "steps": self.steps,
+            "outcome": self.outcome,
+            "error": self.error,
+            "duration_s": self.duration_s,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "step_count": self.step_count,
+            "source": self.source,
+            "provenance": self.provenance,
+            "parent_session_id": self.parent_session_id,
+            "is_segment": self.is_segment,
+        }
 
 
 @dataclass

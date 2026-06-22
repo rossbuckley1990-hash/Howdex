@@ -342,6 +342,31 @@ def consolidate(
 ) -> list[Procedure]:
     """Consolidate canonical near-matching successful traces into procedures."""
     episodes = store.query_episodes(limit=10_000)
+    child_ids = {
+        str(_get(episode, "session_id"))
+        for episode in episodes
+        if _get(episode, "is_segment", False)
+    }
+    segmented_parent_ids: set[str] = set()
+    for episode in episodes:
+        if _get(episode, "is_segment", False):
+            continue
+        provenance = _get(episode, "provenance", {}) or {}
+        expected_children = (
+            provenance.get("segment_ids", [])
+            if isinstance(provenance, dict)
+            else []
+        )
+        if expected_children and all(
+            str(child_id) in child_ids for child_id in expected_children
+        ):
+            segmented_parent_ids.add(str(_get(episode, "session_id", "")))
+    episodes = [
+        episode
+        for episode in episodes
+        if _get(episode, "is_segment", False)
+        or str(_get(episode, "session_id", "")) not in segmented_parent_ids
+    ]
     by_task: dict[str, list[Any]] = {}
     for episode in episodes:
         task = _normalize_task(_get(episode, "task", "") or "")

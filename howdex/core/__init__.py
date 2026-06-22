@@ -19,6 +19,11 @@ from howdex.core.errors import (
     SyncError,
 )
 from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
+from howdex.core.segmentation import (
+    DEFAULT_IDLE_GAP_S,
+    DEFAULT_MAX_SEGMENT_STEPS,
+    segment_episode,
+)
 from howdex.core.tool_calls import canonicalize_tool_call, normalize_tool_name
 from howdex.core.types import (
     Episode,
@@ -45,4 +50,5 @@ __all__ = [
     "INTENTS", "SIDE_EFFECT_CLASSES", "infer_side_effect_class",
     "DEFAULT_WORKING_MAX_ITEMS", "DEFAULT_WORKING_MAX_CHARS",
     "rank_working_memories", "select_working_context",
+    "DEFAULT_MAX_SEGMENT_STEPS", "DEFAULT_IDLE_GAP_S", "segment_episode",
 ]

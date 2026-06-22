@@ -20,7 +20,7 @@ from typing import Any, Iterator, Optional
 from howdex.core.types import Memory, MemoryLayer, MemoryType
 from howdex.core.errors import StoreError
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 SCHEMA = """
@@ -68,7 +68,12 @@ CREATE TABLE IF NOT EXISTS episodes (
     error         TEXT,
     duration_s    REAL NOT NULL DEFAULT 0,
     started_at    REAL NOT NULL,
-    finished_at   REAL
+    finished_at   REAL,
+    step_count    INTEGER NOT NULL DEFAULT 0,
+    source        TEXT NOT NULL DEFAULT 'agent',
+    provenance    TEXT NOT NULL DEFAULT '{}',
+    parent_session_id TEXT,
+    is_segment    INTEGER NOT NULL DEFAULT 0
 );
 
 -- procedural library (consolidation output)
@@ -188,6 +193,34 @@ class Store:
                      ELSE confidence
                    END"""
         )
+
+        episode_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(episodes)").fetchall()
+        }
+        episode_additions = {
+            "step_count": "INTEGER NOT NULL DEFAULT 0",
+            "source": "TEXT NOT NULL DEFAULT 'agent'",
+            "provenance": "TEXT NOT NULL DEFAULT '{}'",
+            "parent_session_id": "TEXT",
+            "is_segment": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for name, definition in episode_additions.items():
+            if name not in episode_columns:
+                conn.execute(f"ALTER TABLE episodes ADD COLUMN {name} {definition}")
+
+        rows = conn.execute(
+            "SELECT id, steps FROM episodes WHERE step_count=0"
+        ).fetchall()
+        for row in rows:
+            try:
+                steps = json.loads(row["steps"])
+            except (TypeError, json.JSONDecodeError):
+                steps = []
+            conn.execute(
+                "UPDATE episodes SET step_count=? WHERE id=?",
+                (len(steps) if isinstance(steps, list) else 0, row["id"]),
+            )
 
     @property
     def node_id(self) -> str:
@@ -320,14 +353,20 @@ class Store:
             conn.execute(
                 """INSERT OR REPLACE INTO episodes
                    (id, session_id, agent_id, task, steps, outcome, error,
-                    duration_s, started_at, finished_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    duration_s, started_at, finished_at, step_count, source,
+                    provenance, parent_session_id, is_segment)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     ep_dict["id"], ep_dict["session_id"], ep_dict["agent_id"],
                     ep_dict["task"], json.dumps(ep_dict.get("steps", [])),
                     ep_dict.get("outcome"), ep_dict.get("error"),
                     ep_dict.get("duration_s", 0), ep_dict["started_at"],
                     ep_dict.get("finished_at"),
+                    ep_dict.get("step_count", len(ep_dict.get("steps", []))),
+                    ep_dict.get("source", "agent"),
+                    json.dumps(ep_dict.get("provenance", {})),
+                    ep_dict.get("parent_session_id"),
+                    int(bool(ep_dict.get("is_segment", False))),
                 ),
             )
 
@@ -344,7 +383,22 @@ class Store:
         sql += " ORDER BY started_at DESC LIMIT ?"
         args.append(limit)
         rows = self._conn().execute(sql, args).fetchall()
-        return [dict(r) for r in rows]
+        episodes: list[dict[str, Any]] = []
+        for row in rows:
+            episode = dict(row)
+            try:
+                episode["provenance"] = json.loads(
+                    episode.get("provenance") or "{}"
+                )
+            except json.JSONDecodeError:
+                episode["provenance"] = {}
+            episode["is_segment"] = bool(episode.get("is_segment"))
+            episode["task_signature"] = episode["task"]
+            episode["start_time"] = episode["started_at"]
+            episode["end_time"] = episode["finished_at"]
+            episode["error_summary"] = episode["error"]
+            episodes.append(episode)
+        return episodes
 
     # ------------------------------------------------------------------ #
     # procedures

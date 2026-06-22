@@ -529,7 +529,10 @@ mem.remember(
 
 ### Episodic Memory
 
-The event log. What happened, when, what was the outcome. This is the raw material that `learn()` turns into procedures.
+Episodes are structured evidence: what task ran, when it started and ended,
+which agent or framework produced it, every raw/canonical step, and the final
+outcome or error. This evidence is the substrate that `learn()` turns into
+procedures, so the original session is always retained.
 
 ```python
 mem.start_session("onboard new customer")
@@ -538,6 +541,30 @@ mem.log_step("send welcome email", "queued")
 mem.log_step("provision resources", "FAILED: quota exceeded")
 mem.end_session("failure", error="quota exceeded")
 ```
+
+Long sessions are segmented deterministically into child episodes when Howdex
+sees:
+
+1. an explicit `task_boundary` on a step;
+2. a conservative major target/domain change after at least two established
+   steps;
+3. an idle timestamp gap longer than 15 minutes; or
+4. 50 steps in the current segment.
+
+```python
+mem.log_step("patch package.json", "fixed")
+mem.log_step(
+    "run pytest",
+    "passed",
+    task_boundary="verify repaired package",
+)
+```
+
+The raw parent session is never removed. Child episodes have deterministic IDs,
+retain raw structured steps and provenance, and reference
+`parent_session_id`. Consolidation uses the child episodes when they exist and
+does not count the raw parent a second time. Default thresholds can be adjusted
+for one close with `end_session(..., max_segment_steps=50, idle_gap_s=900)`.
 
 ### Procedural Memory
 
@@ -603,9 +630,9 @@ Soft-delete a memory (tombstoned for CRDT correctness).
 
 ### Session methods
 
-- `.start_session(task, agent_id=None) -> Episode`
+- `.start_session(task, agent_id=None, *, source="agent", provenance=None) -> Episode`
 - `.log_step(action, observation, **extra)`
-- `.end_session(outcome="success", error=None) -> Episode`
+- `.end_session(outcome="success", error=None, *, max_segment_steps=50, idle_gap_s=900) -> Episode`
 
 ### Sync
 

@@ -24,6 +24,11 @@ from howdex.core.session import HowdexSession
 from howdex.core.trust import TrustMetadata
 from howdex.core.consolidation import consolidate
 from howdex.core.tool_calls import canonicalize_tool_call, redact_secrets
+from howdex.core.segmentation import (
+    DEFAULT_IDLE_GAP_S,
+    DEFAULT_MAX_SEGMENT_STEPS,
+    segment_episode,
+)
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -496,7 +501,14 @@ class Howdex:
     # ------------------------------------------------------------------ #
     # sessions (episodic memory helper)
     # ------------------------------------------------------------------ #
-    def start_session(self, task: str, agent_id: Optional[str] = None) -> Episode:
+    def start_session(
+        self,
+        task: str,
+        agent_id: Optional[str] = None,
+        *,
+        source: str = "agent",
+        provenance: Optional[dict[str, Any]] = None,
+    ) -> Episode:
         """Begin an episodic session. All ``remember()`` calls until
         :meth:`end_session` will be tagged with this session id.
         """
@@ -507,6 +519,8 @@ class Howdex:
             session_id=str(uuid.uuid4()),
             agent_id=agent_id or self.agent_id or "default",
             task=task,
+            source=source,
+            provenance=dict(provenance or {}),
         )
         return self._current_session
 
@@ -568,7 +582,14 @@ class Howdex:
         )
         self.log_step(canonical.raw_action, observation, **fields)
 
-    def end_session(self, outcome: str = "success", error: Optional[str] = None) -> Episode:
+    def end_session(
+        self,
+        outcome: str = "success",
+        error: Optional[str] = None,
+        *,
+        max_segment_steps: int = DEFAULT_MAX_SEGMENT_STEPS,
+        idle_gap_s: float = DEFAULT_IDLE_GAP_S,
+    ) -> Episode:
         """Close the current session and persist it as an episodic memory."""
         if not self._current_session:
             raise HowdexError("no active session")
@@ -584,35 +605,41 @@ class Howdex:
             max_chars=DEFAULT_WORKING_MAX_CHARS,
         )
         ep.close(outcome, error)
-        self.store.put_episode({
-            "id": ep.session_id,
-            "session_id": ep.session_id,
-            "agent_id": ep.agent_id,
-            "task": ep.task,
-            "steps": ep.steps,
-            "outcome": ep.outcome,
-            "error": ep.error,
-            "duration_s": ep.duration_s,
-            "started_at": ep.started_at,
-            "finished_at": ep.finished_at,
-        })
+        child_episodes = segment_episode(
+            ep,
+            max_steps=max_segment_steps,
+            idle_gap_s=idle_gap_s,
+        )
+        if child_episodes:
+            ep.provenance = {
+                **ep.provenance,
+                "segmented": True,
+                "segment_ids": [
+                    child.session_id for child in child_episodes
+                ],
+            }
+        self.store.put_episode(ep.to_record())
+        for child in child_episodes:
+            self.store.put_episode(child.to_record())
         # also store as episodic memory (searchable)
+        episodic_memory = ep.to_memory()
         self.remember(
-            content=ep.to_memory().content,
+            content=episodic_memory.content,
             layer=MemoryLayer.EPISODIC,
             type=MemoryType.SESSION if outcome == "success" else MemoryType.ERROR,
             metadata={
-                "session_id": ep.session_id,
-                "task": ep.task,
-                "outcome": ep.outcome,
-                "duration_s": ep.duration_s,
+                **episodic_memory.metadata,
+                "segment_ids": [
+                    child.session_id for child in child_episodes
+                ],
+                "segment_count": len(child_episodes),
                 "working_memory_ids": [
                     memory.id for memory in selected_working
                 ],
                 "working_memory_count": len(selected_working),
                 "working_memory_context": working_context,
             },
-            source="agent",
+            source=ep.source,
         )
         self._current_session = None
         return ep

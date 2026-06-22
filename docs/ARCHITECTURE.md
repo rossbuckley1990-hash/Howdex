@@ -82,6 +82,14 @@ character/token budgets. Session close stores a bounded snapshot and memory
 references in the resulting episodic memory, while the original working
 records retain their TTL.
 
+Episodic memory stores the full raw session as structured evidence, including
+task, timing, outcome/error, source/provenance, and structured canonical tool
+steps. Long sessions may additionally produce deterministic child episodes.
+Boundaries are explicit task markers, conservative target-domain changes,
+idle gaps, then maximum step count as a fallback. Children retain
+`parent_session_id`; consolidation prefers those children and excludes the raw
+parent from duplicate evidence counting.
+
 ## Storage: SQLite
 
 We chose SQLite for the v0.1 storage backend because:
