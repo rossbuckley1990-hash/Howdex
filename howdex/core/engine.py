@@ -29,6 +29,7 @@ from howdex.core.segmentation import (
     DEFAULT_MAX_SEGMENT_STEPS,
     segment_episode,
 )
+from howdex.core.semantic import derive_tool_semantics
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -176,6 +177,8 @@ class Howdex:
         agent_id: Optional[str] = None,
         session_id: Optional[str] = None,
         embed: bool = True,
+        confidence: Optional[float] = None,
+        provenance: Optional[dict[str, Any]] = None,
     ) -> Memory:
         """Store a memory.
 
@@ -200,6 +203,14 @@ class Howdex:
         if layer == MemoryLayer.SEMANTIC:
             from howdex.core.conflicts import semantic_conflict_metadata
 
+            memory_metadata.setdefault("semantic_origin", "explicit")
+            if confidence is not None:
+                memory_metadata["confidence"] = round(
+                    max(0.0, min(1.0, float(confidence))),
+                    4,
+                )
+            if provenance is not None:
+                memory_metadata["provenance"] = redact_secrets(provenance)[0]
             conflict_metadata = semantic_conflict_metadata(
                 content,
                 self.store.query(layer=MemoryLayer.SEMANTIC, limit=10_000),
@@ -555,6 +566,7 @@ class Howdex:
         arguments: Optional[dict[str, Any]] = None,
         observation: str = "",
         metadata: Optional[dict[str, Any]] = None,
+        derive_semantics: bool = True,
         **extra: Any,
     ) -> None:
         """Record a canonical, structured tool step in the current session."""
@@ -581,6 +593,60 @@ class Howdex:
             }
         )
         self.log_step(canonical.raw_action, observation, **fields)
+        if derive_semantics:
+            self._remember_tool_semantics(
+                canonical,
+                outcome=extra.get("outcome"),
+            )
+
+    def _remember_tool_semantics(
+        self,
+        canonical,
+        *,
+        outcome: Optional[str] = None,
+    ) -> list[Memory]:
+        """Persist idempotent semantic entities derived from a typed call."""
+        session_id = (
+            self._current_session.session_id
+            if self._current_session
+            else None
+        )
+        stored: list[Memory] = []
+        for record in derive_tool_semantics(
+            canonical,
+            outcome=outcome,
+            session_id=session_id,
+        ):
+            existing = self.store.get(record.id)
+            if existing is not None:
+                stored.append(existing)
+                continue
+            content_embedding = self.embedder.embed(record.content)
+            memory = Memory(
+                id=record.id,
+                layer=MemoryLayer.SEMANTIC,
+                type=record.type,
+                content=record.content,
+                metadata={
+                    **record.metadata,
+                    "semantic_key": record.semantic_key,
+                },
+                embedding=content_embedding,
+                relations=record.relations,
+                source="structured_tool_call",
+                agent_id=(
+                    self._current_session.agent_id
+                    if self._current_session
+                    else self.agent_id
+                ),
+                session_id=session_id,
+                importance=0.6,
+                vector_clock=int(time.time() * 1000),
+            )
+            self.store.put(memory)
+            self.index.add(memory.id, content_embedding)
+            stored.append(memory)
+        return stored
 
     def end_session(
         self,

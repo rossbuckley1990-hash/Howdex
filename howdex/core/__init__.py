@@ -24,6 +24,11 @@ from howdex.core.segmentation import (
     DEFAULT_MAX_SEGMENT_STEPS,
     segment_episode,
 )
+from howdex.core.semantic import (
+    SemanticExtractor,
+    SemanticRecord,
+    derive_tool_semantics,
+)
 from howdex.core.tool_calls import canonicalize_tool_call, normalize_tool_name
 from howdex.core.types import (
     Episode,
@@ -51,4 +56,5 @@ __all__ = [
     "DEFAULT_WORKING_MAX_ITEMS", "DEFAULT_WORKING_MAX_CHARS",
     "rank_working_memories", "select_working_context",
     "DEFAULT_MAX_SEGMENT_STEPS", "DEFAULT_IDLE_GAP_S", "segment_episode",
+    "SemanticExtractor", "SemanticRecord", "derive_tool_semantics",
 ]
