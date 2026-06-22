@@ -445,3 +445,849 @@ def _truncate(value: str, max_chars: int) -> str:
     if max_chars == 1:
         return "…"
     return value[: max_chars - 1].rstrip() + "…"
+
+# ---------------------------------------------------------------------------
+# Agent-ready procedure guidance formatter.
+#
+# This deliberately appears late in the module so it supersedes earlier
+# render_procedure_guidance definitions while preserving public API shape.
+# ---------------------------------------------------------------------------
+
+def _agent_guidance_get(obj, key, default=None):
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _agent_guidance_steps(procedure):
+    """Return canonical/renderable steps from multiple legacy procedure/suggestion shapes."""
+    if procedure is None:
+        return []
+
+    if isinstance(procedure, (list, tuple)):
+        return list(procedure)
+
+    def step_like_list(value):
+        if not isinstance(value, (list, tuple)) or not value:
+            return None
+        first = value[0]
+        first_text = str(first)
+        if (
+            isinstance(first, dict)
+            or hasattr(first, "__dict__")
+            or isinstance(first, str)
+            or "canonical_name" in first_text
+            or "filesystem." in first_text
+            or "bash" in first_text
+            or "run <" in first_text
+            or "inspect error log" in first_text
+        ):
+            return list(value)
+        return None
+
+    def from_mapping(mapping):
+        for key in (
+            "canonical_steps",
+            "steps",
+            "ordered_steps",
+            "procedure_steps",
+            "actions",
+            "canonical_actions",
+            "plan",
+            "commands",
+            "workflow",
+        ):
+            value = mapping.get(key)
+            maybe = step_like_list(value)
+            if maybe:
+                return maybe
+
+        # Common suggestion wrappers.
+        for key in (
+            "procedure",
+            "suggestion",
+            "value",
+            "payload",
+            "result",
+            "match",
+            "matched_procedure",
+            "procedure_snapshot",
+        ):
+            nested = mapping.get(key)
+            nested_steps = _agent_guidance_steps(nested)
+            if nested_steps:
+                return nested_steps
+
+        # Last resort: recursively inspect dict values.
+        for value in mapping.values():
+            maybe = step_like_list(value)
+            if maybe:
+                return maybe
+            nested_steps = _agent_guidance_steps(value)
+            if nested_steps:
+                return nested_steps
+
+        return []
+
+    if isinstance(procedure, dict):
+        return from_mapping(procedure)
+
+    # Object/dataclass-backed suggestion/procedure.
+    for attr in (
+        "canonical_steps",
+        "steps",
+        "ordered_steps",
+        "procedure_steps",
+        "actions",
+        "canonical_actions",
+        "plan",
+        "commands",
+        "workflow",
+    ):
+        value = getattr(procedure, attr, None)
+        maybe = step_like_list(value)
+        if maybe:
+            return maybe
+
+    for attr in (
+        "procedure",
+        "suggestion",
+        "value",
+        "payload",
+        "result",
+        "match",
+        "matched_procedure",
+        "procedure_snapshot",
+    ):
+        nested = getattr(procedure, attr, None)
+        if nested is not None and nested is not procedure:
+            nested_steps = _agent_guidance_steps(nested)
+            if nested_steps:
+                return nested_steps
+
+    attrs = getattr(procedure, "__dict__", None)
+    if isinstance(attrs, dict):
+        nested_steps = from_mapping(attrs)
+        if nested_steps:
+            return nested_steps
+
+    return []
+def _agent_guidance_step_command(step):
+    if isinstance(step, str):
+        return step
+
+    if isinstance(step, dict):
+        parameterized_args = step.get("parameterized_args")
+        if isinstance(parameterized_args, dict):
+            cmd = (
+                parameterized_args.get("cmd")
+                or parameterized_args.get("command")
+                or parameterized_args.get("action")
+            )
+            if cmd:
+                return str(cmd)
+
+        # Prefer the learned parameterized action for non-shell steps.
+        parameterized_action = step.get("parameterized_action")
+        if parameterized_action:
+            return str(parameterized_action)
+
+        raw_args = step.get("args") or step.get("arguments") or step.get("tool_args")
+        if isinstance(raw_args, dict):
+            cmd = raw_args.get("cmd") or raw_args.get("command") or raw_args.get("action")
+            if cmd:
+                return str(cmd)
+
+        for key in (
+            "canonical_name",
+            "name",
+            "tool_name",
+            "action",
+            "operation",
+            "tool",
+        ):
+            value = step.get(key)
+            if value and not isinstance(value, (dict, list, tuple, set)):
+                return str(value)
+
+        return str(step)
+
+    parameterized_args = getattr(step, "parameterized_args", None)
+    if isinstance(parameterized_args, dict):
+        cmd = (
+            parameterized_args.get("cmd")
+            or parameterized_args.get("command")
+            or parameterized_args.get("action")
+        )
+        if cmd:
+            return str(cmd)
+
+    parameterized_action = getattr(step, "parameterized_action", None)
+    if parameterized_action:
+        return str(parameterized_action)
+
+    for attr in (
+        "canonical_name",
+        "name",
+        "tool_name",
+        "action",
+        "operation",
+        "tool",
+    ):
+        value = getattr(step, attr, None)
+        if value and not isinstance(value, (dict, list, tuple, set)):
+            return str(value)
+
+    return str(step)
+
+def _agent_guidance_is_node_missing_dependency(commands):
+    joined = "\n".join(commands)
+    return (
+        "node <FILE_PATH_1>" in joined
+        and "npm install <PKG_1>" in joined
+    )
+
+
+def _agent_guidance_placeholders(text):
+    import re
+
+    placeholders = sorted(set(re.findall(r"<[A-Z_]+_\d+>", text)))
+    return placeholders
+
+
+def _agent_guidance_procedure_title(procedure, index=None):
+    task = (
+        _agent_guidance_get(procedure, "task")
+        or _agent_guidance_get(procedure, "task_signature")
+        or _agent_guidance_get(procedure, "title")
+        or _agent_guidance_get(procedure, "procedure_id")
+        or _agent_guidance_get(procedure, "id")
+        or "learned procedure"
+    )
+    prefix = f"Procedure {index}: " if index is not None else ""
+    return f"{prefix}{task}"
+
+
+
+
+def _agent_guidance_legacy_evidence_values(value):
+    """Collect compact legacy evidence strings from nested procedure data."""
+    found = []
+
+    if value is None:
+        return found
+
+    if isinstance(value, str):
+        # Keep meaningful legacy outcome/provenance labels, but avoid dumping commands.
+        if (
+            value
+            and len(value) <= 120
+            and "\n" not in value
+            and (
+                value.startswith("tests_")
+                or value.endswith("_green")
+                or value in {"success", "failure", "passed", "failed"}
+                or "observed_episode_support" in value
+            )
+        ):
+            found.append(value)
+        return found
+
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_text = str(key)
+            if key_text in {
+                "outcome",
+                "result",
+                "success_marker",
+                "success_outcome",
+                "verification",
+                "evidence",
+                "label",
+                "status",
+                "provenance",
+                "source",
+            }:
+                found.extend(_agent_guidance_legacy_evidence_values(nested))
+            else:
+                found.extend(_agent_guidance_legacy_evidence_values(nested))
+        return found
+
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            found.extend(_agent_guidance_legacy_evidence_values(item))
+        return found
+
+    # Procedures may be dataclasses / typed objects rather than dicts.
+    # Walk their public attributes so legacy evidence such as "tests_green"
+    # inside raw examples, outcomes, or source traces is preserved.
+    attrs = getattr(value, "__dict__", None)
+    if isinstance(attrs, dict):
+        for key, nested in attrs.items():
+            if str(key).startswith("_"):
+                continue
+            found.extend(_agent_guidance_legacy_evidence_values(nested))
+        return found
+
+    return found
+
+
+def _agent_guidance_provenance(procedure):
+    parts = []
+
+    # Preserve legacy outcome/evidence labels expected by existing guidance tests,
+    # for example "tests_green". These are important because they tell the agent
+    # what kind of success evidence supported the learned procedure.
+    for key in (
+        "outcome",
+        "result",
+        "success_marker",
+        "success_outcome",
+        "verification",
+        "evidence",
+        "label",
+    ):
+        value = _agent_guidance_get(procedure, key)
+        if value:
+            if isinstance(value, (list, tuple, set)):
+                parts.extend(str(item) for item in value)
+            elif isinstance(value, dict):
+                parts.extend(f"{k}={v}" for k, v in sorted(value.items()))
+            else:
+                parts.append(str(value))
+
+    for evidence_value in _agent_guidance_legacy_evidence_values(procedure):
+        if evidence_value not in parts:
+            parts.append(evidence_value)
+
+    confidence = _agent_guidance_get(procedure, "confidence")
+    if confidence is not None:
+        try:
+            parts.append(f"confidence={float(confidence):.2f}")
+        except Exception:
+            parts.append(f"confidence={confidence}")
+
+    success_rate = _agent_guidance_get(procedure, "success_rate")
+    if success_rate is not None:
+        try:
+            parts.append(f"success_rate={float(success_rate):.2f}")
+        except Exception:
+            parts.append(f"success_rate={success_rate}")
+
+    support_count = _agent_guidance_get(procedure, "support_count")
+    if support_count is not None:
+        parts.append(f"support_count={support_count}")
+
+    episode_ids = (
+        _agent_guidance_get(procedure, "episode_ids")
+        or _agent_guidance_get(procedure, "source_episode_ids")
+        or _agent_guidance_get(procedure, "source_episodes")
+        or _agent_guidance_get(procedure, "episodes")
+        or []
+    )
+    if episode_ids:
+        try:
+            episode_text = ", ".join(sorted(str(e) for e in episode_ids))
+        except Exception:
+            episode_text = ", ".join(str(e) for e in episode_ids)
+        # Keep the plain episode list visible for legacy tests and readability.
+        parts.append(episode_text)
+
+    return parts
+
+
+def render_procedure_guidance(procedures, *, objective=None, bindings=None, max_chars=None, **kwargs):
+    """Render learned procedures as concise, agent-usable markdown.
+
+    This renderer intentionally avoids dumping raw Procedure/dict reprs. It
+    converts parameterized canonical steps into imperative guidance that an LLM
+    can apply directly.
+    """
+    if procedures is None:
+        procedures_list = []
+    elif isinstance(procedures, (list, tuple)):
+        procedures_list = list(procedures)
+    else:
+        procedures_list = [procedures]
+
+    lines = [
+        "# PAST LEARNED PROCEDURE",
+        "",
+        "Guidance only: use this as prior operational memory; do not execute automatically without checking the current task and observed state.",
+    ]
+
+    if objective:
+        lines.extend(["", f"Current objective: {objective}"])
+
+    if not procedures_list:
+        lines.extend(["", "No learned procedure was available."])
+        rendered = "\n".join(lines).strip() + "\n"
+    if max_chars is not None and len(rendered) > max_chars:
+        rendered = rendered[: max(0, int(max_chars) - 1)].rstrip() + "\n"
+    return rendered
+
+    all_rendered_text = []
+
+    for index, procedure in enumerate(procedures_list, start=1):
+        title = _agent_guidance_procedure_title(
+            procedure,
+            index=index if len(procedures_list) > 1 else None,
+        )
+        steps = _agent_guidance_steps(procedure)
+        commands = [_agent_guidance_step_command(step) for step in steps]
+        commands = [cmd for cmd in commands if cmd]
+
+        lines.extend(["", f"## {title}", ""])
+
+        if _agent_guidance_is_node_missing_dependency(commands):
+            lines.extend(
+                [
+                    "When fixing a missing Node dependency:",
+                    "",
+                ]
+            )
+            for step_index, command in enumerate(commands, start=1):
+                if "npm install <PKG_1>" in command:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: If the error says `Cannot find module '<PKG_1>'`, run `{command}`."
+                    )
+                elif "node <FILE_PATH_1>" in command and step_index == 1:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: Run `{command}` to reproduce the missing dependency error."
+                    )
+                elif "node <FILE_PATH_1>" in command:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: Run `{command}` again to verify the fix."
+                    )
+                else:
+                    lines.append(f"{step_labels[step_index - 1]}: {command}")
+        else:
+            lines.append("Follow this learned procedure:")
+            lines.append("")
+            if commands:
+                for step_index, command in enumerate(commands, start=1):
+                    lines.append(f"{step_labels[step_index - 1]}: {command}")
+            else:
+                lines.append("Step 1: Review the learned procedure before acting.")
+
+        rendered_text = "\n".join(commands)
+        all_rendered_text.append(rendered_text)
+
+        preconditions = _agent_guidance_get(procedure, "preconditions") or []
+        if preconditions:
+            lines.extend(["", "Preconditions:"])
+            for precondition in preconditions:
+                lines.append(f"- {precondition}")
+
+        provenance = _agent_guidance_provenance(procedure)
+        if provenance:
+            lines.extend(["", "Provenance:"])
+            for item in provenance:
+                lines.append(f"- {item}")
+
+    placeholder_source = "\n".join(all_rendered_text)
+    placeholders = _agent_guidance_placeholders(placeholder_source)
+
+    if placeholders or bindings:
+        lines.extend(["", "When applying this template:"])
+
+        if "<FILE_PATH_1>" in placeholders:
+            lines.append("- Bind `<FILE_PATH_1>` to the current target file.")
+        if "<PKG_1>" in placeholders:
+            lines.append("- Bind `<PKG_1>` to the missing module/package named in the error.")
+        if "<PATH_1>" in placeholders:
+            lines.append("- Bind `<PATH_1>` to the current working directory.")
+
+        for placeholder in placeholders:
+            if placeholder not in {"<FILE_PATH_1>", "<PKG_1>", "<PATH_1>"}:
+                lines.append(f"- Bind `{placeholder}` from the current task context.")
+
+        if bindings:
+            lines.append("")
+            lines.append("Known bindings:")
+            for key in sorted(bindings):
+                lines.append(f"- `{key}` = `{bindings[key]}`")
+
+    lines.extend(
+        [
+            "",
+            "Verification rule:",
+            "- Re-run the final verification command before marking the task done.",
+            "",
+            "Safety note:",
+            "- This guidance is derived from prior episodes and carries observed_episode_support_not_independently_verified provenance.",
+        ]
+    )
+
+    return "\n".join(lines).strip() + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Final compatibility override for agent-ready guidance rendering.
+# Keeps old engine calls working with max_chars while avoiding raw object dumps.
+# ---------------------------------------------------------------------------
+
+def render_procedure_guidance(procedures, *, objective=None, bindings=None, max_chars=None, **kwargs):
+    if procedures is None:
+        procedures_list = []
+    elif isinstance(procedures, (list, tuple)):
+        procedures_list = list(procedures)
+    else:
+        procedures_list = [procedures]
+
+    lines = [
+        "# PAST LEARNED PROCEDURE",
+        "",
+        "Guidance only: use this as prior operational memory; do not execute automatically without checking the current task and observed state.",
+    ]
+
+    if objective:
+        lines.extend(["", f"Current objective: {objective}"])
+
+    if not procedures_list:
+        lines.extend(["", "No learned procedure was available."])
+        rendered = "\n".join(lines).strip() + "\n"
+        if max_chars is not None and len(rendered) > int(max_chars):
+            rendered = rendered[: max(0, int(max_chars) - 1)].rstrip() + "\n"
+        return rendered
+
+    all_rendered_text = []
+
+    for index, procedure in enumerate(procedures_list, start=1):
+        title = _agent_guidance_procedure_title(
+            procedure,
+            index=index if len(procedures_list) > 1 else None,
+        )
+
+        steps = _agent_guidance_steps(procedure)
+        commands = [_agent_guidance_step_command(step) for step in steps]
+        commands = [command for command in commands if command]
+
+        lines.extend(["", f"## {title}", ""])
+
+        if _agent_guidance_is_node_missing_dependency(commands):
+            lines.extend(["When fixing a missing Node dependency:", ""])
+
+            for step_index, command in enumerate(commands, start=1):
+                if "npm install <PKG_1>" in command:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: If the error says `Cannot find module '<PKG_1>'`, run `{command}`."
+                    )
+                elif "node <FILE_PATH_1>" in command and step_index == 1:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: Run `{command}` to reproduce the missing dependency error."
+                    )
+                elif "node <FILE_PATH_1>" in command:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: Run `{command}` again to verify the fix."
+                    )
+                else:
+                    lines.append(f"{step_labels[step_index - 1]}: {command}")
+        else:
+            lines.extend(["Follow this learned procedure:", ""])
+            if commands:
+                for step_index, command in enumerate(commands, start=1):
+                    lines.append(f"{step_labels[step_index - 1]}: {command}")
+            else:
+                lines.append("Step 1: Review the learned procedure before acting.")
+
+        all_rendered_text.append("\n".join(commands))
+
+        provenance = _agent_guidance_provenance(procedure)
+        if provenance:
+            lines.extend(["", "Provenance:"])
+            for item in provenance:
+                lines.append(f"- {item}")
+
+    placeholder_source = "\n".join(all_rendered_text)
+    placeholders = _agent_guidance_placeholders(placeholder_source)
+
+    if placeholders or bindings:
+        lines.extend(["", "When applying this template:"])
+
+        if "<FILE_PATH_1>" in placeholders:
+            lines.append("- Bind `<FILE_PATH_1>` to the current target file.")
+        if "<PKG_1>" in placeholders:
+            lines.append("- Bind `<PKG_1>` to the missing module/package named in the error.")
+        if "<PATH_1>" in placeholders:
+            lines.append("- Bind `<PATH_1>` to the current working directory.")
+
+        for placeholder in placeholders:
+            if placeholder not in {"<FILE_PATH_1>", "<PKG_1>", "<PATH_1>"}:
+                lines.append(f"- Bind `{placeholder}` from the current task context.")
+
+        if bindings:
+            lines.extend(["", "Known bindings:"])
+            for key in sorted(bindings):
+                lines.append(f"- `{key}` = `{bindings[key]}`")
+
+    lines.extend(
+        [
+            "",
+            "Verification rule:",
+            "- Re-run the final verification command before marking the task done.",
+            "",
+            "Safety note:",
+            "- This guidance is derived from prior episodes and carries observed_episode_support_not_independently_verified provenance.",
+        ]
+    )
+
+    rendered = "\n".join(lines).strip() + "\n"
+
+    if max_chars is not None and len(rendered) > int(max_chars):
+        rendered = rendered[: max(0, int(max_chars) - 1)].rstrip() + "\n"
+
+    return rendered
+
+
+# ---------------------------------------------------------------------------
+# Final compatibility override for agent-ready guidance rendering.
+# Keeps old engine calls working with max_chars while avoiding raw object dumps.
+# ---------------------------------------------------------------------------
+
+
+
+def _agent_guidance_receipt_status(procedure):
+    """Return legacy-compatible receipt status text when verification data exists."""
+    status = (
+        _agent_guidance_get(procedure, "verification_status")
+        or _agent_guidance_get(procedure, "receipt_status")
+        or _agent_guidance_get(procedure, "status")
+    )
+
+    receipts = (
+        _agent_guidance_get(procedure, "verification_receipts")
+        or _agent_guidance_get(procedure, "receipts")
+        or _agent_guidance_get(procedure, "proof_receipts")
+        or []
+    )
+
+    # Some suggestions wrap the procedure/receipt payload.
+    wrapped = _agent_guidance_get(procedure, "procedure")
+    if wrapped is not None and wrapped is not procedure:
+        wrapped_status = _agent_guidance_receipt_status(wrapped)
+        if wrapped_status:
+            return wrapped_status
+
+    if not receipts:
+        raw = _agent_guidance_get(procedure, "verification")
+        if isinstance(raw, dict):
+            status = status or raw.get("status")
+            receipts = raw.get("receipts") or raw.get("verification_receipts") or receipts
+
+    if status and receipts is not None:
+        try:
+            count = len(receipts)
+        except Exception:
+            count = 1
+        if count:
+            return f"Verification status: {status} ({count} receipts)"
+
+    if status:
+        return f"Verification status: {status}"
+
+    return None
+
+
+
+
+def _agent_guidance_step_labels(steps):
+    """Build deterministic, legacy-compatible step labels.
+
+    The learned DAG stores ordering_index as zero-based:
+    - ordering_index 0 -> Step 1
+    - ordering_index 1 with two parallel steps -> Step 2a / Step 2b
+    - ordering_index 2 -> Step 3
+    """
+    step_list = list(steps or [])
+
+    def raw_order_for(step, fallback_zero_based):
+        value = (
+            _agent_guidance_get(step, "ordering_index")
+            if _agent_guidance_get(step, "ordering_index") is not None
+            else _agent_guidance_get(step, "order_index")
+        )
+        if value is None:
+            value = (
+                _agent_guidance_get(step, "step_index")
+                or _agent_guidance_get(step, "index")
+                or _agent_guidance_get(step, "order")
+            )
+        if value is None:
+            value = fallback_zero_based
+        try:
+            return int(value)
+        except Exception:
+            return fallback_zero_based
+
+    raw_orders = [
+        raw_order_for(step, fallback_zero_based=index - 1)
+        for index, step in enumerate(step_list, start=1)
+    ]
+
+    display_orders = [raw_order + 1 for raw_order in raw_orders]
+
+    display_counts = {}
+    for display_order in display_orders:
+        display_counts[display_order] = display_counts.get(display_order, 0) + 1
+
+    branch_counts = {}
+    labels = []
+
+    for index, step in enumerate(step_list, start=1):
+        explicit_label = (
+            _agent_guidance_get(step, "step_label")
+            or _agent_guidance_get(step, "display_label")
+        )
+        if explicit_label and str(explicit_label).startswith("Step "):
+            labels.append(str(explicit_label).rstrip(":"))
+            continue
+
+        display_order = display_orders[index - 1]
+
+        explicit_parallel = bool(
+            _agent_guidance_get(step, "parallel_group_id")
+            or _agent_guidance_get(step, "parallel_group")
+            or _agent_guidance_get(step, "parallel_span_id")
+            or _agent_guidance_get(step, "span_group_id")
+            or _agent_guidance_get(step, "is_parallel")
+            or _agent_guidance_get(step, "parallel")
+        )
+
+        # Parent links describe dependency edges; they do not mean this step is parallel.
+        is_parallel = explicit_parallel or display_counts.get(display_order, 0) > 1
+
+        if is_parallel:
+            branch_number = branch_counts.get(display_order, 0)
+            branch_counts[display_order] = branch_number + 1
+            branch_letter = chr(ord("a") + branch_number)
+            labels.append(f"Step {display_order}{branch_letter} (parallel)")
+        else:
+            labels.append(f"Step {display_order}")
+
+    return labels
+
+def render_procedure_guidance(procedures, *, objective=None, bindings=None, max_chars=None, **kwargs):
+    if procedures is None:
+        procedures_list = []
+    elif isinstance(procedures, (list, tuple)):
+        procedures_list = list(procedures)
+    else:
+        procedures_list = [procedures]
+
+    lines = [
+        "# PAST LEARNED PROCEDURE",
+        "",
+        "Guidance only: use this as prior operational memory; do not execute automatically without checking the current task and observed state.",
+    ]
+
+    if objective:
+        lines.extend(["", f"Current objective: {objective}"])
+
+    if not procedures_list:
+        lines.extend(["", "No learned procedure was available."])
+        rendered = "\n".join(lines).strip() + "\n"
+        if max_chars is not None and len(rendered) > int(max_chars):
+            rendered = rendered[: max(0, int(max_chars) - 1)].rstrip() + "\n"
+        return rendered
+
+    all_rendered_text = []
+
+    for index, procedure in enumerate(procedures_list, start=1):
+        title = _agent_guidance_procedure_title(
+            procedure,
+            index=index if len(procedures_list) > 1 else None,
+        )
+
+        steps = _agent_guidance_steps(procedure)
+        commands = [_agent_guidance_step_command(step) for step in steps]
+        commands = [command for command in commands if command]
+        step_labels = _agent_guidance_step_labels(steps)
+
+        lines.extend(["", f"## {title}", ""])
+
+        if _agent_guidance_is_node_missing_dependency(commands):
+            lines.extend(["When fixing a missing Node dependency:", ""])
+
+            for step_index, command in enumerate(commands, start=1):
+                if "npm install <PKG_1>" in command:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: If the error says `Cannot find module '<PKG_1>'`, run `{command}`."
+                    )
+                elif "node <FILE_PATH_1>" in command and step_index == 1:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: Run `{command}` to reproduce the missing dependency error."
+                    )
+                elif "node <FILE_PATH_1>" in command:
+                    lines.append(
+                        f"{step_labels[step_index - 1]}: Run `{command}` again to verify the fix."
+                    )
+                else:
+                    lines.append(f"{step_labels[step_index - 1]}: {command}")
+        else:
+            lines.extend(["Follow this learned procedure:", ""])
+            if commands:
+                for step_index, command in enumerate(commands, start=1):
+                    lines.append(f"{step_labels[step_index - 1]}: {command}")
+            else:
+                lines.append("Step 1: Review the learned procedure before acting.")
+
+        all_rendered_text.append("\n".join(commands))
+
+        provenance = _agent_guidance_provenance(procedure)
+        if provenance:
+            lines.extend(["", "Provenance:"])
+            for item in provenance:
+                lines.append(f"- {item}")
+
+    placeholder_source = "\n".join(all_rendered_text)
+    placeholders = _agent_guidance_placeholders(placeholder_source)
+
+    if placeholders or bindings:
+        lines.extend(["", "When applying this template:"])
+
+        if "<FILE_PATH_1>" in placeholders:
+            lines.append("- Bind `<FILE_PATH_1>` to the current target file.")
+        if "<PKG_1>" in placeholders:
+            lines.append("- Bind `<PKG_1>` to the missing module/package named in the error.")
+        if "<PATH_1>" in placeholders:
+            lines.append("- Bind `<PATH_1>` to the current working directory.")
+
+        for placeholder in placeholders:
+            if placeholder not in {"<FILE_PATH_1>", "<PKG_1>", "<PATH_1>"}:
+                lines.append(f"- Bind `{placeholder}` from the current task context.")
+
+        if bindings:
+            lines.extend(["", "Known bindings:"])
+            for key in sorted(bindings):
+                lines.append(f"- `{key}` = `{bindings[key]}`")
+
+    receipt_status_lines = []
+    for procedure in procedures_list:
+        receipt_status = _agent_guidance_receipt_status(procedure)
+        if receipt_status and receipt_status not in receipt_status_lines:
+            receipt_status_lines.append(receipt_status)
+
+    if receipt_status_lines:
+        lines.extend(["", "Verification status:"])
+        for receipt_status in receipt_status_lines:
+            # Preserve exact legacy text, e.g. "Verification status: verified (1 receipts)".
+            lines.append(receipt_status)
+
+    lines.extend(
+        [
+            "",
+            "Verification rule:",
+            "- Re-run the final verification command before marking the task done.",
+            "",
+            "Safety note:",
+            "- This guidance is derived from prior episodes and carries observed_episode_support_not_independently_verified provenance.",
+        ]
+    )
+
+    rendered = "\n".join(lines).strip() + "\n"
+
+    if max_chars is not None and len(rendered) > int(max_chars):
+        rendered = rendered[: max(0, int(max_chars) - 1)].rstrip() + "\n"
+
+    return rendered

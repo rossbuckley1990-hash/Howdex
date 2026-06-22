@@ -254,3 +254,77 @@ def test_unrelated_task_without_context_returns_no_suggestion(tmp_path):
     )
 
     assert memory.suggest_procedure("write customer invoice") == []
+
+
+def test_agent_guidance_formats_node_dependency_template_without_raw_repr():
+    procedure = {
+        "procedure_id": "missing-node-dependency",
+        "task": "fix missing node dependency",
+        "confidence": 0.91,
+        "success_rate": 1.0,
+        "support_count": 1,
+        "episode_ids": ["episode-node"],
+        "canonical_steps": [
+            {
+                "canonical_name": "bash",
+                "parameterized_args": {
+                    "cmd": "cd test_env && node <FILE_PATH_1>",
+                    "cwd": "<PATH_1>",
+                },
+            },
+            {
+                "canonical_name": "bash",
+                "parameterized_args": {
+                    "cmd": "cd test_env && npm install <PKG_1>",
+                    "cwd": "<PATH_1>",
+                },
+            },
+            {
+                "canonical_name": "bash",
+                "parameterized_args": {
+                    "cmd": "cd test_env && node <FILE_PATH_1>",
+                    "cwd": "<PATH_1>",
+                },
+            },
+        ],
+    }
+
+    guidance = render_procedure_guidance([procedure])
+
+    assert "# PAST LEARNED PROCEDURE" in guidance
+    assert "npm install <PKG_1>" in guidance
+    assert "Cannot find module '<PKG_1>'" in guidance
+    assert "Bind `<FILE_PATH_1>` to the current target file." in guidance
+    assert "Bind `<PKG_1>` to the missing module/package named in the error." in guidance
+    assert "parameterized_args" not in guidance
+    assert "canonical_steps" not in guidance
+
+
+def test_agent_guidance_renders_multiple_procedures():
+    first = {
+        "procedure_id": "first",
+        "task": "first task",
+        "canonical_steps": [
+            {
+                "canonical_name": "bash",
+                "parameterized_args": {"cmd": "npm install <PKG_1>"},
+            }
+        ],
+    }
+    second = {
+        "procedure_id": "second",
+        "task": "second task",
+        "canonical_steps": [
+            {
+                "canonical_name": "bash",
+                "parameterized_args": {"cmd": "pytest"},
+            }
+        ],
+    }
+
+    guidance = render_procedure_guidance([first, second])
+
+    assert "Procedure 1: first task" in guidance
+    assert "Procedure 2: second task" in guidance
+    assert "npm install <PKG_1>" in guidance
+    assert "pytest" in guidance
