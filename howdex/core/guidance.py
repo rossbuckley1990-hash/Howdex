@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from howdex.core.actions import canonicalize_steps
+from howdex.core.parallel import render_dag_steps
 from howdex.core.receipts import procedure_verification_status
 from howdex.core.retrieval import tokenize
 from howdex.core.types import Procedure
@@ -224,7 +225,8 @@ def render_procedure_guidance(
                 "Steps:",
             ]
         )
-        for step_index, step in enumerate(suggestion.steps, start=1):
+        display_steps: list[dict[str, Any]] = []
+        for step in suggestion.steps:
             action = str(
                 step.get("parameterized_action")
                 or step.get("canonical_name")
@@ -247,7 +249,18 @@ def render_procedure_guidance(
             ]
             details = [detail for detail in details if detail]
             suffix = f" ({'; '.join(details)})" if details else ""
-            blocks.append(f"{step_index}. {action}{suffix}")
+            display_steps.append(
+                {
+                    **step,
+                    "guidance_display": f"{action}{suffix}",
+                }
+            )
+        blocks.extend(
+            render_dag_steps(
+                display_steps,
+                action_key="guidance_display",
+            )
+        )
         blocks.extend(
             [
                 f"Proof status: {suggestion.proof_status}",

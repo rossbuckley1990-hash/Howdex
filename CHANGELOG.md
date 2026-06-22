@@ -32,6 +32,10 @@
   terminal, stdout, stderr, observation, and error payloads
 - ANSI stripping, progress/stack/repeated-line compression, bounded payload
   truncation, and mandatory secret redaction before episodic storage
+- Additive DAG metadata for episodic and procedural steps, including stable
+  step IDs, parent edges, spans, parallel groups, timing, and display ordering
+- Deterministic parallel-span resolution, order-insensitive consolidation
+  nodes, portable DAG JSON, and grouped human guidance rendering
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

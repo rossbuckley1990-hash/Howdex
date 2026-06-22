@@ -40,6 +40,12 @@ from howdex.core.parameterize import (
     parameterize_steps,
     redact_parameter_evidence,
 )
+from howdex.core.parallel import (
+    Parallel_Span_Resolver,
+    ParallelSpanResolver,
+    render_dag_steps,
+    resolve_parallel_spans,
+)
 from howdex.core.segmentation import (
     DEFAULT_IDLE_GAP_S,
     DEFAULT_MAX_SEGMENT_STEPS,
@@ -85,4 +91,6 @@ __all__ = [
     "ParameterizedAction", "parameterize_action", "parameterize_steps",
     "parameter_bindings",
     "redact_parameter_evidence",
+    "Parallel_Span_Resolver", "ParallelSpanResolver",
+    "resolve_parallel_spans", "render_dag_steps",
 ]

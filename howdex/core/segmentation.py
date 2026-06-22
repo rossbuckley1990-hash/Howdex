@@ -174,12 +174,15 @@ def _idle_gap(previous: dict[str, Any], current: dict[str, Any]) -> float:
 
 
 def _step_start(step: dict[str, Any], fallback: float) -> float:
-    value = step.get("start_time", step.get("started_at", step.get("ts")))
+    value = step.get("started_at", step.get("start_time", step.get("ts")))
     return _float_or(value, fallback)
 
 
 def _step_end(step: dict[str, Any], fallback: float) -> float:
-    value = step.get("end_time", step.get("finished_at"))
+    value = step.get(
+        "ended_at",
+        step.get("end_time", step.get("finished_at")),
+    )
     if value is not None:
         return _float_or(value, fallback)
     start = _step_start(step, fallback)
