@@ -10,6 +10,8 @@
 - Stable target projection with canonical argument hashing and secret redaction
 - First-class deterministic intent and side-effect ontologies with inspectable
   matched rules
+- Session-scoped working-memory context with deterministic importance/recency
+  eviction, prompt budgeting, and bounded episodic snapshots
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

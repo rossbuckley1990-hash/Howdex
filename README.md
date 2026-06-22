@@ -475,12 +475,39 @@ agent_executor = AgentExecutor(
 
 ### Working Memory
 
-Short-lived context for the current task. Auto-expires (default 5 min). Use it for "what the user just said" or "what step am I on."
+Working memory is the agent's RAM-like context for the current session.
+Items auto-expire after five minutes by default and remain isolated by
+`session_id`. Prompt context is selected deterministically: expired items are
+excluded, then a fixed score of 65% importance and 35% relative recency decides
+which items survive the item and character/token budget. Stable timestamp and
+memory-ID tie-breakers make repeated selection reproducible. No LLM
+summarisation is involved.
 
 ```python
-mem.remember("User asked about refund policy", layer="working")
-mem.remember("Step 3 of 5: processing payment", layer="working", ttl=60)
+mem.start_session("process refund")
+mem.remember(
+    "User approved a refund up to $50",
+    layer="working",
+    importance=0.9,
+    source="user",
+)
+mem.remember(
+    "Payment intent is pi_123",
+    layer="working",
+    ttl=60,
+    metadata={"provenance": {"tool": "stripe.lookup"}},
+)
+
+prompt_context = mem.get_working_context(
+    max_items=8,
+    token_budget=500,  # deterministic 4-char/token approximation
+)
+mem.end_session("success")
 ```
+
+Closing the session records a bounded working-memory snapshot and its memory
+IDs in the episodic memory metadata. The original working items retain their
+normal TTL and are not destructively deleted by context-window eviction.
 
 **Vacuum:** `howdex vacuum` cleans up expired working memories.
 
@@ -562,6 +589,13 @@ Retrieve memories. Returns `list[HowdexResult]` where each result has `.memory`,
 ### `.learn(*, min_samples=3, dry_run=False)`
 
 Consolidate episodic memories into procedures. Returns `list[Procedure]`.
+
+### `.get_working_context(session_id=None, *, max_items=20, max_chars=4000, token_budget=None, include_provenance=True)`
+
+Build deterministic prompt-ready working context for one session. If
+`session_id` is omitted, the active session is used. `token_budget` uses a
+four-characters-per-token approximation and is capped by `max_chars` when both
+are provided.
 
 ### `.forget(memory_id)`
 
