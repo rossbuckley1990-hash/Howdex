@@ -60,7 +60,7 @@ Howdex's layer model is based on cognitive science (Atkinson-Shiffrin memory mod
 
 | Layer | Cognitive analog | Retention | Write trigger |
 |---|---|---|---|
-| Working | Short-term / working memory | seconds-minutes | Per-task scratchpad |
+| Working | RAM-like session context | seconds-minutes | Per-task scratchpad |
 | Semantic | Declarative knowledge | long-term | Facts, preferences |
 | Episodic | Autobiographical memory | long-term | Session logs |
 | Procedural | Procedural memory (skills) | long-term | Output of `learn()` |
@@ -74,6 +74,13 @@ A single "memory" bucket fails because different memories have different lifecyc
 - "To deploy: tests → build → ship" is a skill (→ procedural)
 
 Mixing these in one store means you either lose the short-term stuff too fast or drown the long-term stuff in noise. Separate layers = separate retrieval strategies, separate retention policies, separate consolidation paths.
+
+Working-memory prompt injection is deterministic and session-scoped. Expired
+items are removed first; the remaining items are ranked by relative recency and
+importance using fixed 35%/65% weights, then bounded by item and
+character/token budgets. Session close stores a bounded snapshot and memory
+references in the resulting episodic memory, while the original working
+records retain their TTL.
 
 ## Storage: SQLite
 

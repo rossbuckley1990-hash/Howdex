@@ -24,6 +24,11 @@ from howdex.core.session import HowdexSession
 from howdex.core.trust import TrustMetadata
 from howdex.core.consolidation import consolidate
 from howdex.core.tool_calls import canonicalize_tool_call, redact_secrets
+from howdex.core.working import (
+    DEFAULT_WORKING_MAX_CHARS,
+    DEFAULT_WORKING_MAX_ITEMS,
+    select_working_context,
+)
 from howdex.storage import Store
 from howdex.vectors import VectorIndex, Embedder, auto_embedder
 
@@ -216,6 +221,43 @@ class Howdex:
         if embedding:
             self.index.add(m.id, embedding)
         return m
+
+    def get_working_context(
+        self,
+        session_id: Optional[str] = None,
+        *,
+        max_items: Optional[int] = DEFAULT_WORKING_MAX_ITEMS,
+        max_chars: Optional[int] = DEFAULT_WORKING_MAX_CHARS,
+        token_budget: Optional[int] = None,
+        include_provenance: bool = True,
+    ) -> str:
+        """Return deterministic, prompt-ready working memory for one session.
+
+        ``token_budget`` uses a conservative four-characters-per-token
+        approximation and is combined with ``max_chars`` using the smaller
+        limit. Stored memories are not deleted when they are evicted from this
+        context window.
+        """
+        resolved_session_id = session_id or (
+            self._current_session.session_id
+            if self._current_session
+            else None
+        )
+        if not resolved_session_id:
+            return ""
+        memories = self.store.query(
+            layer=MemoryLayer.WORKING,
+            session_id=resolved_session_id,
+            limit=10_000,
+        )
+        _, context = select_working_context(
+            memories,
+            max_items=max_items,
+            max_chars=max_chars,
+            token_budget=token_budget,
+            include_provenance=include_provenance,
+        )
+        return context
 
     # ------------------------------------------------------------------ #
     # core: recall
@@ -531,6 +573,16 @@ class Howdex:
         if not self._current_session:
             raise HowdexError("no active session")
         ep = self._current_session
+        working_memories = self.store.query(
+            layer=MemoryLayer.WORKING,
+            session_id=ep.session_id,
+            limit=10_000,
+        )
+        selected_working, working_context = select_working_context(
+            working_memories,
+            max_items=DEFAULT_WORKING_MAX_ITEMS,
+            max_chars=DEFAULT_WORKING_MAX_CHARS,
+        )
         ep.close(outcome, error)
         self.store.put_episode({
             "id": ep.session_id,
@@ -554,6 +606,11 @@ class Howdex:
                 "task": ep.task,
                 "outcome": ep.outcome,
                 "duration_s": ep.duration_s,
+                "working_memory_ids": [
+                    memory.id for memory in selected_working
+                ],
+                "working_memory_count": len(selected_working),
+                "working_memory_context": working_context,
             },
             source="agent",
         )

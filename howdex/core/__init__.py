@@ -28,6 +28,12 @@ from howdex.core.types import (
     MemoryType,
     Procedure,
 )
+from howdex.core.working import (
+    DEFAULT_WORKING_MAX_CHARS,
+    DEFAULT_WORKING_MAX_ITEMS,
+    rank_working_memories,
+    select_working_context,
+)
 
 __all__ = [
     "Howdex",
@@ -37,4 +43,6 @@ __all__ = [
     "CanonicalAction", "canonicalize_action", "canonicalize_steps",
     "canonicalize_tool_call", "normalize_tool_name",
     "INTENTS", "SIDE_EFFECT_CLASSES", "infer_side_effect_class",
+    "DEFAULT_WORKING_MAX_ITEMS", "DEFAULT_WORKING_MAX_CHARS",
+    "rank_working_memories", "select_working_context",
 ]
