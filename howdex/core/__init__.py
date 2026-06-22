@@ -18,6 +18,11 @@ from howdex.core.errors import (
     StoreError,
     SyncError,
 )
+from howdex.core.guidance import (
+    ProcedureSuggestion,
+    render_procedure_guidance,
+    suggest_procedures,
+)
 from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
 from howdex.core.segmentation import (
     DEFAULT_IDLE_GAP_S,
@@ -57,4 +62,5 @@ __all__ = [
     "rank_working_memories", "select_working_context",
     "DEFAULT_MAX_SEGMENT_STEPS", "DEFAULT_IDLE_GAP_S", "segment_episode",
     "SemanticExtractor", "SemanticRecord", "derive_tool_semantics",
+    "ProcedureSuggestion", "suggest_procedures", "render_procedure_guidance",
 ]

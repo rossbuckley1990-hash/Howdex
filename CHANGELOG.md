@@ -16,6 +16,8 @@
   segmentation with raw-parent preservation
 - Explicit provenance-rich semantic writes and deterministic tool
   system/action/target entity relations with stable IDs
+- Deterministic pre-action procedure suggestions and bounded prompt guidance
+  with match explanations and source episode evidence
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results
