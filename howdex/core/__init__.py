@@ -33,6 +33,13 @@ from howdex.core.receipts import (
     parse_bootproof_attestation,
     procedure_verification_status,
 )
+from howdex.core.parameterize import (
+    ParameterizedAction,
+    parameter_bindings,
+    parameterize_action,
+    parameterize_steps,
+    redact_parameter_evidence,
+)
 from howdex.core.segmentation import (
     DEFAULT_IDLE_GAP_S,
     DEFAULT_MAX_SEGMENT_STEPS,
@@ -75,4 +82,7 @@ __all__ = [
     "procedure_feedback_confidence", "procedure_success_rate",
     "VerificationReceipt", "parse_bootproof_attestation",
     "procedure_verification_status",
+    "ParameterizedAction", "parameterize_action", "parameterize_steps",
+    "parameter_bindings",
+    "redact_parameter_evidence",
 ]

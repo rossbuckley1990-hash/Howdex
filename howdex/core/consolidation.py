@@ -17,7 +17,12 @@ from howdex.core.feedback import (
     procedure_feedback_confidence,
     procedure_success_rate,
 )
-from howdex.core.tool_calls import redact_secrets
+from howdex.core.parameterize import (
+    ParameterizedAction,
+    parameter_bindings,
+    parameterize_steps,
+    redact_parameter_evidence,
+)
 from howdex.core.types import Procedure
 from howdex.storage import Store
 
@@ -33,6 +38,7 @@ class _EpisodeTrace:
     outcome: str
     raw_steps: list[Any]
     canonical_actions: list[CanonicalAction]
+    parameterized_actions: list[ParameterizedAction]
 
     @property
     def action_names(self) -> list[str]:
@@ -101,6 +107,7 @@ def _trace_from_episode(episode: Any) -> _EpisodeTrace | None:
         outcome=str(_get(episode, "outcome", "") or ""),
         raw_steps=raw_steps,
         canonical_actions=actionable,
+        parameterized_actions=parameterize_steps(actionable),
     )
 
 
@@ -226,14 +233,37 @@ def _canonical_steps(
                 action.raw_action,
             ),
         )
-        raw_actions = sorted({action.raw_action for action in examples if action.raw_action})
+        raw_actions = sorted(
+            {
+                str(redact_parameter_evidence(action.raw_action))
+                for action in examples
+                if action.raw_action
+            }
+        )
         observations = sorted(
             {
-                str(action.evidence.get("observation"))
+                str(
+                    redact_parameter_evidence(
+                        action.evidence.get("observation")
+                    )
+                )
                 for action in examples
                 if action.evidence.get("observation")
             }
         )
+        parameterized_examples = [
+            matching[occurrence]
+            for trace in cluster
+            if len(
+                matching := [
+                    action
+                    for action in trace.parameterized_actions
+                    if action.canonical_name == name
+                ]
+            )
+            > occurrence
+        ]
+        template = _representative_template(parameterized_examples)
         steps.append(
             {
                 "action": name,
@@ -245,6 +275,10 @@ def _canonical_steps(
                     sum(action.confidence for action in examples) / len(examples),
                     4,
                 ),
+                "parameterized_action": template["action"],
+                "parameterized_args": template["arguments"],
+                "parameterized_target": template["target"],
+                "template": template,
                 "evidence": {
                     "support_count": len(
                         {
@@ -290,11 +324,57 @@ def _raw_examples(traces: list[_EpisodeTrace]) -> list[dict[str, Any]]:
             {
                 "episode_id": trace.episode_id,
                 "outcome": trace.outcome,
-                "steps": redact_secrets(trace.raw_steps)[0],
+                "steps": redact_parameter_evidence(trace.raw_steps),
                 "canonical_sequence": trace.action_names,
+                "parameterized_sequence": [
+                    action.to_dict()
+                    for action in trace.parameterized_actions
+                ],
+                "bindings": parameter_bindings(trace.parameterized_actions),
             }
         )
     return examples
+
+
+def _representative_template(
+    examples: list[ParameterizedAction],
+) -> dict[str, Any]:
+    if not examples:
+        return {"action": "", "arguments": {}, "target": None}
+    candidates: dict[str, tuple[int, dict[str, Any]]] = {}
+    for example in examples:
+        template = {
+            "action": example.parameterized_action,
+            "arguments": example.parameterized_args,
+            "target": example.parameterized_target,
+        }
+        identity = json.dumps(
+            template,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        count, _ = candidates.get(identity, (0, template))
+        candidates[identity] = (count + 1, template)
+    return max(
+        candidates.items(),
+        key=lambda item: (item[1][0], item[0]),
+    )[1][1]
+
+
+def _example_bindings(
+    traces: list[_EpisodeTrace],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "episode_id": trace.episode_id,
+            "bindings": parameter_bindings(trace.parameterized_actions),
+        }
+        for trace in sorted(traces, key=lambda item: item.episode_id)[
+            :MAX_RAW_SUPPORTING_EXAMPLES
+        ]
+        if parameter_bindings(trace.parameterized_actions)
+    ]
 
 
 def _preconditions(
@@ -485,6 +565,7 @@ def consolidate(
                 _get(existing, "unverified_use_count", 0)
             ),
             raw_supporting_examples=_raw_examples(support_traces),
+            parameter_bindings=_example_bindings(support_traces),
             source_episode_ids=sorted(
                 learned_episode_ids | existing_episode_ids
             ),

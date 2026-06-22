@@ -24,7 +24,7 @@ from howdex.core.feedback import (
     procedure_success_rate,
 )
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 SCHEMA = """
@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS procedures (
     suggestion_count INTEGER NOT NULL DEFAULT 0,
     unverified_use_count INTEGER NOT NULL DEFAULT 0,
     raw_examples     TEXT NOT NULL DEFAULT '[]',
+    parameter_bindings TEXT NOT NULL DEFAULT '[]',
     source_episode_ids TEXT NOT NULL DEFAULT '[]',
     created_at       REAL NOT NULL,
     last_used_at     REAL,
@@ -213,6 +214,7 @@ class Store:
             "suggestion_count": "INTEGER NOT NULL DEFAULT 0",
             "unverified_use_count": "INTEGER NOT NULL DEFAULT 0",
             "raw_examples": "TEXT NOT NULL DEFAULT '[]'",
+            "parameter_bindings": "TEXT NOT NULL DEFAULT '[]'",
             "source_episode_ids": "TEXT NOT NULL DEFAULT '[]'",
         }
         for name, definition in additions.items():
@@ -482,8 +484,9 @@ class Store:
                     failure_count, confidence, base_confidence,
                     feedback_success_count, feedback_failure_count,
                     suggestion_count, unverified_use_count, raw_examples,
-                    source_episode_ids, created_at, last_used_at, use_count)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    parameter_bindings, source_episode_ids, created_at,
+                    last_used_at, use_count)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     p["id"], p["task_signature"], json.dumps(p.get("steps", [])),
                     json.dumps(p.get("preconditions", [])), p.get("expected_outcome", ""),
@@ -495,6 +498,7 @@ class Store:
                     p.get("suggestion_count", 0),
                     p.get("unverified_use_count", 0),
                     json.dumps(p.get("raw_supporting_examples", [])),
+                    json.dumps(p.get("parameter_bindings", [])),
                     json.dumps(p.get("source_episode_ids", [])),
                     p.get("created_at", time.time()), p.get("last_used_at"),
                     p.get("use_count", 0),
@@ -910,6 +914,9 @@ def _row_to_procedure(row: sqlite3.Row) -> dict[str, Any]:
     procedure["preconditions"] = _json_list(procedure["preconditions"])
     procedure["raw_supporting_examples"] = _json_list(
         procedure.pop("raw_examples")
+    )
+    procedure["parameter_bindings"] = _json_list(
+        procedure["parameter_bindings"]
     )
     procedure["source_episode_ids"] = _json_list(
         procedure["source_episode_ids"]

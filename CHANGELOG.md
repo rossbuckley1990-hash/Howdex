@@ -24,6 +24,10 @@
   optional defensive import of local BootProof-like attestations
 - Receipt-backed verification status in procedure suggestions and portable
   procedure exports
+- Deterministic procedure parameterisation for volatile command and tool-call
+  arguments, with stable typed placeholders and redacted example bindings
+- Generalized procedure templates layered on canonical actions so repeated
+  workflows learn reusable algorithms rather than hardcoded macros
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

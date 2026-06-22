@@ -140,6 +140,7 @@ def test_v1_procedure_schema_migrates_with_evidence_defaults(tmp_path):
     assert procedure["suggestion_count"] == 0
     assert procedure["unverified_use_count"] == 0
     assert procedure["raw_supporting_examples"] == []
+    assert procedure["parameter_bindings"] == []
     assert procedure["source_episode_ids"] == []
 
     reopened = Store(path)
@@ -149,3 +150,8 @@ def test_v1_procedure_schema_migrates_with_evidence_defaults(tmp_path):
            WHERE type='table' AND name='procedure_feedback'"""
     ).fetchone()
     assert feedback_table is not None
+    receipt_table = reopened._conn().execute(
+        """SELECT name FROM sqlite_master
+           WHERE type='table' AND name='procedure_receipts'"""
+    ).fetchone()
+    assert receipt_table is not None

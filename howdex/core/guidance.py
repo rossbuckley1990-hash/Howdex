@@ -226,15 +226,26 @@ def render_procedure_guidance(
         )
         for step_index, step in enumerate(suggestion.steps, start=1):
             action = str(
-                step.get("canonical_name")
+                step.get("parameterized_action")
+                or step.get("canonical_name")
                 or step.get("action")
                 or "unknown_action"
             )
             details = [
-                f"{key}={step[key]}"
-                for key in ("intent", "target", "side_effect_class")
-                if step.get(key) not in (None, "")
+                (
+                    f"target="
+                    f"{step.get('parameterized_target') or step.get('target')}"
+                )
+                if step.get("parameterized_target") or step.get("target")
+                else "",
+                f"intent={step['intent']}" if step.get("intent") else "",
+                (
+                    f"side_effect_class={step['side_effect_class']}"
+                    if step.get("side_effect_class")
+                    else ""
+                ),
             ]
+            details = [detail for detail in details if detail]
             suffix = f" ({'; '.join(details)})" if details else ""
             blocks.append(f"{step_index}. {action}{suffix}")
         blocks.extend(

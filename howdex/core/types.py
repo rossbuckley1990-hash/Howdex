@@ -269,6 +269,7 @@ class Procedure:
     suggestion_count: int = 0
     unverified_use_count: int = 0
     raw_supporting_examples: list[dict[str, Any]] = field(default_factory=list)
+    parameter_bindings: list[dict[str, Any]] = field(default_factory=list)
     source_episode_ids: list[str] = field(default_factory=list)
     receipts: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
@@ -305,6 +306,7 @@ class Procedure:
                 "suggestion_count": self.suggestion_count,
                 "unverified_use_count": self.unverified_use_count,
                 "raw_supporting_examples": self.raw_supporting_examples,
+                "parameter_bindings": self.parameter_bindings,
                 "source_episode_ids": self.source_episode_ids,
                 "verification_receipts": self.receipts,
                 "use_count": self.use_count,
