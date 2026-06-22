@@ -36,7 +36,18 @@ def segment_episode(
             reason = "explicit_task_boundary"
         elif current and _idle_gap(current[-1], step) > idle_gap_s:
             reason = "idle_gap"
-        elif len(current) >= 2 and _major_target_change(current[-1], step):
+        # Do not split short, coherent workflows merely because the target
+        # object changes. Real business procedures naturally cross objects:
+        # order -> eligibility -> payment -> email, flight -> hotel -> email,
+        # inventory -> shipment -> customer notification.
+        #
+        # Target-change segmentation is only safe once a segment has grown
+        # long enough that splitting improves retrieval rather than shearing
+        # off the consequential action from a normal multi-object workflow.
+        elif (
+            len(current) >= min(max_steps, 8)
+            and _major_target_change(current[-1], step)
+        ):
             reason = "major_target_change"
         elif current and len(current) >= max_steps:
             reason = "max_step_count"
