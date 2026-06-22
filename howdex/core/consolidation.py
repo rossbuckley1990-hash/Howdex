@@ -534,6 +534,84 @@ def _example_bindings(
     ]
 
 
+
+
+def _episode_context(episode: Any) -> dict[str, str]:
+    """Infer deterministic context facts from an episode.
+
+    Conservative but robust:
+    - structured action args containing env_type
+    - stringified action args containing env_type
+    - observations from `echo $ENV_TYPE`, e.g. LOCAL / PROD
+    - nested raw examples / stored episode dicts
+    """
+    context: dict[str, str] = {}
+    seen: set[int] = set()
+
+    def visit(value: Any) -> None:
+        if value is None:
+            return
+
+        value_id = id(value)
+        if value_id in seen:
+            return
+        seen.add(value_id)
+
+        if isinstance(value, str):
+            upper = value.upper()
+
+            # Exact shell-observation style.
+            if upper.strip() in {"LOCAL", "PROD"}:
+                context["env_type"] = upper.strip()
+                return
+
+            # Structured/stringified action style.
+            if "ENV_TYPE" in upper or "ENV_TYPE" in value or "env_type" in value:
+                if "PROD" in upper:
+                    context["env_type"] = "PROD"
+                elif "LOCAL" in upper:
+                    context["env_type"] = "LOCAL"
+            return
+
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                key_text = str(key).lower()
+
+                if key_text == "env_type":
+                    nested_text = str(nested).upper()
+                    if nested_text in {"LOCAL", "PROD"}:
+                        context["env_type"] = nested_text
+
+                visit(nested)
+            return
+
+        if isinstance(value, (list, tuple, set)):
+            for item in value:
+                visit(item)
+            return
+
+        attrs = getattr(value, "__dict__", None)
+        if isinstance(attrs, dict):
+            for key, nested in attrs.items():
+                if str(key).startswith("_"):
+                    continue
+                visit(nested)
+
+    visit(episode)
+    return context
+
+def _context_signature(context: dict[str, str]) -> str:
+    if not context:
+        return "default"
+    return "|".join(f"{key}={context[key]}" for key in sorted(context))
+
+
+def _context_preconditions(context_signature: str) -> list[str]:
+    if not context_signature or context_signature == "default":
+        return []
+    return [part for part in context_signature.split("|") if part]
+
+
 def _preconditions(
     canonical_names: list[str],
     failure_traces: list[_EpisodeTrace],
@@ -608,17 +686,18 @@ def consolidate(
         if _get(episode, "is_segment", False)
         or str(_get(episode, "session_id", "")) not in segmented_parent_ids
     ]
-    by_task: dict[str, list[Any]] = {}
+    by_task_context: dict[tuple[str, str], list[Any]] = {}
     for episode in episodes:
         task = _normalize_task(_get(episode, "task", "") or "")
         if task:
-            by_task.setdefault(task, []).append(episode)
+            context_signature = _context_signature(_episode_context(episode))
+            by_task_context.setdefault((task, context_signature), []).append(episode)
 
     procedures: list[Procedure] = []
-    for task in sorted(by_task):
+    for task, context_signature in sorted(by_task_context):
         traces = [
             trace
-            for episode in by_task[task]
+            for episode in by_task_context[(task, context_signature)]
             if (trace := _trace_from_episode(episode)) is not None
         ]
         success_traces = [
@@ -669,7 +748,12 @@ def consolidate(
         failure_traces = [
             trace for trace in support_traces if trace.outcome != "success"
         ]
-        existing = store.get_procedure(task)
+        procedure_task_signature = (
+            task
+            if context_signature == "default"
+            else f"{task} [{context_signature}]"
+        )
+        existing = store.get_procedure(procedure_task_signature)
         feedback_success_count = int(
             _get(existing, "feedback_success_count", 0)
         )
@@ -704,16 +788,21 @@ def consolidate(
         }
         procedure = Procedure(
             id=str(_get(existing, "id") or Procedure().id),
-            task_signature=task,
+            task_signature=procedure_task_signature,
             extraction_method="parameterized_lcs",
             steps=steps,
-            preconditions=_preconditions(
-                [
-                    str(step["canonical_name"])
-                    for step in steps
-                    if step.get("canonical_name")
-                ],
-                failure_traces,
+            preconditions=sorted(
+                set(
+                    _preconditions(
+                        [
+                            str(step["canonical_name"])
+                            for step in steps
+                            if step.get("canonical_name")
+                        ],
+                        failure_traces,
+                    )
+                    + _context_preconditions(context_signature)
+                )
             ),
             expected_outcome="success",
             success_rate=success_rate,
