@@ -261,7 +261,13 @@ class Procedure:
     sample_count: int = 0
     support_count: int = 0
     success_count: int = 0
+    failure_count: int = 0
     confidence: float = 0.0
+    base_confidence: float = 0.0
+    feedback_success_count: int = 0
+    feedback_failure_count: int = 0
+    suggestion_count: int = 0
+    unverified_use_count: int = 0
     raw_supporting_examples: list[dict[str, Any]] = field(default_factory=list)
     source_episode_ids: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
@@ -290,9 +296,17 @@ class Procedure:
                 "sample_count": self.sample_count,
                 "support_count": self.support_count,
                 "success_count": self.success_count,
+                "failure_count": self.failure_count,
                 "confidence": self.confidence,
+                "base_confidence": self.base_confidence,
+                "feedback_success_count": self.feedback_success_count,
+                "feedback_failure_count": self.feedback_failure_count,
+                "suggestion_count": self.suggestion_count,
+                "unverified_use_count": self.unverified_use_count,
                 "raw_supporting_examples": self.raw_supporting_examples,
                 "source_episode_ids": self.source_episode_ids,
+                "use_count": self.use_count,
+                "last_used_at": self.last_used_at,
             },
             source="system",
             importance=max(0.7, self.success_rate, self.confidence),

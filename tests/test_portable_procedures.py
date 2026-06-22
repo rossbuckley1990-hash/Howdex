@@ -75,13 +75,19 @@ def test_procedure_export_creates_json_files_and_is_safe_to_repeat(tmp_path):
     assert document["success_evidence"]["sample_count"] == 3
     assert document["success_evidence"]["support_count"] == 3
     assert document["success_evidence"]["success_count"] == 3
+    assert document["success_evidence"]["failure_count"] == 0
     assert document["success_evidence"]["confidence"] >= 0.6
+    assert document["success_evidence"]["base_confidence"] >= 0.6
+    assert document["success_evidence"]["feedback_success_count"] == 0
+    assert document["success_evidence"]["feedback_failure_count"] == 0
     assert len(document["procedure"]["raw_supporting_examples"]) == 3
     assert len(document["success_evidence"]["source_episode_ids"]) == 3
     assert document["source"]["system"] == "howdex"
     assert document["source"]["node_id"]
     assert document["timestamps"]["created_at"]
     assert "updated_at" in document["timestamps"]
+    assert document["usage"]["suggestion_count"] == 0
+    assert document["usage"]["unverified_use_count"] == 0
 
 
 def test_procedure_import_restores_without_duplicates(tmp_path):
@@ -171,10 +177,16 @@ def test_v1_portable_procedure_remains_importable(tmp_path):
     for field in (
         "support_count",
         "success_count",
+        "failure_count",
         "confidence",
+        "base_confidence",
+        "feedback_success_count",
+        "feedback_failure_count",
         "source_episode_ids",
     ):
         document["success_evidence"].pop(field, None)
+    document["usage"].pop("suggestion_count", None)
+    document["usage"].pop("unverified_use_count", None)
     procedure_file.write_text(json.dumps(document))
 
     imported = _run(
@@ -196,7 +208,11 @@ def test_v1_portable_procedure_remains_importable(tmp_path):
         procedure = restored.get_procedure("deploy api")
         assert procedure is not None
         assert procedure.confidence == procedure.success_rate
+        assert procedure.base_confidence == procedure.confidence
         assert procedure.support_count == procedure.sample_count
+        assert procedure.failure_count == (
+            procedure.support_count - procedure.success_count
+        )
     finally:
         restored.close()
 

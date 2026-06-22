@@ -19,8 +19,12 @@ from typing import Any, Iterator, Optional
 
 from howdex.core.types import Memory, MemoryLayer, MemoryType
 from howdex.core.errors import StoreError
+from howdex.core.feedback import (
+    procedure_feedback_confidence,
+    procedure_success_rate,
+)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 SCHEMA = """
@@ -87,13 +91,33 @@ CREATE TABLE IF NOT EXISTS procedures (
     sample_count     INTEGER NOT NULL DEFAULT 0,
     support_count    INTEGER NOT NULL DEFAULT 0,
     success_count    INTEGER NOT NULL DEFAULT 0,
+    failure_count    INTEGER NOT NULL DEFAULT 0,
     confidence       REAL NOT NULL DEFAULT 0,
+    base_confidence  REAL NOT NULL DEFAULT 0,
+    feedback_success_count INTEGER NOT NULL DEFAULT 0,
+    feedback_failure_count INTEGER NOT NULL DEFAULT 0,
+    suggestion_count INTEGER NOT NULL DEFAULT 0,
+    unverified_use_count INTEGER NOT NULL DEFAULT 0,
     raw_examples     TEXT NOT NULL DEFAULT '[]',
     source_episode_ids TEXT NOT NULL DEFAULT '[]',
     created_at       REAL NOT NULL,
     last_used_at     REAL,
     use_count        INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS procedure_feedback (
+    procedure_id     TEXT NOT NULL,
+    reference_id     TEXT NOT NULL,
+    state            TEXT NOT NULL,
+    outcome          TEXT,
+    suggested_at     REAL,
+    used_at          REAL,
+    observed_at      REAL,
+    PRIMARY KEY (procedure_id, reference_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_procedure_feedback_procedure
+    ON procedure_feedback(procedure_id);
 
 -- CRDT sync log
 CREATE TABLE IF NOT EXISTS sync_log (
@@ -170,7 +194,13 @@ class Store:
         additions = {
             "support_count": "INTEGER NOT NULL DEFAULT 0",
             "success_count": "INTEGER NOT NULL DEFAULT 0",
+            "failure_count": "INTEGER NOT NULL DEFAULT 0",
             "confidence": "REAL NOT NULL DEFAULT 0",
+            "base_confidence": "REAL NOT NULL DEFAULT 0",
+            "feedback_success_count": "INTEGER NOT NULL DEFAULT 0",
+            "feedback_failure_count": "INTEGER NOT NULL DEFAULT 0",
+            "suggestion_count": "INTEGER NOT NULL DEFAULT 0",
+            "unverified_use_count": "INTEGER NOT NULL DEFAULT 0",
             "raw_examples": "TEXT NOT NULL DEFAULT '[]'",
             "source_episode_ids": "TEXT NOT NULL DEFAULT '[]'",
         }
@@ -191,6 +221,22 @@ class Store:
                    confidence=CASE
                      WHEN confidence=0 THEN success_rate
                      ELSE confidence
+                   END,
+                   base_confidence=CASE
+                     WHEN base_confidence=0 THEN
+                       CASE
+                         WHEN confidence=0 THEN success_rate
+                         ELSE confidence
+                       END
+                     ELSE base_confidence
+                   END"""
+        )
+        conn.execute(
+            """UPDATE procedures
+               SET failure_count=CASE
+                     WHEN failure_count=0 AND support_count > success_count
+                       THEN support_count - success_count
+                     ELSE failure_count
                    END"""
         )
 
@@ -404,24 +450,39 @@ class Store:
     # procedures
     # ------------------------------------------------------------------ #
     def put_procedure(self, p: dict[str, Any]) -> None:
+        sample_count = int(p.get("sample_count", 0))
+        support_count = int(p.get("support_count", sample_count))
+        success_count = int(
+            p.get(
+                "success_count",
+                round(p.get("success_rate", 0) * sample_count),
+            )
+        )
+        failure_count = int(p.get("failure_count", 0))
+        if failure_count == 0 and support_count > success_count:
+            failure_count = support_count - success_count
+        confidence = float(p.get("confidence", p.get("success_rate", 0)))
+        base_confidence = float(p.get("base_confidence", 0) or confidence)
         with self.transaction() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO procedures
                    (id, task_signature, steps, preconditions, expected_outcome,
                     success_rate, sample_count, support_count, success_count,
-                    confidence, raw_examples, source_episode_ids, created_at,
-                    last_used_at, use_count)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    failure_count, confidence, base_confidence,
+                    feedback_success_count, feedback_failure_count,
+                    suggestion_count, unverified_use_count, raw_examples,
+                    source_episode_ids, created_at, last_used_at, use_count)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     p["id"], p["task_signature"], json.dumps(p.get("steps", [])),
                     json.dumps(p.get("preconditions", [])), p.get("expected_outcome", ""),
-                    p.get("success_rate", 0), p.get("sample_count", 0),
-                    p.get("support_count", p.get("sample_count", 0)),
-                    p.get(
-                        "success_count",
-                        round(p.get("success_rate", 0) * p.get("sample_count", 0)),
-                    ),
-                    p.get("confidence", p.get("success_rate", 0)),
+                    p.get("success_rate", 0), sample_count,
+                    support_count, success_count, failure_count,
+                    confidence, base_confidence,
+                    p.get("feedback_success_count", 0),
+                    p.get("feedback_failure_count", 0),
+                    p.get("suggestion_count", 0),
+                    p.get("unverified_use_count", 0),
                     json.dumps(p.get("raw_supporting_examples", [])),
                     json.dumps(p.get("source_episode_ids", [])),
                     p.get("created_at", time.time()), p.get("last_used_at"),
@@ -433,26 +494,244 @@ class Store:
         row = self._conn().execute(
             "SELECT * FROM procedures WHERE task_signature=?", (task_signature,)
         ).fetchone()
-        if not row:
-            return None
-        d = dict(row)
-        d["steps"] = json.loads(d["steps"])
-        d["preconditions"] = json.loads(d["preconditions"])
-        d["raw_supporting_examples"] = json.loads(d.pop("raw_examples"))
-        d["source_episode_ids"] = json.loads(d["source_episode_ids"])
-        return d
+        return _row_to_procedure(row) if row else None
+
+    def get_procedure_by_id(self, procedure_id: str) -> Optional[dict[str, Any]]:
+        row = self._conn().execute(
+            "SELECT * FROM procedures WHERE id=?",
+            (procedure_id,),
+        ).fetchone()
+        return _row_to_procedure(row) if row else None
 
     def all_procedures(self) -> list[dict[str, Any]]:
         rows = self._conn().execute("SELECT * FROM procedures").fetchall()
         out = []
         for r in rows:
-            d = dict(r)
-            d["steps"] = json.loads(d["steps"])
-            d["preconditions"] = json.loads(d["preconditions"])
-            d["raw_supporting_examples"] = json.loads(d.pop("raw_examples"))
-            d["source_episode_ids"] = json.loads(d["source_episode_ids"])
-            out.append(d)
+            out.append(_row_to_procedure(r))
         return out
+
+    def mark_procedure_suggested(
+        self,
+        procedure_id: str,
+        reference_id: str,
+        *,
+        now: Optional[float] = None,
+    ) -> bool:
+        """Record one suggestion once without affecting use outcomes."""
+        timestamp = time.time() if now is None else float(now)
+        with self.transaction() as conn:
+            self._require_procedure(conn, procedure_id)
+            existing = conn.execute(
+                """SELECT state FROM procedure_feedback
+                   WHERE procedure_id=? AND reference_id=?""",
+                (procedure_id, reference_id),
+            ).fetchone()
+            if existing is not None:
+                return False
+            conn.execute(
+                """INSERT INTO procedure_feedback(
+                     procedure_id, reference_id, state, suggested_at
+                   ) VALUES (?, ?, 'suggested', ?)""",
+                (procedure_id, reference_id, timestamp),
+            )
+            conn.execute(
+                """UPDATE procedures
+                   SET suggestion_count=suggestion_count+1
+                   WHERE id=?""",
+                (procedure_id,),
+            )
+        return True
+
+    def mark_procedure_used(
+        self,
+        procedure_id: str,
+        reference_id: str,
+        *,
+        now: Optional[float] = None,
+    ) -> bool:
+        """Record an unverified use once."""
+        timestamp = time.time() if now is None else float(now)
+        with self.transaction() as conn:
+            self._require_procedure(conn, procedure_id)
+            existing = conn.execute(
+                """SELECT state FROM procedure_feedback
+                   WHERE procedure_id=? AND reference_id=?""",
+                (procedure_id, reference_id),
+            ).fetchone()
+            if existing is not None and existing["state"] != "suggested":
+                return False
+            if existing is None:
+                conn.execute(
+                    """INSERT INTO procedure_feedback(
+                         procedure_id, reference_id, state, used_at
+                       ) VALUES (?, ?, 'used', ?)""",
+                    (procedure_id, reference_id, timestamp),
+                )
+            else:
+                conn.execute(
+                    """UPDATE procedure_feedback
+                       SET state='used', used_at=?
+                       WHERE procedure_id=? AND reference_id=?""",
+                    (timestamp, procedure_id, reference_id),
+                )
+            conn.execute(
+                """UPDATE procedures
+                   SET use_count=use_count+1,
+                       unverified_use_count=unverified_use_count+1,
+                       last_used_at=?
+                   WHERE id=?""",
+                (timestamp, procedure_id),
+            )
+        return True
+
+    def record_procedure_outcome(
+        self,
+        procedure_id: str,
+        episode_id: str,
+        outcome: str,
+        *,
+        now: Optional[float] = None,
+    ) -> bool:
+        """Record one verified success/failure and update aggregate stats."""
+        normalized_outcome = str(outcome or "").strip().lower()
+        if normalized_outcome not in {"success", "failure"}:
+            raise ValueError("procedure outcome must be 'success' or 'failure'")
+        timestamp = time.time() if now is None else float(now)
+
+        with self.transaction() as conn:
+            procedure_row = self._require_procedure(conn, procedure_id)
+            feedback_row = conn.execute(
+                """SELECT state, outcome FROM procedure_feedback
+                   WHERE procedure_id=? AND reference_id=?""",
+                (procedure_id, episode_id),
+            ).fetchone()
+            if feedback_row is not None and feedback_row["outcome"] is not None:
+                if feedback_row["outcome"] != normalized_outcome:
+                    raise StoreError(
+                        "procedure outcome already recorded with a different value"
+                    )
+                return False
+
+            was_pending = (
+                feedback_row is not None and feedback_row["state"] == "used"
+            )
+            was_used = feedback_row is not None and feedback_row["state"] in {
+                "used",
+                "success",
+                "failure",
+            }
+            if feedback_row is None:
+                conn.execute(
+                    """INSERT INTO procedure_feedback(
+                         procedure_id, reference_id, state, outcome,
+                         used_at, observed_at
+                       ) VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        procedure_id,
+                        episode_id,
+                        normalized_outcome,
+                        normalized_outcome,
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """UPDATE procedure_feedback
+                       SET state=?, outcome=?, used_at=COALESCE(used_at, ?),
+                           observed_at=?
+                       WHERE procedure_id=? AND reference_id=?""",
+                    (
+                        normalized_outcome,
+                        normalized_outcome,
+                        timestamp,
+                        timestamp,
+                        procedure_id,
+                        episode_id,
+                    ),
+                )
+
+            success_count = int(procedure_row["success_count"])
+            failure_count = int(procedure_row["failure_count"])
+            feedback_success_count = int(
+                procedure_row["feedback_success_count"]
+            )
+            feedback_failure_count = int(
+                procedure_row["feedback_failure_count"]
+            )
+            if normalized_outcome == "success":
+                success_count += 1
+                feedback_success_count += 1
+            else:
+                failure_count += 1
+                feedback_failure_count += 1
+            support_count = success_count + failure_count
+            success_rate = procedure_success_rate(
+                success_count,
+                support_count,
+            )
+            confidence = procedure_feedback_confidence(
+                base_confidence=float(procedure_row["base_confidence"]),
+                success_count=success_count,
+                support_count=support_count,
+            )
+            source_episode_ids = _json_list(
+                procedure_row["source_episode_ids"]
+            )
+            source_episode_ids = sorted(
+                {*map(str, source_episode_ids), str(episode_id)}
+            )
+            conn.execute(
+                """UPDATE procedures
+                   SET support_count=?, success_count=?, failure_count=?,
+                       feedback_success_count=?, feedback_failure_count=?,
+                       success_rate=?, confidence=?,
+                       source_episode_ids=?,
+                       use_count=use_count+?,
+                       unverified_use_count=MAX(
+                         0, unverified_use_count-?
+                       ),
+                       last_used_at=?
+                   WHERE id=?""",
+                (
+                    support_count,
+                    success_count,
+                    failure_count,
+                    feedback_success_count,
+                    feedback_failure_count,
+                    success_rate,
+                    confidence,
+                    json.dumps(source_episode_ids),
+                    0 if was_used else 1,
+                    1 if was_pending else 0,
+                    timestamp,
+                    procedure_id,
+                ),
+            )
+        return True
+
+    def pending_procedure_uses(self, reference_id: str) -> list[str]:
+        """Return procedures awaiting an outcome for one session reference."""
+        rows = self._conn().execute(
+            """SELECT procedure_id FROM procedure_feedback
+               WHERE reference_id=? AND state='used'
+               ORDER BY procedure_id""",
+            (reference_id,),
+        ).fetchall()
+        return [str(row["procedure_id"]) for row in rows]
+
+    @staticmethod
+    def _require_procedure(
+        conn: sqlite3.Connection,
+        procedure_id: str,
+    ) -> sqlite3.Row:
+        row = conn.execute(
+            "SELECT * FROM procedures WHERE id=?",
+            (procedure_id,),
+        ).fetchone()
+        if row is None:
+            raise StoreError(f"no procedure with id={procedure_id}")
+        return row
 
     # ------------------------------------------------------------------ #
     # sync log
@@ -567,3 +846,28 @@ def _row_to_memory(row: sqlite3.Row) -> Memory:
         ttl=row["ttl"],
         vector_clock=row["vector_clock"],
     )
+
+
+def _row_to_procedure(row: sqlite3.Row) -> dict[str, Any]:
+    procedure = dict(row)
+    procedure["steps"] = _json_list(procedure["steps"])
+    procedure["preconditions"] = _json_list(procedure["preconditions"])
+    procedure["raw_supporting_examples"] = _json_list(
+        procedure.pop("raw_examples")
+    )
+    procedure["source_episode_ids"] = _json_list(
+        procedure["source_episode_ids"]
+    )
+    return procedure
+
+
+def _json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str):
+        return []
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return decoded if isinstance(decoded, list) else []

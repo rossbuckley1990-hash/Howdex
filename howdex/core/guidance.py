@@ -365,6 +365,8 @@ def _domain_overlap(
 
 
 def _proof_status(procedure: Procedure) -> str:
+    if procedure.unverified_use_count > 0:
+        return "pending_unverified_use"
     if procedure.source_episode_ids and procedure.support_count > 0:
         return "observed_episode_support_not_independently_verified"
     return "unverified"

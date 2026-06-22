@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from howdex.core.feedback import procedure_feedback_confidence
 from howdex.core.types import Procedure
 from howdex.storage import Store
 
@@ -169,7 +170,11 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
             "sample_count": procedure.sample_count,
             "support_count": procedure.support_count,
             "success_count": procedure.success_count,
+            "failure_count": procedure.failure_count,
             "confidence": procedure.confidence,
+            "base_confidence": procedure.base_confidence,
+            "feedback_success_count": procedure.feedback_success_count,
+            "feedback_failure_count": procedure.feedback_failure_count,
             "source_episode_ids": procedure.source_episode_ids,
         },
         "source": {
@@ -185,6 +190,8 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
         },
         "usage": {
             "use_count": procedure.use_count,
+            "suggestion_count": procedure.suggestion_count,
+            "unverified_use_count": procedure.unverified_use_count,
         },
     }
 
@@ -223,14 +230,33 @@ def procedure_from_document(
         evidence.get("success_count", round(success_rate * support_count))
     )
     confidence = float(evidence.get("confidence", success_rate))
+    base_confidence = float(
+        evidence.get("base_confidence", confidence)
+    )
+    failure_count = int(
+        evidence.get(
+            "failure_count",
+            max(0, support_count - success_count),
+        )
+    )
+    feedback_success_count = int(
+        evidence.get("feedback_success_count", 0)
+    )
+    feedback_failure_count = int(
+        evidence.get("feedback_failure_count", 0)
+    )
     if not 0.0 <= success_rate <= 1.0:
         raise ValueError(f"{label} success_rate must be between 0 and 1")
     if sample_count < 0:
         raise ValueError(f"{label} sample_count must be non-negative")
-    if support_count < 0 or success_count < 0:
+    if support_count < 0 or success_count < 0 or failure_count < 0:
         raise ValueError(f"{label} support counts must be non-negative")
+    if feedback_success_count < 0 or feedback_failure_count < 0:
+        raise ValueError(f"{label} feedback counts must be non-negative")
     if not 0.0 <= confidence <= 1.0:
         raise ValueError(f"{label} confidence must be between 0 and 1")
+    if not 0.0 <= base_confidence <= 1.0:
+        raise ValueError(f"{label} base_confidence must be between 0 and 1")
 
     return Procedure(
         id=str(payload.get("id") or "").strip() or Procedure().id,
@@ -242,7 +268,13 @@ def procedure_from_document(
         sample_count=sample_count,
         support_count=support_count,
         success_count=success_count,
+        failure_count=failure_count,
         confidence=confidence,
+        base_confidence=base_confidence,
+        feedback_success_count=feedback_success_count,
+        feedback_failure_count=feedback_failure_count,
+        suggestion_count=int(usage.get("suggestion_count", 0)),
+        unverified_use_count=int(usage.get("unverified_use_count", 0)),
         raw_supporting_examples=_list_value(
             payload.get("raw_supporting_examples"),
             "raw_supporting_examples",
@@ -287,19 +319,75 @@ def _merge_with_existing(
         for value in (existing_proc.last_used_at, incoming.last_used_at)
         if value is not None
     ]
+    feedback_success_count = max(
+        existing_proc.feedback_success_count,
+        incoming.feedback_success_count,
+    )
+    feedback_failure_count = max(
+        existing_proc.feedback_failure_count,
+        incoming.feedback_failure_count,
+    )
+    success_count = max(
+        existing_proc.success_count,
+        incoming.success_count,
+    )
+    failure_count = max(
+        existing_proc.failure_count,
+        incoming.failure_count,
+    )
+    support_count = max(
+        existing_proc.support_count,
+        incoming.support_count,
+        success_count + failure_count,
+    )
+    source_episode_ids = sorted(
+        {
+            *map(str, existing_proc.source_episode_ids),
+            *map(str, incoming.source_episode_ids),
+        }
+    )
+    base_confidence = (
+        incoming.base_confidence
+        or existing_proc.base_confidence
+        or incoming.confidence
+    )
+    if feedback_success_count or feedback_failure_count:
+        confidence = procedure_feedback_confidence(
+            base_confidence=base_confidence,
+            success_count=success_count,
+            support_count=support_count,
+        )
+    else:
+        confidence = incoming.confidence
     return Procedure(
         id=existing_proc.id,
         task_signature=existing_proc.task_signature,
         steps=incoming.steps,
         preconditions=incoming.preconditions,
         expected_outcome=incoming.expected_outcome,
-        success_rate=incoming.success_rate,
+        success_rate=(
+            round(success_count / support_count, 4)
+            if support_count
+            else incoming.success_rate
+        ),
         sample_count=incoming.sample_count,
-        support_count=incoming.support_count,
-        success_count=incoming.success_count,
-        confidence=incoming.confidence,
+        support_count=support_count,
+        success_count=success_count,
+        failure_count=failure_count,
+        confidence=confidence,
+        base_confidence=base_confidence,
+        feedback_success_count=feedback_success_count,
+        feedback_failure_count=feedback_failure_count,
+        suggestion_count=max(
+            existing_proc.suggestion_count,
+            incoming.suggestion_count,
+        ),
+        unverified_use_count=max(
+            existing_proc.unverified_use_count,
+            incoming.unverified_use_count,
+        ),
         raw_supporting_examples=incoming.raw_supporting_examples,
-        source_episode_ids=incoming.source_episode_ids,
+        source_episode_ids=source_episode_ids,
         created_at=created_at,
         last_used_at=max(last_used_candidates) if last_used_candidates else None,
         use_count=max(existing_proc.use_count, incoming.use_count),

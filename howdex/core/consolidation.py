@@ -13,6 +13,10 @@ from howdex.core.actions import (
     canonical_sequence_similarity,
     canonicalize_steps,
 )
+from howdex.core.feedback import (
+    procedure_feedback_confidence,
+    procedure_success_rate,
+)
 from howdex.core.tool_calls import redact_secrets
 from howdex.core.types import Procedure
 from howdex.storage import Store
@@ -412,38 +416,77 @@ def consolidate(
 
         representative = _medoid(cluster)
         support_traces = _matching_traces(representative, traces)
-        support_count = len(support_traces)
-        success_count = sum(
+        learned_support_count = len(support_traces)
+        learned_success_count = sum(
             trace.outcome == "success" for trace in support_traces
         )
-        success_rate = success_count / support_count if support_count else 0.0
-        confidence = _procedure_confidence(
+        base_confidence = _procedure_confidence(
             cluster,
             support_traces,
             steps,
             min_samples=min_samples,
         )
-        if confidence < MIN_PROCEDURE_CONFIDENCE:
+        if base_confidence < MIN_PROCEDURE_CONFIDENCE:
             continue
 
         failure_traces = [
             trace for trace in support_traces if trace.outcome != "success"
         ]
         existing = store.get_procedure(task)
+        feedback_success_count = int(
+            _get(existing, "feedback_success_count", 0)
+        )
+        feedback_failure_count = int(
+            _get(existing, "feedback_failure_count", 0)
+        )
+        support_count = (
+            learned_support_count
+            + feedback_success_count
+            + feedback_failure_count
+        )
+        success_count = learned_success_count + feedback_success_count
+        failure_count = support_count - success_count
+        success_rate = procedure_success_rate(
+            success_count,
+            support_count,
+        )
+        if feedback_success_count or feedback_failure_count:
+            confidence = procedure_feedback_confidence(
+                base_confidence=base_confidence,
+                success_count=success_count,
+                support_count=support_count,
+            )
+        else:
+            confidence = base_confidence
+        learned_episode_ids = {
+            trace.episode_id for trace in support_traces
+        }
+        existing_episode_ids = {
+            str(episode_id)
+            for episode_id in _get(existing, "source_episode_ids", []) or []
+        }
         procedure = Procedure(
             id=str(_get(existing, "id") or Procedure().id),
             task_signature=task,
             steps=steps,
             preconditions=_preconditions(canonical_names, failure_traces),
             expected_outcome="success",
-            success_rate=round(success_rate, 4),
-            sample_count=support_count,
+            success_rate=success_rate,
+            sample_count=learned_support_count,
             support_count=support_count,
             success_count=success_count,
+            failure_count=failure_count,
             confidence=confidence,
+            base_confidence=base_confidence,
+            feedback_success_count=feedback_success_count,
+            feedback_failure_count=feedback_failure_count,
+            suggestion_count=int(_get(existing, "suggestion_count", 0)),
+            unverified_use_count=int(
+                _get(existing, "unverified_use_count", 0)
+            ),
             raw_supporting_examples=_raw_examples(support_traces),
             source_episode_ids=sorted(
-                trace.episode_id for trace in support_traces
+                learned_episode_ids | existing_episode_ids
             ),
             created_at=float(_get(existing, "created_at", time.time())),
             last_used_at=_get(existing, "last_used_at"),

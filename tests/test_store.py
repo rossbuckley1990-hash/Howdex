@@ -132,6 +132,20 @@ def test_v1_procedure_schema_migrates_with_evidence_defaults(tmp_path):
     assert procedure is not None
     assert procedure["support_count"] == 4
     assert procedure["success_count"] == 3
+    assert procedure["failure_count"] == 1
     assert procedure["confidence"] == 0.75
+    assert procedure["base_confidence"] == 0.75
+    assert procedure["feedback_success_count"] == 0
+    assert procedure["feedback_failure_count"] == 0
+    assert procedure["suggestion_count"] == 0
+    assert procedure["unverified_use_count"] == 0
     assert procedure["raw_supporting_examples"] == []
     assert procedure["source_episode_ids"] == []
+
+    reopened = Store(path)
+    assert reopened.get_procedure("repair tests") == procedure
+    feedback_table = reopened._conn().execute(
+        """SELECT name FROM sqlite_master
+           WHERE type='table' AND name='procedure_feedback'"""
+    ).fetchone()
+    assert feedback_table is not None

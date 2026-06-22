@@ -18,6 +18,10 @@ from howdex.core.errors import (
     StoreError,
     SyncError,
 )
+from howdex.core.feedback import (
+    procedure_feedback_confidence,
+    procedure_success_rate,
+)
 from howdex.core.guidance import (
     ProcedureSuggestion,
     render_procedure_guidance,
@@ -63,4 +67,5 @@ __all__ = [
     "DEFAULT_MAX_SEGMENT_STEPS", "DEFAULT_IDLE_GAP_S", "segment_episode",
     "SemanticExtractor", "SemanticRecord", "derive_tool_semantics",
     "ProcedureSuggestion", "suggest_procedures", "render_procedure_guidance",
+    "procedure_feedback_confidence", "procedure_success_rate",
 ]

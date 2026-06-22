@@ -18,6 +18,8 @@
   system/action/target entity relations with stable IDs
 - Deterministic pre-action procedure suggestions and bounded prompt guidance
   with match explanations and source episode evidence
+- Idempotent procedure suggestion/use/outcome feedback with automatic session
+  resolution and deterministic success/confidence updates
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results
