@@ -1,5 +1,8 @@
 """Structured tool-call canonicalisation tests."""
 
+import json
+import sqlite3
+
 from howdex import Howdex
 from howdex.core.actions import canonicalize_action, canonicalize_steps
 from howdex.core.tool_calls import canonicalize_tool_call
@@ -199,6 +202,28 @@ def test_legacy_prose_fallback_still_works():
     assert from_steps[0].matched_by == "legacy_prose"
 
 
+def test_stored_canonical_structured_action_is_preferred():
+    action = canonicalize_steps(
+        [
+            {
+                "action": "ambiguous legacy prose",
+                "tool_name": "custom.execute",
+                "tool_args": {"id": "job-7"},
+                "canonical_action": "custom.stable_operation",
+                "target": "id=job-7",
+                "intent": "execute",
+                "canonical_confidence": 0.94,
+            }
+        ]
+    )[0]
+
+    assert action.canonical_name == "custom.stable_operation"
+    assert action.target == "id=job-7"
+    assert action.intent == "execute"
+    assert action.confidence == 0.94
+    assert action.matched_by == "structured_tool_call"
+
+
 def test_structured_tool_calls_flow_into_learned_procedure(tmp_path):
     memory = Howdex(path=tmp_path / "structured.db", embedder="hashing")
     for _ in range(2):
@@ -225,6 +250,139 @@ def test_structured_tool_calls_flow_into_learned_procedure(tmp_path):
     raw_call = procedure.raw_supporting_examples[0]["steps"][0]
     assert raw_call["arguments"] == {"path": "pyproject.toml"}
     assert raw_call["metadata"]["source"] == "mcp"
+
+
+def test_structured_tool_call_fields_are_stored_in_episode(tmp_path):
+    memory = Howdex(path=tmp_path / "structured-step.db", embedder="hashing")
+    with memory.session("read configuration") as session:
+        session.tool_call(
+            "filesystem.read_file",
+            {"path": "settings.json", "api_key": "do-not-store"},
+            observation="configuration loaded",
+            metadata={"source": "mcp", "token": "metadata-secret"},
+            outcome="success",
+            error=None,
+            duration_s=0.125,
+        )
+
+    row = memory.store.query_episodes()[0]
+    step = json.loads(row["steps"])[0]
+
+    assert step["tool_name"] == "filesystem.read_file"
+    assert step["tool_args"] == {
+        "api_key": "[REDACTED]",
+        "path": "settings.json",
+    }
+    assert step["tool_metadata"] == {
+        "source": "mcp",
+        "token": "[REDACTED]",
+    }
+    assert step["canonical_action"] == "filesystem.read_file"
+    assert step["target"] == "path=settings.json"
+    assert step["intent"] == "read"
+    assert step["observation"] == "configuration loaded"
+    assert step["outcome"] == "success"
+    assert step["error"] is None
+    assert step["duration_s"] == 0.125
+    assert isinstance(step["ts"], float)
+    assert step["arguments"] == step["tool_args"]
+    assert step["metadata"] == step["tool_metadata"]
+    assert "do-not-store" not in row["steps"]
+    assert "metadata-secret" not in row["steps"]
+
+
+def test_log_step_structured_fields_use_the_canonical_tool_path(tmp_path):
+    memory = Howdex(path=tmp_path / "log-step.db", embedder="hashing")
+    memory.start_session("read configuration")
+    memory.log_step(
+        "framework tool invocation",
+        "configuration loaded",
+        tool_name="filesystem.read_file",
+        tool_args={"path": "settings.json"},
+        tool_metadata={"source": "langchain"},
+    )
+    episode = memory.end_session("success")
+
+    assert episode.steps[0]["action"] == "filesystem.read_file"
+    assert episode.steps[0]["canonical_action"] == "filesystem.read_file"
+    assert episode.steps[0]["target"] == "path=settings.json"
+    assert episode.steps[0]["intent"] == "read"
+    assert episode.steps[0]["tool_metadata"]["source"] == "langchain"
+
+
+def test_prose_only_sessions_still_learn_procedures(tmp_path):
+    memory = Howdex(path=tmp_path / "prose.db", embedder="hashing")
+    for _ in range(2):
+        with memory.session("repair tests") as session:
+            session.step("read package.json", "test script missing")
+            session.step("patch package.json test script", "script restored")
+            session.step("run npm test", "tests passed")
+
+    procedure = memory.learn(min_samples=2)[0]
+
+    assert [step["action"] for step in procedure.steps] == [
+        "inspect_package_manifest",
+        "repair_test_command",
+        "run_test_suite",
+    ]
+
+
+def test_legacy_episode_database_remains_readable_and_learnable(tmp_path):
+    path = tmp_path / "legacy-episodes.db"
+    steps = json.dumps(
+        [
+            {"action": "read package.json", "observation": "script missing"},
+            {
+                "action": "patch package.json test script",
+                "observation": "fixed",
+            },
+            {"action": "run npm test", "observation": "passed"},
+        ]
+    )
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE episodes (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            task TEXT NOT NULL,
+            steps TEXT NOT NULL DEFAULT '[]',
+            outcome TEXT,
+            error TEXT,
+            duration_s REAL NOT NULL DEFAULT 0,
+            started_at REAL NOT NULL,
+            finished_at REAL
+        );
+        """
+    )
+    connection.executemany(
+        """
+        INSERT INTO episodes(
+            id, session_id, agent_id, task, steps, outcome, error,
+            duration_s, started_at, finished_at
+        ) VALUES (?, ?, 'legacy-agent', 'repair tests', ?, 'success', NULL, 1, ?, ?)
+        """,
+        [
+            ("legacy-1", "legacy-1", steps, 1.0, 2.0),
+            ("legacy-2", "legacy-2", steps, 3.0, 4.0),
+        ],
+    )
+    connection.commit()
+    connection.close()
+
+    memory = Howdex(path=path, embedder="hashing")
+    stored_steps = json.loads(memory.store.query_episodes()[0]["steps"])
+    reopened = Howdex(path=path, embedder="hashing")
+    procedure = reopened.learn(min_samples=2)[0]
+
+    assert "tool_name" not in stored_steps[0]
+    assert len(reopened.store.query_episodes()) == 2
+    assert [step["action"] for step in procedure.steps] == [
+        "inspect_package_manifest",
+        "repair_test_command",
+        "run_test_suite",
+    ]
 
 
 def test_structured_secrets_are_redacted_from_procedure_evidence(tmp_path):

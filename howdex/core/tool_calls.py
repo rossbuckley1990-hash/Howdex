@@ -286,6 +286,61 @@ def tool_call_from_step(step: Any) -> CanonicalAction | None:
     if not isinstance(step, Mapping):
         return None
 
+    stored_canonical_name = step.get("canonical_action")
+    stored_tool_name = step.get("tool_name")
+    if stored_canonical_name and stored_tool_name:
+        arguments = _arguments_dict(
+            step.get("tool_args", step.get("arguments"))
+        ) or {}
+        evidence_value = step.get("canonical_evidence")
+        evidence = (
+            dict(evidence_value)
+            if isinstance(evidence_value, Mapping)
+            else {}
+        )
+        observation = step.get("observation")
+        if observation:
+            evidence.setdefault("observation", str(observation))
+        provenance_value = step.get("provenance")
+        provenance = (
+            dict(provenance_value)
+            if isinstance(provenance_value, Mapping)
+            else {}
+        )
+        if not provenance:
+            metadata = _step_metadata(step)
+            provenance = {
+                "source": metadata.get("source")
+                or metadata.get("framework")
+                or metadata.get("provider")
+                or "structured_tool_call",
+                "call_id": metadata.get("call_id")
+                or metadata.get("tool_call_id")
+                or metadata.get("id"),
+                "schema_name": metadata.get("schema_name"),
+            }
+        try:
+            confidence = float(step.get("canonical_confidence", 0.9))
+        except (TypeError, ValueError):
+            confidence = 0.9
+        return CanonicalAction(
+            raw_action=str(step.get("action") or stored_tool_name),
+            canonical_name=normalize_tool_name(str(stored_canonical_name))
+            or "unknown_tool",
+            intent=str(step.get("intent") or "unknown"),
+            target=(
+                str(step["target"])
+                if step.get("target") is not None
+                else None
+            ),
+            confidence=max(0.0, min(1.0, confidence)),
+            evidence=evidence,
+            raw_name=str(stored_tool_name),
+            raw_args=arguments,
+            provenance=provenance,
+            matched_by="structured_tool_call",
+        )
+
     function = step.get("function")
     if isinstance(function, Mapping):
         name = function.get("name")
@@ -358,7 +413,12 @@ def _step_metadata(
     *,
     framework_default: str | None = None,
 ) -> dict[str, Any]:
-    metadata = dict(step.get("metadata") or {})
+    metadata_value = step.get("tool_metadata", step.get("metadata"))
+    metadata = (
+        dict(metadata_value)
+        if isinstance(metadata_value, Mapping)
+        else {}
+    )
     for key in (
         "source",
         "framework",
