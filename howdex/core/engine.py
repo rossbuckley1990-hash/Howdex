@@ -513,6 +513,7 @@ class Howdex:
                 "canonical_action": canonical.canonical_name,
                 "target": canonical.target,
                 "intent": canonical.intent,
+                "side_effect_class": canonical.side_effect_class,
                 "outcome": extra.get("outcome"),
                 "error": extra.get("error"),
                 "canonical_confidence": canonical.confidence,

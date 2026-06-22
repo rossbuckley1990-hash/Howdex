@@ -8,7 +8,8 @@
 - Domain-portable canonicalisation from structured tool names, typed arguments,
   and framework metadata
 - Stable target projection with canonical argument hashing and secret redaction
-- Open deterministic intent ontology with side-effect classification
+- First-class deterministic intent and side-effect ontologies with inspectable
+  matched rules
 - Near-match grouping using canonical subsequence and Jaccard similarity
 - Procedure confidence, support/success counts, source episode IDs, and raw evidence
 - Conservative procedural retrieval capped at three high-confidence results

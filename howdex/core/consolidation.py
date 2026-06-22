@@ -235,6 +235,7 @@ def _canonical_steps(
                 "action": name,
                 "canonical_name": name,
                 "intent": representative.intent,
+                "side_effect_class": representative.side_effect_class,
                 "target": representative.target,
                 "confidence": round(
                     sum(action.confidence for action in examples) / len(examples),

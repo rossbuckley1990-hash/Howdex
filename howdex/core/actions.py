@@ -6,6 +6,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from howdex.core.classification import infer_side_effect_class, normalize_intent
+
 _SPACE_RE = re.compile(r"\s+")
 _PATH_RE = re.compile(
     r"(?:^|\s)(?P<path>(?:\.{0,2}/)?[\w@.-]+(?:/[\w@.-]+)*\.[a-z0-9]+)(?:\s|$)",
@@ -27,6 +29,7 @@ class CanonicalAction:
     raw_args: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
     matched_by: str = "legacy_prose"
+    side_effect_class: str = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -273,22 +276,38 @@ def _canonical(
     *,
     observation: str,
 ) -> CanonicalAction:
+    normalized_intent = normalize_intent(intent)
+    side_effect_arguments: dict[str, Any] = {}
+    if target and canonical_name in {
+        "inspect_file",
+        "inspect_package_manifest",
+        "repair_file",
+        "repair_test_command",
+    }:
+        side_effect_arguments["path"] = target
+    side_effect_class, side_effect_rule = infer_side_effect_class(
+        canonical_name,
+        normalized_intent,
+        side_effect_arguments,
+    )
     evidence: dict[str, Any] = {
         "rule": rule,
         "normalized_action": _normalize(raw_action),
+        "side_effect_rule": side_effect_rule,
     }
     if observation:
         evidence["observation"] = observation
     return CanonicalAction(
         raw_action=raw_action,
         canonical_name=canonical_name,
-        intent=intent,
+        intent=normalized_intent,
         target=target,
         confidence=confidence,
         evidence=evidence,
         raw_name=raw_action,
         provenance={"source": "legacy_prose"},
         matched_by="legacy_prose",
+        side_effect_class=side_effect_class,
     )
 
 

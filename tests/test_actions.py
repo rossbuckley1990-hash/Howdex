@@ -1,6 +1,7 @@
 """Deterministic canonical action tests."""
 
 from howdex.core.actions import canonicalize_action, canonicalize_steps
+from howdex.core.classification import INTENTS
 
 
 def test_equivalent_actions_share_canonical_name():
@@ -46,3 +47,23 @@ def test_canonicalize_steps_preserves_raw_evidence():
     ]
     assert actions[0].raw_action == "read package.json"
     assert actions[0].evidence["observation"] == "test script found"
+
+
+def test_legacy_actions_use_formal_intents_and_side_effect_classes():
+    inspected = canonicalize_action("read package.json")
+    repaired = canonicalize_action("patch package.json test script")
+    executed = canonicalize_action("run pytest")
+    internal = canonicalize_action("recall memory for this task")
+
+    assert inspected.intent == "read"
+    assert inspected.side_effect_class == "read_only"
+    assert repaired.intent == "update"
+    assert repaired.side_effect_class == "local_write"
+    assert executed.intent == "execute"
+    assert executed.side_effect_class == "unknown"
+    assert internal.intent == "search"
+    assert internal.side_effect_class == "read_only"
+    assert all(
+        action.intent in INTENTS
+        for action in (inspected, repaired, executed, internal)
+    )

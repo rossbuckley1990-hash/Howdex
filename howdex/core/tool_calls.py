@@ -9,23 +9,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from howdex.core.actions import CanonicalAction
-
-INTENTS = {
-    "read",
-    "search",
-    "list",
-    "create",
-    "update",
-    "write",
-    "delete",
-    "execute",
-    "transfer",
-    "notify",
-    "approve",
-    "reject",
-    "authenticate",
-    "unknown",
-}
+from howdex.core.classification import (
+    INTENTS,
+    SIDE_EFFECT_CLASSES,
+    infer_side_effect_class,
+    normalize_intent,
+    side_effecting_value,
+)
 
 _SECRET_KEY_RE = re.compile(
     r"(?:^|_)(?:api_?key|access_?key|secret|password|passwd|token|"
@@ -91,7 +81,15 @@ _INTENT_VERBS = {
     "create": {"create", "add", "new", "provision", "open"},
     "update": {"update", "edit", "patch", "modify", "change", "set"},
     "write": {"write", "save", "put", "upsert", "upload", "store"},
-    "delete": {"delete", "remove", "destroy", "purge", "revoke", "cancel"},
+    "delete": {
+        "delete",
+        "remove",
+        "destroy",
+        "drop",
+        "purge",
+        "revoke",
+        "cancel",
+    },
     "execute": {
         "run",
         "execute",
@@ -112,7 +110,15 @@ _INTENT_VERBS = {
         "withdraw",
         "deposit",
     },
-    "notify": {"notify", "email", "message", "alert", "publish", "announce"},
+    "notify": {
+        "notify",
+        "send",
+        "email",
+        "message",
+        "alert",
+        "publish",
+        "announce",
+    },
     "approve": {"approve", "accept", "confirm", "authorize"},
     "reject": {"reject", "deny", "decline", "disapprove"},
     "authenticate": {
@@ -136,7 +142,11 @@ def canonicalize_tool_call(
     raw_metadata = dict(metadata or {})
     canonical_name = normalize_tool_name(raw_name)
     redacted_args, redacted_paths = redact_secrets(raw_arguments)
-    intent, intent_rule = infer_intent(canonical_name, raw_metadata)
+    intent, intent_rule = infer_intent(
+        canonical_name,
+        raw_metadata,
+        redacted_args,
+    )
     target, target_rule = project_target(redacted_args, raw_metadata)
     source = str(
         raw_metadata.get("source")
@@ -144,7 +154,13 @@ def canonicalize_tool_call(
         or raw_metadata.get("provider")
         or "structured_tool_call"
     )
-    side_effecting = _side_effecting(intent, raw_metadata)
+    side_effect_class, side_effect_rule = infer_side_effect_class(
+        canonical_name,
+        intent,
+        redacted_args,
+        raw_metadata,
+    )
+    side_effecting = side_effecting_value(side_effect_class)
     confidence = _structured_confidence(
         canonical_name=canonical_name,
         intent=intent,
@@ -161,6 +177,7 @@ def canonicalize_tool_call(
         evidence={
             "intent_rule": intent_rule,
             "target_rule": target_rule,
+            "side_effect_rule": side_effect_rule,
             "side_effecting": side_effecting,
             "redacted_argument_paths": redacted_paths,
         },
@@ -174,6 +191,7 @@ def canonicalize_tool_call(
             "schema_name": raw_metadata.get("schema_name"),
         },
         matched_by="structured_tool_call",
+        side_effect_class=side_effect_class,
     )
 
 
@@ -225,9 +243,11 @@ def project_target(
 def infer_intent(
     canonical_name: str,
     metadata: dict[str, Any] | None = None,
+    arguments: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Infer a small open intent ontology from metadata and tool-name verbs."""
     metadata = metadata or {}
+    arguments = arguments or {}
     explicit = str(
         metadata.get("intent")
         or metadata.get("operation")
@@ -236,6 +256,10 @@ def infer_intent(
     ).strip().lower()
     if explicit in INTENTS:
         return explicit, "metadata_intent"
+    if explicit:
+        for intent, verbs in _INTENT_VERBS.items():
+            if explicit in verbs:
+                return intent, f"metadata_verb:{explicit}"
 
     tokens = [
         token
@@ -250,6 +274,22 @@ def infer_intent(
 
     if metadata.get("read_only") is True or metadata.get("side_effecting") is False:
         return "read", "metadata_read_only"
+    annotations = metadata.get("annotations")
+    if isinstance(annotations, Mapping) and (
+        annotations.get("readOnlyHint") is True
+        or annotations.get("read_only_hint") is True
+    ):
+        return "read", "metadata_read_only_annotation"
+    schema_names = _schema_argument_names(metadata)
+    argument_names = {
+        path.rsplit(".", 1)[-1].lower()
+        for path in _flatten_scalars(arguments)
+    }
+    signal_names = schema_names | argument_names
+    if signal_names & {"query", "search", "search_query"}:
+        return "search", "argument_or_schema_query"
+    if signal_names & {"message", "channel", "recipient"}:
+        return "notify", "argument_or_schema_notification"
     return "unknown", "no_intent_rule"
 
 
@@ -323,11 +363,29 @@ def tool_call_from_step(step: Any) -> CanonicalAction | None:
             confidence = float(step.get("canonical_confidence", 0.9))
         except (TypeError, ValueError):
             confidence = 0.9
+        metadata = _step_metadata(step)
+        stored_intent = normalize_intent(str(step.get("intent") or "unknown"))
+        stored_side_effect = str(step.get("side_effect_class") or "")
+        if stored_side_effect in SIDE_EFFECT_CLASSES:
+            side_effect_class = stored_side_effect
+            side_effect_rule = "stored_side_effect_class"
+        else:
+            side_effect_class, side_effect_rule = infer_side_effect_class(
+                str(stored_canonical_name),
+                stored_intent,
+                arguments,
+                metadata,
+            )
+        evidence.setdefault("side_effect_rule", side_effect_rule)
+        evidence.setdefault(
+            "side_effecting",
+            side_effecting_value(side_effect_class),
+        )
         return CanonicalAction(
             raw_action=str(step.get("action") or stored_tool_name),
             canonical_name=normalize_tool_name(str(stored_canonical_name))
             or "unknown_tool",
-            intent=str(step.get("intent") or "unknown"),
+            intent=stored_intent,
             target=(
                 str(step["target"])
                 if step.get("target") is not None
@@ -339,6 +397,7 @@ def tool_call_from_step(step: Any) -> CanonicalAction | None:
             raw_args=arguments,
             provenance=provenance,
             matched_by="structured_tool_call",
+            side_effect_class=side_effect_class,
         )
 
     function = step.get("function")
@@ -428,6 +487,12 @@ def _step_metadata(
         "verb",
         "read_only",
         "side_effecting",
+        "side_effect_class",
+        "schema",
+        "input_schema",
+        "parameters",
+        "annotations",
+        "hints",
         "call_id",
         "tool_call_id",
         "id",
@@ -518,16 +583,16 @@ def _is_secret_key(key: str) -> bool:
     return bool(_SECRET_KEY_RE.search(normalized))
 
 
-def _side_effecting(intent: str, metadata: Mapping[str, Any]) -> bool | None:
-    if "side_effecting" in metadata:
-        return bool(metadata["side_effecting"])
-    if metadata.get("read_only") is True:
-        return False
-    if intent in {"read", "search", "list"}:
-        return False
-    if intent == "unknown":
-        return None
-    return True
+def _schema_argument_names(metadata: Mapping[str, Any]) -> set[str]:
+    names: set[str] = set()
+    for schema_key in ("schema", "input_schema", "parameters"):
+        schema = metadata.get(schema_key)
+        if not isinstance(schema, Mapping):
+            continue
+        properties = schema.get("properties")
+        if isinstance(properties, Mapping):
+            names.update(str(key).lower() for key in properties)
+    return names
 
 
 def _structured_confidence(
