@@ -27,25 +27,6 @@ from howdex.core.guidance import (
     render_procedure_guidance,
     suggest_procedures,
 )
-from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
-from howdex.core.receipts import (
-    VerificationReceipt,
-    parse_bootproof_attestation,
-    procedure_verification_status,
-)
-from howdex.core.parameterize import (
-    ParameterizedAction,
-    parameter_bindings,
-    parameterize_action,
-    parameterize_steps,
-    redact_parameter_evidence,
-)
-from howdex.core.parallel import (
-    Parallel_Span_Resolver,
-    ParallelSpanResolver,
-    render_dag_steps,
-    resolve_parallel_spans,
-)
 from howdex.core.learning import (
     NormalizedLearningStep,
     canonical_json,
@@ -53,6 +34,28 @@ from howdex.core.learning import (
     normalize_step_for_learning,
     normalize_steps_for_learning,
 )
+from howdex.core.parallel import (
+    Parallel_Span_Resolver,
+    ParallelSpanResolver,
+    render_dag_steps,
+    resolve_parallel_spans,
+)
+from howdex.core.parameterize import (
+    ParameterizedAction,
+    ParameterizedStep,
+    parameter_bindings,
+    parameterize_action,
+    parameterize_step_for_learning,
+    parameterize_steps,
+    parameterize_steps_for_learning,
+    redact_parameter_evidence,
+)
+from howdex.core.receipts import (
+    VerificationReceipt,
+    parse_bootproof_attestation,
+    procedure_verification_status,
+)
+from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
 from howdex.core.segmentation import (
     DEFAULT_IDLE_GAP_S,
     DEFAULT_MAX_SEGMENT_STEPS,
@@ -95,7 +98,9 @@ __all__ = [
     "procedure_feedback_confidence", "procedure_success_rate",
     "VerificationReceipt", "parse_bootproof_attestation",
     "procedure_verification_status",
-    "ParameterizedAction", "parameterize_action", "parameterize_steps",
+    "ParameterizedAction", "ParameterizedStep",
+    "parameterize_action", "parameterize_steps",
+    "parameterize_step_for_learning", "parameterize_steps_for_learning",
     "parameter_bindings",
     "redact_parameter_evidence",
     "Parallel_Span_Resolver", "ParallelSpanResolver",

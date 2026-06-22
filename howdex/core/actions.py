@@ -219,6 +219,18 @@ def canonicalize_action(
             observation=raw_observation,
         )
 
+    execution_target = _file_execution_target(raw_action)
+    if execution_target is not None:
+        return _canonical(
+            raw_action,
+            "execute_file",
+            "execute",
+            execution_target,
+            0.90,
+            "execute_file_command",
+            observation=raw_observation,
+        )
+
     return _canonical(
         raw_action,
         "unknown_action",
@@ -404,9 +416,15 @@ def _is_dependency_install(value: str) -> bool:
     compact = value.replace(" ", "")
     return (
         "npm install" in value
+        or "npm i " in value
         or "npminstall" in compact
+        or "pnpm add" in value
+        or "yarn add" in value
         or "pip install" in value
         or "pipinstall" in compact
+        or "poetry add" in value
+        or "cargo add" in value
+        or "go get" in value
         or "install dependencies" in value
         or compact in {"installdeps", "installdependencies"}
     )
@@ -418,7 +436,22 @@ def _dependency_target(value: str) -> str:
         return "npm"
     if "pip install" in value or "pipinstall" in compact:
         return "pip"
+    for manager in ("pnpm", "yarn", "poetry", "cargo", "go"):
+        if value.startswith(f"{manager} "):
+            return manager
     return "dependencies"
+
+
+def _file_execution_target(value: str) -> str | None:
+    match = re.match(
+        r"^\s*(?:python3?|node|ts-node)\s+"
+        r"(?:--?[^\s]+\s+)*"
+        r"(?P<path>[^\s]+\.(?:js|ts|tsx|jsx|py|rb|go|rs|java|cs|php))"
+        r"(?:\s|$)",
+        str(value or ""),
+        re.IGNORECASE,
+    )
+    return match.group("path") if match else None
 
 
 def _mentions_file(value: str) -> bool:

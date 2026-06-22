@@ -418,10 +418,17 @@ order.
 
 ```text
 npm install cors                 -> npm install <PKG_1>
-pytest tests/test_auth.py        -> pytest <PATH_1>
+pytest tests/test_auth.py        -> pytest <FILE_PATH_1>
 curl http://localhost:3000/health -> curl <URL_1>
+{"path": "src/app.js"}           -> {"path": "<FILE_PATH_1>"}
 {"repo": "acme/app"}             -> {"repo": "<REPO_1>"}
 ```
+
+Variable masking is AST-style for structured calls: Howdex walks typed
+arguments in sorted-key order and replaces volatile file paths, packages,
+URLs, ports, IDs, hashes, emails, branches, environment values, and write
+payloads with typed slots. Obvious secret keys and command-line credentials
+become `<SECRET_REDACTED>` and are never added to example bindings.
 
 Learned procedure steps retain their canonical action and add a `template`
 containing parameterized action text, arguments, and target. Concrete,
@@ -432,27 +439,26 @@ secret-redacted examples remain inspectable in `raw_supporting_examples`;
 For example, these two successful traces:
 
 ```text
-edit app.js       | edit server.js
-npm install cors  | npm install express
-npm test          | npm test
+fs.write path=app.js content=alpha    | fs.write path=server.js content=beta
+npm install cors                      | npm install express
 ```
 
 consolidate into one reusable template:
 
 ```text
-edit <PATH_1>
+fs.write path=<FILE_PATH_1> content=<CONTENT_1>
 npm install <PKG_1>
-run <TEST_COMMAND_1>
 ```
 
 The procedure API exposes `canonical_steps`, `parameterized_steps`, and
 `example_bindings` as compatible derived views; existing `steps` and
-`parameter_bindings` remain unchanged.
+`parameter_bindings` remain unchanged. New procedures identify their
+deterministic extraction path as `extraction_method="parameterized_lcs"`.
 
 This is the distinction between dumb macro memory and reusable procedural
 memory: Howdex learns the stable operation sequence and its parameter slots,
-not one hardcoded replay. No LLM is used, and secrets become `[REDACTED]`
-rather than visible placeholders or exported bindings.
+not one hardcoded replay. No LLM is used, and secrets become
+`<SECRET_REDACTED>` rather than visible placeholders or exported bindings.
 
 ### Canonical learning identity
 

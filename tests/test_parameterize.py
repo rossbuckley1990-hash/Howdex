@@ -18,8 +18,8 @@ def test_bash_command_parameterisation_examples():
         "npm install cors": "npm install <PKG_1>",
         "pnpm add zod": "pnpm add <PKG_1>",
         "pip install fastapi": "pip install <PKG_1>",
-        "pytest tests/test_auth.py": "pytest <PATH_1>",
-        "node server.js": "node <PATH_1>",
+        "pytest tests/test_auth.py": "pytest <FILE_PATH_1>",
+        "node server.js": "node <FILE_PATH_1>",
         "curl http://localhost:3000/health": "curl <URL_1>",
     }
 
@@ -33,7 +33,7 @@ def test_tool_arguments_parameterize_salient_values():
         (
             "filesystem.read_file",
             {"path": "src/app.js"},
-            {"path": "<PATH_1>"},
+            {"path": "<FILE_PATH_1>"},
         ),
         (
             "github.create_pr",
@@ -71,7 +71,7 @@ def test_placeholder_names_are_stable_across_dict_order():
     assert first.parameterized_args == second.parameterized_args
     assert first.parameter_map == second.parameter_map
     assert first.parameter_map == {
-        "<PATH_1>": "src/app.js",
+        "<FILE_PATH_1>": "src/app.js",
         "<PORT_1>": 3000,
         "<REPO_1>": "acme/app",
     }
@@ -95,12 +95,12 @@ def test_repeated_literal_reuses_placeholder_and_new_values_increment():
         ]
     )
 
-    assert actions[0].parameterized_args["path"] == "<PATH_1>"
-    assert actions[1].parameterized_args["path"] == "<PATH_1>"
-    assert actions[2].parameterized_args["path"] == "<PATH_2>"
+    assert actions[0].parameterized_args["path"] == "<FILE_PATH_1>"
+    assert actions[1].parameterized_args["path"] == "<FILE_PATH_1>"
+    assert actions[2].parameterized_args["path"] == "<FILE_PATH_2>"
     assert parameter_bindings(actions) == {
-        "<PATH_1>": "src/app.py",
-        "<PATH_2>": "src/config.py",
+        "<FILE_PATH_1>": "src/app.py",
+        "<FILE_PATH_2>": "src/config.py",
     }
 
 
@@ -169,13 +169,13 @@ def test_different_file_names_learn_one_parameterized_procedure(tmp_path):
 
     assert procedure.steps[0]["action"] == "filesystem.read_file"
     assert procedure.steps[0]["parameterized_args"] == {
-        "path": "<PATH_1>"
+        "path": "<FILE_PATH_1>"
     }
     assert procedure.steps[0]["template"]["arguments"] == {
-        "path": "<PATH_1>"
+        "path": "<FILE_PATH_1>"
     }
     assert {
-        binding["bindings"]["<PATH_1>"]
+        binding["bindings"]["<FILE_PATH_1>"]
         for binding in procedure.parameter_bindings
     } == set(paths)
 
@@ -209,7 +209,10 @@ def test_legacy_prose_actions_still_learn_with_templates(tmp_path):
     procedure = memory.learn(min_samples=2)[0]
 
     assert procedure.steps[0]["action"] == "inspect_file"
-    assert procedure.steps[0]["parameterized_action"] == "read <PATH_1>"
+    assert (
+        procedure.steps[0]["parameterized_action"]
+        == "read <FILE_PATH_1>"
+    )
     assert len(procedure.raw_supporting_examples) == 2
     assert all(
         example["bindings"]

@@ -65,6 +65,9 @@ def test_procedure_export_creates_json_files_and_is_safe_to_repeat(tmp_path):
     assert document["format_version"] == 2
     assert document["procedure"]["id"]
     assert document["procedure"]["task_signature"] == "deploy api"
+    assert document["procedure"]["extraction_method"] == (
+        "parameterized_lcs"
+    )
     assert document["procedure"]["steps"]
     assert document["procedure"]["preconditions"] == [
         "deploy_service",

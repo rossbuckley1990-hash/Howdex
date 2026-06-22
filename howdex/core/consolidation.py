@@ -22,7 +22,7 @@ from howdex.core.learning import (
     normalize_steps_for_learning,
 )
 from howdex.core.parameterize import (
-    ParameterizedAction,
+    ParameterizedStep,
     parameter_bindings,
     redact_parameter_evidence,
 )
@@ -48,7 +48,7 @@ class _TraceMember:
         return self.normalized.canonical
 
     @property
-    def parameterized_action(self) -> ParameterizedAction:
+    def parameterized_action(self) -> ParameterizedStep:
         return self.normalized.parameterized
 
     @property
@@ -93,7 +93,7 @@ class _EpisodeTrace:
         ]
 
     @property
-    def parameterized_actions(self) -> list[ParameterizedAction]:
+    def parameterized_actions(self) -> list[ParameterizedStep]:
         return [
             member.parameterized_action
             for node in self.nodes
@@ -445,6 +445,7 @@ def _procedure_step(
         "parameterized_action": template["action"],
         "parameterized_args": template["arguments"],
         "parameterized_target": template["target"],
+        "learning_key": examples[0].parameterized_action.learning_key,
         "template": template,
         "evidence": {
             "support_count": support_count,
@@ -493,7 +494,7 @@ def _raw_examples(traces: list[_EpisodeTrace]) -> list[dict[str, Any]]:
 
 
 def _representative_template(
-    examples: list[ParameterizedAction],
+    examples: list[ParameterizedStep],
 ) -> dict[str, Any]:
     if not examples:
         return {"action": "", "arguments": {}, "target": None}
@@ -704,6 +705,7 @@ def consolidate(
         procedure = Procedure(
             id=str(_get(existing, "id") or Procedure().id),
             task_signature=task,
+            extraction_method="parameterized_lcs",
             steps=steps,
             preconditions=_preconditions(
                 [

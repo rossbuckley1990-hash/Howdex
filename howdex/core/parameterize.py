@@ -12,14 +12,18 @@ from typing import Any
 from howdex.core.actions import CanonicalAction
 from howdex.core.tool_calls import redact_secrets
 
-REDACTED = "[REDACTED]"
+REDACTED = "<SECRET_REDACTED>"
+_LEGACY_REDACTED = "[REDACTED]"
+_COMMAND_KEYS = {"cmd", "command", "shell_command", "script"}
 
 _SECRET_KEY_RE = re.compile(
     r"(?i)(?:^|_)(?:api_?key|access_?key|secret|password|passwd|token|"
-    r"authorization|credential|cookie|private_?key|client_?secret)(?:$|_)"
+    r"bearer|authorization|credential|cookie|private_?key|client_?secret)"
+    r"(?:$|_)"
 )
 _SECRET_FLAG_RE = re.compile(
-    r"(?i)(--?(?:api[-_]?key|password|secret|token|authorization)"
+    r"(?i)(--?(?:api[-_]?key|access[-_]?key|password|private[-_]?key|"
+    r"secret|token|bearer|authorization)"
     r"(?:=|\s+))([^\s]+)"
 )
 _SECRET_ASSIGNMENT_RE = re.compile(
@@ -27,11 +31,15 @@ _SECRET_ASSIGNMENT_RE = re.compile(
     r"[A-Z0-9_]*)=([^\s]+)"
 )
 _SECRET_LABEL_RE = re.compile(
-    r"(?i)\b(api[-_ ]?key|password|secret|token|authorization)"
+    r"(?i)\b(api[-_ ]?key|access[-_ ]?key|password|private[-_ ]?key|"
+    r"secret|token|bearer|authorization)"
     r"(\s*[:=]\s*)([^\s]+)"
 )
 _AUTH_BEARER_RE = re.compile(
     r"(?i)(--?authorization\s+bearer\s+)([^\s]+)"
+)
+_BEARER_TOKEN_RE = re.compile(
+    r"(?i)(\bbearer\s+)([A-Za-z0-9._~+/=-]+)"
 )
 _ENV_ASSIGNMENT_RE = re.compile(r"\b([A-Z][A-Z0-9_]*=)([^\s]+)")
 _URI_CREDENTIAL_RE = re.compile(r"(://[^:/@\s]+:)([^@\s]+)(@)")
@@ -47,13 +55,28 @@ _UUID_RE = re.compile(
 )
 _HASH_RE = re.compile(r"\b(?:sha(?:1|256|512):)?[0-9a-f]{32,128}\b", re.IGNORECASE)
 _PATH_RE = re.compile(
-    r"(?<![\w<>])(?:\.{0,2}/|/)?(?:[\w@.-]+/)+[\w@.+-]+"
-    r"|(?<![\w<>])[\w@.-]+\.(?:py|js|jsx|ts|tsx|json|yaml|yml|toml|md|sh|sql)"
+    r"(?<![\w<>])(?:[A-Za-z]:[\\/]|\.{0,2}[\\/]|[\\/])?"
+    r"(?:[\w@.-]+[\\/])+[\w@.+-]+"
+    r"|(?<![\w<>])[\w@.-]+\.(?:js|ts|tsx|jsx|py|rb|go|rs|java|cs|php|"
+    r"json|yaml|yml|toml|env|md|txt|html|css|scss|sql|sh)"
+    r"|(?<![\w<>])\.env\b"
 )
 _ISSUE_RE = re.compile(r"(?i)\b(issue\s*#?\s*)(\d+)\b")
 _PR_RE = re.compile(r"(?i)\b((?:pr|pull request)\s*#?\s*)(\d+)\b")
 _PORT_RE = re.compile(r"(?i)\b(port\s+)(\d{2,5})\b")
-_ID_RE = re.compile(r"\b[a-z][a-z0-9]*_[a-z0-9][a-z0-9_-]*\b", re.IGNORECASE)
+_ID_RE = re.compile(
+    r"\b(?:[a-z][a-z0-9]*[_-])(?:[a-z0-9][a-z0-9_-]*\d[a-z0-9_-]*"
+    r"|\d+[a-z0-9_-]*)\b",
+    re.IGNORECASE,
+)
+_PORT_FLAG_RE = re.compile(
+    r"(?i)(--?port(?:=|\s+))(\d{2,5})\b"
+)
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?"
+    r"-----END [A-Z ]*PRIVATE KEY-----",
+    re.DOTALL,
+)
 
 _PACKAGE_COMMANDS = {
     ("npm", "install"),
@@ -62,8 +85,11 @@ _PACKAGE_COMMANDS = {
     ("yarn", "add"),
     ("pip", "install"),
     ("pip3", "install"),
+    ("poetry", "add"),
+    ("cargo", "add"),
+    ("go", "get"),
 }
-_PATH_COMMANDS = {"pytest", "node"}
+_FILE_COMMANDS = {"pytest", "python", "python3", "node", "ts-node"}
 _URL_COMMANDS = {"curl", "wget"}
 _BRANCH_COMMANDS = {
     ("git", "checkout"),
@@ -71,12 +97,16 @@ _BRANCH_COMMANDS = {
 }
 
 _KEY_TYPES = {
-    "path": "PATH",
+    "path": "FILE_PATH",
     "cwd": "PATH",
     "directory": "PATH",
     "working_directory": "PATH",
-    "file": "PATH",
-    "filename": "PATH",
+    "file": "FILE_PATH",
+    "filepath": "FILE_PATH",
+    "filename": "FILE_PATH",
+    "source": "FILE_PATH",
+    "destination": "FILE_PATH",
+    "target_path": "FILE_PATH",
     "url": "URL",
     "uri": "URL",
     "endpoint": "URL",
@@ -100,11 +130,19 @@ _KEY_TYPES = {
     "payment_intent": "ID",
     "charge": "ID",
     "id": "ID",
-    "uuid": "UUID",
+    "uuid": "ID",
     "hash": "HASH",
     "digest": "HASH",
     "sha": "HASH",
     "sha256": "HASH",
+}
+_CONTENT_KEYS = {
+    "body",
+    "content",
+    "data",
+    "file_content",
+    "payload",
+    "source_code",
 }
 _ENV_CONTAINER_KEYS = {
     "env",
@@ -124,6 +162,28 @@ class ParameterizedAction:
     parameterized_target: str | None = None
     parameter_map: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ParameterizedStep:
+    """A canonical step plus its stable, literal-free learning identity."""
+
+    canonical_name: str
+    learning_key: str
+    parameterized_action: str
+    parameterized_args: dict[str, Any] = field(default_factory=dict)
+    parameter_bindings: dict[str, Any] = field(default_factory=dict)
+    parameterized_target: str | None = None
+    placeholder_types: dict[str, str] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def parameter_map(self) -> dict[str, Any]:
+        """Compatibility alias used by existing consolidation helpers."""
+        return self.parameter_bindings
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -155,6 +215,7 @@ def parameterize_action(
     """Parameterise one canonical action with deterministic placeholders."""
     registry = _registry or _PlaceholderRegistry()
     safe_args, redacted_paths = redact_secrets(action.raw_args)
+    safe_args = _normalize_secret_markers(safe_args)
     safe_action = _redact_text(action.raw_action)
     safe_target = _redact_text(action.target)
     parameter_map: dict[str, Any] = {}
@@ -215,8 +276,76 @@ def parameterize_steps(
     ]
 
 
+def parameterize_step_for_learning(
+    action: CanonicalAction,
+    *,
+    _registry: _PlaceholderRegistry | None = None,
+) -> ParameterizedStep:
+    """Build the deterministic parameterized key consumed by LCS."""
+    parameterized = parameterize_action(
+        action,
+        _registry=_registry,
+    )
+    payload: dict[str, Any] = {
+        "canonical_action": action.canonical_name,
+        "intent": action.intent,
+        "side_effect_class": action.side_effect_class,
+    }
+    if parameterized.parameterized_args:
+        payload["arguments"] = parameterized.parameterized_args
+    if (
+        parameterized.parameterized_target is not None
+        and (
+            action.matched_by != "legacy_prose"
+            or _contains_placeholder(
+                parameterized.parameterized_target
+            )
+        )
+    ):
+        payload["target"] = parameterized.parameterized_target
+    if action.matched_by == "structured_command":
+        payload["command"] = parameterized.parameterized_action
+    elif not parameterized.parameterized_args:
+        slots = _placeholder_types(parameterized.parameterized_action)
+        if slots:
+            payload["action_slots"] = sorted(slots.values())
+
+    bindings = dict(sorted(parameterized.parameter_map.items()))
+    return ParameterizedStep(
+        canonical_name=action.canonical_name,
+        learning_key=_stable_value(payload),
+        parameterized_action=parameterized.parameterized_action,
+        parameterized_args=parameterized.parameterized_args,
+        parameter_bindings=bindings,
+        parameterized_target=parameterized.parameterized_target,
+        placeholder_types=_placeholder_types(
+            {
+                "action": parameterized.parameterized_action,
+                "arguments": parameterized.parameterized_args,
+                "target": parameterized.parameterized_target,
+            }
+        ),
+        provenance={
+            "source": "parameterized_lcs",
+            "canonical": redact_parameter_evidence(action.to_dict()),
+            "parameterization": parameterized.provenance,
+        },
+    )
+
+
+def parameterize_steps_for_learning(
+    steps: list[CanonicalAction],
+) -> list[ParameterizedStep]:
+    """Parameterize one episode with a shared deterministic registry."""
+    registry = _PlaceholderRegistry()
+    return [
+        parameterize_step_for_learning(step, _registry=registry)
+        for step in steps
+    ]
+
+
 def parameter_bindings(
-    steps: list[ParameterizedAction],
+    steps: list[ParameterizedAction | ParameterizedStep],
 ) -> dict[str, Any]:
     """Collect safe example bindings from a parameterised sequence."""
     bindings: dict[str, Any] = {}
@@ -265,12 +394,18 @@ def _parameterize_command(
         return " ".join(tokens)
 
     executable = lowered[0]
-    if executable in _PATH_COMMANDS:
+    if executable in _FILE_COMMANDS:
         for index in range(1, len(tokens)):
             if tokens[index].startswith("-") or tokens[index] == REDACTED:
                 continue
-            tokens[index] = _bind("PATH", tokens[index], registry, parameter_map)
-            break
+            if _looks_like_file_path(tokens[index]):
+                tokens[index] = _bind(
+                    "FILE_PATH",
+                    tokens[index],
+                    registry,
+                    parameter_map,
+                )
+                break
         return " ".join(tokens)
 
     if executable in _URL_COMMANDS:
@@ -306,6 +441,13 @@ def _parameterize_value(
             item = value[key]
             if _is_secret_key(key_text):
                 output[key_text] = REDACTED
+                continue
+            if key_text.lower() in _COMMAND_KEYS:
+                output[key_text] = _parameterize_command(
+                    str(item),
+                    registry,
+                    parameter_map,
+                )
                 continue
             if str(parent_key or "").lower() in _ENV_CONTAINER_KEYS:
                 output[key_text] = _parameterize_scalar(
@@ -388,7 +530,13 @@ def _parameterize_scalar(
     if kind is None and isinstance(value, str):
         kind = _kind_for_value(value)
     if kind is not None:
-        return _bind(kind, value, registry, parameter_map)
+        return _bind(
+            kind,
+            value,
+            registry,
+            parameter_map,
+            preserve_binding=kind != "CONTENT",
+        )
     if isinstance(value, str):
         return _parameterize_text(value, registry, parameter_map)
     return value
@@ -402,12 +550,30 @@ def _parameterize_text(
     text = _redact_text(value) or ""
     text = _replace_matches(text, _URL_RE, "URL", registry, parameter_map)
     text = _replace_matches(text, _EMAIL_RE, "EMAIL", registry, parameter_map)
-    text = _replace_matches(text, _UUID_RE, "UUID", registry, parameter_map)
+    text = _replace_matches(text, _UUID_RE, "ID", registry, parameter_map)
     text = _replace_matches(text, _HASH_RE, "HASH", registry, parameter_map)
     text = _replace_group(text, _PR_RE, "PR", registry, parameter_map)
     text = _replace_group(text, _ISSUE_RE, "ISSUE", registry, parameter_map)
     text = _replace_group(text, _PORT_RE, "PORT", registry, parameter_map)
-    text = _replace_matches(text, _PATH_RE, "PATH", registry, parameter_map)
+    text = _replace_matches(
+        text,
+        _PATH_RE,
+        "FILE_PATH",
+        registry,
+        parameter_map,
+    )
+    text = _PORT_FLAG_RE.sub(
+        lambda match: (
+            match.group(1)
+            + _bind(
+                "PORT",
+                match.group(2),
+                registry,
+                parameter_map,
+            )
+        ),
+        text,
+    )
     text = _ENV_ASSIGNMENT_RE.sub(
         lambda match: (
             match.group(0)
@@ -469,9 +635,12 @@ def _bind(
     value: Any,
     registry: _PlaceholderRegistry,
     parameter_map: dict[str, Any],
+    *,
+    preserve_binding: bool = True,
 ) -> str:
     placeholder = registry.placeholder(kind, value)
-    parameter_map.setdefault(placeholder, value)
+    if preserve_binding:
+        parameter_map.setdefault(placeholder, value)
     return placeholder
 
 
@@ -480,16 +649,18 @@ def _kind_for_key(key: str) -> str | None:
         return None
     if key in _KEY_TYPES:
         return _KEY_TYPES[key]
+    if key in _CONTENT_KEYS:
+        return "CONTENT"
     if key == "env_value" or key.endswith("_value"):
         return "ENV_VALUE"
     if key.endswith("_path") or key.endswith("_file"):
-        return "PATH"
+        return "FILE_PATH"
     if key.endswith("_url") or key.endswith("_uri"):
         return "URL"
     if key.endswith("_port"):
         return "PORT"
     if key.endswith("_uuid"):
-        return "UUID"
+        return "ID"
     if key.endswith("_hash") or key.endswith("_digest"):
         return "HASH"
     if key.endswith("_email"):
@@ -509,7 +680,7 @@ def _kind_for_value(value: str) -> str | None:
     if _HASH_RE.fullmatch(value):
         return "HASH"
     if _PATH_RE.fullmatch(value):
-        return "PATH"
+        return "FILE_PATH"
     if _ID_RE.fullmatch(value):
         return "ID"
     return None
@@ -519,7 +690,10 @@ def _redact_text(value: Any) -> str | None:
     if value in (None, ""):
         return None
     text = str(value)
+    text = text.replace(_LEGACY_REDACTED, REDACTED)
+    text = _PRIVATE_KEY_RE.sub(REDACTED, text)
     text = _AUTH_BEARER_RE.sub(r"\1" + REDACTED, text)
+    text = _BEARER_TOKEN_RE.sub(r"\1" + REDACTED, text)
     text = _SECRET_FLAG_RE.sub(r"\1" + REDACTED, text)
     text = _SECRET_ASSIGNMENT_RE.sub(r"\1=" + REDACTED, text)
     text = _SECRET_LABEL_RE.sub(
@@ -541,3 +715,47 @@ def _stable_value(value: Any) -> str:
         ensure_ascii=True,
         default=str,
     )
+
+
+def _normalize_secret_markers(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _normalize_secret_markers(value[key])
+            for key in sorted(value, key=lambda item: str(item))
+        }
+    if isinstance(value, list):
+        return [_normalize_secret_markers(item) for item in value]
+    if value == _LEGACY_REDACTED:
+        return REDACTED
+    return value
+
+
+def _placeholder_types(value: Any) -> dict[str, str]:
+    placeholders: set[str] = set()
+
+    def visit(item: Any) -> None:
+        if isinstance(item, Mapping):
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, (list, tuple)):
+            for child in item:
+                visit(child)
+        elif isinstance(item, str):
+            placeholders.update(
+                f"<{match}>"
+                for match in re.findall(r"<([A-Z][A-Z0-9_]*_\d+)>", item)
+            )
+
+    visit(value)
+    return {
+        placeholder: placeholder[1:-1].rsplit("_", 1)[0]
+        for placeholder in sorted(placeholders)
+    }
+
+
+def _looks_like_file_path(value: str) -> bool:
+    return bool(_PATH_RE.fullmatch(value))
+
+
+def _contains_placeholder(value: str) -> bool:
+    return bool(re.search(r"<[A-Z][A-Z0-9_]*_\d+>", value))

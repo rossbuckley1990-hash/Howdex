@@ -60,6 +60,13 @@
 - Equivalent traces such as `edit app.js` / `edit server.js` and
   `npm install cors` / `npm install express` now consolidate into one reusable
   template without making English phrasing part of identity
+- Structured write content and file arguments now use typed
+  `<CONTENT_n>` / `<FILE_PATH_n>` slots, fixing `fs.write` workflows that
+  previously split on concrete payloads
+- Package-manager and file-execution commands now mask volatile targets across
+  npm, pnpm, yarn, pip, poetry, cargo, Go, pytest, Python, Node, and ts-node
+- Parameterized learning provenance and exports use `<SECRET_REDACTED>` and
+  never retain secret values as example bindings
 
 ## 0.2.0 - Production Foundation
 
