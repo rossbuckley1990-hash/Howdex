@@ -469,7 +469,20 @@ OPENAI_API_KEY
 openssl
 python3
 bash
+Docker running
+python:3.12-alpine present locally
 ```
+
+The Docker benchmark never auto-pulls images. If `python:3.12-alpine` is not
+already available locally, pull it yourself before running the benchmark:
+
+```bash
+docker pull python:3.12-alpine
+```
+
+Benchmark logs from the Makefile targets are written under
+`benchmark-results/` and are intentionally ignored by git unless you decide to
+publish a specific result.
 
 ---
 
@@ -632,6 +645,34 @@ HOWDEX_POLY_TRIALS=5 HOWDEX_POLY_MAX_TURNS=12 python3 polyglot_macgyver_test.py
 ```
 
 The real benchmarks use live model calls and may incur API cost.
+
+### Headline Docker A/B benchmark
+
+The headline Docker recovery benchmark is reproducible through Make:
+
+```bash
+make bench-docker-n20
+```
+
+This runs:
+
+```bash
+HOWDEX_DOCKER_TRIALS=20 HOWDEX_DOCKER_MAX_TURNS=15 python3 real_docker_recovery_ab_test.py
+```
+
+Prerequisites:
+
+- Docker must be running.
+- `python:3.12-alpine` must already be present locally.
+- `OPENAI_API_KEY` must be set for the live model calls.
+- The benchmark does not auto-pull Docker images or use external services beyond
+  the configured live model API.
+
+For a smaller smoke run:
+
+```bash
+make bench-docker
+```
 
 ---
 

@@ -6,7 +6,12 @@
 PYTHON ?= python
 PIP    ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev install-full test test-cov lint format typecheck build clean dist verify examples
+BENCHMARK_RESULTS_DIR ?= benchmark-results
+DOCKER_BENCH_TRIALS ?= 5
+DOCKER_BENCH_MAX_TURNS ?= 15
+DOCKER_BENCH_BASE_IMAGE ?= python:3.12-alpine
+
+.PHONY: help install install-dev install-full test test-cov lint format typecheck build clean dist verify examples bench bench-docker bench-docker-n20
 
 help:  ## Show this help
 	@echo "Howdex — common commands:"
@@ -27,6 +32,35 @@ install-dev:  ## Editable install with dev tools (pytest, ruff, mypy)
 
 test:  ## Run the test suite
 	$(PYTHON) -m pytest
+
+bench:  ## Show available benchmark commands
+	@echo "Available benchmark commands:"
+	@echo "  make bench-docker      # Docker A/B benchmark, default n=$${HOWDEX_DOCKER_TRIALS:-$(DOCKER_BENCH_TRIALS)}"
+	@echo "  make bench-docker-n20  # Headline Docker A/B benchmark, n=20"
+	@echo ""
+	@echo "Prerequisites: Docker running, $(DOCKER_BENCH_BASE_IMAGE) present locally, OPENAI_API_KEY set."
+	@echo "The benchmark does not auto-pull images."
+
+bench-docker:  ## Run the Docker A/B benchmark with a small default sample
+	@mkdir -p "$(BENCHMARK_RESULTS_DIR)"
+	@log="$(BENCHMARK_RESULTS_DIR)/docker-recovery-n$${HOWDEX_DOCKER_TRIALS:-$(DOCKER_BENCH_TRIALS)}-$$(date -u +%Y%m%dT%H%M%SZ).log"; \
+		echo "Writing benchmark log to $$log"; \
+		HOWDEX_DOCKER_TRIALS=$${HOWDEX_DOCKER_TRIALS:-$(DOCKER_BENCH_TRIALS)} \
+		HOWDEX_DOCKER_MAX_TURNS=$${HOWDEX_DOCKER_MAX_TURNS:-$(DOCKER_BENCH_MAX_TURNS)} \
+		python3 real_docker_recovery_ab_test.py > "$$log" 2>&1; \
+		status=$$?; \
+		cat "$$log"; \
+		exit $$status
+
+bench-docker-n20:  ## Run the headline Docker A/B benchmark with n=20
+	@mkdir -p "$(BENCHMARK_RESULTS_DIR)"
+	@log="$(BENCHMARK_RESULTS_DIR)/docker-recovery-n20-$$(date -u +%Y%m%dT%H%M%SZ).log"; \
+		echo "Writing benchmark log to $$log"; \
+		HOWDEX_DOCKER_TRIALS=20 HOWDEX_DOCKER_MAX_TURNS=15 \
+		python3 real_docker_recovery_ab_test.py > "$$log" 2>&1; \
+		status=$$?; \
+		cat "$$log"; \
+		exit $$status
 
 test-cov:  ## Run tests with coverage report
 	$(PYTHON) -m pytest --cov=howdex --cov-report=term-missing
