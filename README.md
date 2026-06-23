@@ -2,41 +2,36 @@
 
 **The procedural memory layer for AI agents.**
 
-Howdex turns messy execution traces into reusable, parameterized, context-aware procedures that agents can apply before repeating known mistakes.
+Howdex turns successful and failed agent execution traces into reusable operational memory: parameterized procedures, context-conditioned workflows, failure lessons, verification evidence, and cross-task guidance that future agents can apply before repeating the same expensive discovery.
 
-It is designed for one job:
+> One expensive discovery. Many cheap executions.
 
-> Help agents remember **how work was actually done**, not just what was said.
-
-Howdex watches successful and failed task episodes, extracts the repeatable operational pattern, masks environment-specific variables, preserves provenance, and renders the learned procedure back to agents as usable guidance.
+Howdex is not chat history. It is not prompt stuffing. It is not a vector database full of notes. It is a memory system for **how work was actually done**.
 
 ---
 
 ## Why Howdex Exists
 
-Modern AI agents can reason, call tools, and execute code. But most of them still behave like they have no operational memory.
+Modern AI agents can reason, call tools, write files, run commands, and interact with systems. But most still behave as if every task is the first time they have ever seen the world.
 
 They repeatedly:
 
-- hit the same dependency errors,
-- rerun the same broken command,
-- rediscover the same environment setup,
-- ignore subtle production-vs-local differences,
-- fail to transfer one recovery pattern to another task.
+- rediscover the same setup steps,
+- rerun known-bad commands,
+- forget which recovery path actually worked,
+- collapse local and production workflows into one unsafe procedure,
+- fail to transfer a hard-won operational fix into a related task,
+- spend expensive model calls solving problems that were already solved once.
 
-Howdex fixes that by giving agents a durable procedural memory system.
+Howdex gives agents durable procedural memory.
 
-Not chat history.  
-Not prompt stuffing.  
-Not a vector database full of notes.
-
-A learned, structured, parameterized memory of **what worked**.
+It watches episodes, records tool calls, separates failures from successful paths, extracts reusable structure, masks environment-specific values, preserves evidence, and renders the learned procedure back as agent-usable guidance.
 
 ---
 
-## Core Idea
+## The Core Idea
 
-A successful agent trace like this:
+A messy trace like this:
 
 ```text
 node app.js
@@ -48,7 +43,7 @@ node app.js
 → App running!
 ```
 
-becomes this reusable procedure:
+becomes a reusable procedure:
 
 ```text
 Step 1: node <FILE_PATH_1>
@@ -63,16 +58,17 @@ With bindings such as:
 <PKG_1> = express
 ```
 
-Later, when a new task mentions `server.js` and `cors`, Howdex can render agent guidance like:
+Later, when a different task mentions `server.js` and `cors`, Howdex can render guidance such as:
 
 ```text
 Fast path for this task:
-- The objective already names the missing package as `cors`.
-- You may skip reproducing the crash and run `npm install cors` first.
-- Then verify with `node server.js`.
+- The current objective names `cors` as the missing package.
+- You may skip the known-bad reproduction step if the evidence is already present.
+- Run `npm install cors`.
+- Verify with `node server.js`.
 ```
 
-The result is fewer wasted tool calls, fewer repeated failures, and safer execution.
+That is the difference between remembering text and remembering procedure.
 
 ---
 
@@ -82,8 +78,9 @@ Howdex can learn from:
 
 - shell commands,
 - structured tool calls,
+- file writes,
 - observations,
-- failed attempts,
+- failure messages,
 - successful recoveries,
 - repeated workflows,
 - parallel spans,
@@ -94,33 +91,28 @@ It extracts:
 
 - canonical actions,
 - parameterized arguments,
-- procedure steps,
+- ordered procedure steps,
 - preconditions,
 - success evidence,
+- failed attempts to avoid,
 - source episode IDs,
-- confidence and support counts,
+- support and confidence counts,
 - context-conditioned variants.
 
 ---
 
 ## Key Capabilities
 
-### 1. Parameterized Procedural Memory
+### Parameterized Procedural Memory
 
-Howdex does not simply remember `npm install express`.
+Howdex does not simply remember one concrete command.
 
-It learns:
+It learns reusable structure:
 
 ```text
 npm install <PKG_1>
-```
-
-It does not simply remember `app.js`.
-
-It learns:
-
-```text
-<FILE_PATH_1>
+python3 <SCRIPT_PATH_1> <INPUT_FILE_1>
+openssl enc -d ... -pass pass:<DERIVED_SECRET_1>
 ```
 
 Supported masking includes:
@@ -129,16 +121,17 @@ Supported masking includes:
 - package names,
 - working directories,
 - command arguments,
+- generated artifacts,
 - repeated variable bindings,
 - context-specific procedure variants.
 
 ---
 
-### 2. Agent-Ready Guidance Rendering
+### Agent-Ready Guidance Rendering
 
-Raw procedure objects are too dense for agents to use reliably.
+Raw memories are too dense for agents to use reliably.
 
-Howdex renders learned procedures into concise, imperative markdown:
+Howdex renders learned procedures into concise operational guidance:
 
 ```text
 # PAST LEARNED PROCEDURE
@@ -151,43 +144,281 @@ Step 3: Run `node <FILE_PATH_1>` again to verify the fix.
 
 When applying this template:
 - Bind `<FILE_PATH_1>` to the current target file.
-- Bind `<PKG_1>` to the missing module/package named in the error.
+- Bind `<PKG_1>` to the missing module named in the error.
 ```
 
-This is the difference between storing memory and making memory usable.
+This makes memory usable by future agents without forcing them to parse raw traces.
 
 ---
 
-### 3. Context-Conditioned Procedure Variants
+### Failed-Attempt Separation
+
+Howdex does not just store the final answer.
+
+It can preserve the difference between:
+
+```text
+python custom_parser.py data.zdat     # failed
+python3 custom_parser.py data.zdat    # succeeded
+```
+
+and render the failed path separately:
+
+```text
+Avoid these failed attempts from the original trace:
+- run `python custom_parser.py data.zdat`
+```
+
+That matters because good operational memory is not only “what worked”; it is also “what not to waste time on again.”
+
+---
+
+### Context-Conditioned Variants
 
 The same task can require different procedures depending on environment.
 
 For example:
-
-- local database migration: reset and recreate,
-- production database migration: backup, migrate, validate.
-
-Howdex preserves both as separate variants:
 
 ```text
 db_migration [env_type=LOCAL]
 db_migration [env_type=PROD]
 ```
 
-This allows agents to learn not just what worked, but **when it is safe to use it**.
+Local migration may safely reset and recreate a database. Production migration may require backup, migration, verification, and rollback evidence.
+
+Howdex keeps those variants separate so agents do not apply local shortcuts to production systems.
 
 ---
 
-### 4. Cross-Task Semantic Procedure Retrieval
+### Cross-Task Semantic Retrieval
 
-Howdex can retrieve a procedure learned from one task and apply the reusable subroutine to a different task.
+Howdex can retrieve a procedure learned from one task and apply the reusable part to a different but related task.
 
 Example:
 
-- learned from S3 upload: `AccessDenied → aws sso login --profile staging → success`,
-- reused for Lambda deploy in staging before triggering the same failure.
+```text
+S3 upload failed with AccessDenied
+→ aws sso login --profile staging
+→ retry succeeded
+```
 
-This is cross-task procedural transfer, not same-task replay.
+Later, a Lambda deploy in the same staging environment can retrieve the authentication recovery before wasting tool calls on the same failure.
+
+This is procedural transfer, not same-task replay.
+
+---
+
+### Artifact-Aware Tool Memory
+
+Agents sometimes invent tools: scripts, parsers, probes, repair commands, generated config, or local utilities.
+
+Howdex can preserve those generated artifacts as part of procedural memory.
+
+In the real MacGyver filesystem benchmark, a teacher agent created a parser tool on disk, verified it, and Howdex later helped a student agent recreate and run that tool in a fresh sandbox.
+
+---
+
+### Language-Agnostic Operational Transfer
+
+Howdex can also carry the algorithmic idea of a procedure across execution environments.
+
+In the polyglot crypto transfer benchmark, a Python-enabled teacher discovered a decryption procedure. A Bash-only student could not run or write Python and received no pasted Python source. Howdex supplied operational memory, and the student translated the learned procedure into Bash/OpenSSL execution.
+
+---
+
+## Real Benchmarks
+
+Howdex now includes real local execution benchmarks, not just mocked behavioural demos.
+
+### 1. Real MacGyver Filesystem Artifact Replay
+
+File:
+
+```text
+real_macgyver_test.py
+```
+
+What it tests:
+
+- real temporary filesystem,
+- real generated `custom_parser.py`,
+- real data files,
+- real subprocess execution,
+- deletion of the teacher’s parser before the student run,
+- student re-creation from Howdex memory.
+
+What it proves:
+
+```text
+Howdex can preserve and re-surface a teacher-created source-code artifact, and a student can recreate and execute it on a fresh real filesystem task.
+```
+
+Honest scope:
+
+```text
+Artifact replay regression test. Not yet a no-memory capability-lift test.
+```
+
+Run:
+
+```bash
+python3 real_macgyver_test.py
+```
+
+---
+
+### 2. Real MacGyver A/B Hard-Tool Benchmark
+
+File:
+
+```text
+real_macgyver_ab_test.py
+```
+
+What it tests:
+
+- hard local binary-ish file format,
+- real temporary filesystem,
+- real subprocess verification,
+- teacher discovery run,
+- no-memory control arm,
+- Howdex-memory treatment arm,
+- no pasted source code,
+- repeated stochastic student trials.
+
+Representative result:
+
+```text
+Control:
+  trials: 5
+  successes: 2
+  success_rate: 0.40
+  avg_attempts: 7.20
+
+Treatment:
+  trials: 5
+  successes: 5
+  success_rate: 1.00
+  avg_attempts: 2.60
+  howdex_memory_used: 5/5
+  source_pasted: 0/5
+
+Delta:
+  success_rate_lift: +0.60
+  attempt_reduction: +4.60
+```
+
+What it proves:
+
+```text
+Howdex improved student success from 40% to 100% on a hard real-filesystem tool-reuse benchmark while reducing average attempts, without pasting source code.
+```
+
+Run:
+
+```bash
+HOWDEX_AB_TRIALS=5 HOWDEX_AB_MAX_TURNS=20 python3 real_macgyver_ab_test.py
+```
+
+---
+
+### 3. Polyglot MacGyver Crypto Transfer Benchmark
+
+File:
+
+```text
+polyglot_macgyver_test.py
+```
+
+What it tests:
+
+- real OpenSSL encryption and decryption,
+- real `seed.txt` and `vault.enc`,
+- Python-enabled teacher discovery,
+- Bash-only student environment,
+- Python file writes and Python execution banned for students,
+- no-memory control arm,
+- Howdex-memory treatment arm,
+- no pasted Python source,
+- repeated trials.
+
+Representative result:
+
+```text
+Teacher:
+  success: True
+  attempts: 1
+
+Control:
+  trials: 5
+  successes: 0
+  success_rate: 0.00
+  avg_attempts: 11.00
+
+Treatment:
+  trials: 5
+  successes: 5
+  success_rate: 1.00
+  avg_attempts: 3.60
+  howdex_memory_used: 5/5
+  source_pasted: 0/5
+
+Delta:
+  success_rate_lift: +1.00
+  attempt_reduction: +7.40
+```
+
+What it proves:
+
+```text
+Howdex transferred Python-discovered operational knowledge into Bash-only execution without pasting source code.
+```
+
+The treatment receives operational facts, not source code:
+
+```text
+- read seed.txt
+- reverse the seed string before hashing
+- hash the reversed seed bytes with no trailing newline
+- use the SHA256 hex digest as the OpenSSL password
+- decrypt vault.enc with AES-256-CBC and PBKDF2
+```
+
+Then the Bash-only student must translate that into real shell/OpenSSL execution.
+
+Run:
+
+```bash
+HOWDEX_POLY_TRIALS=5 HOWDEX_POLY_MAX_TURNS=12 python3 polyglot_macgyver_test.py
+```
+
+Honest scope:
+
+```text
+This proves language-agnostic operational transfer using synthesized Howdex memory facts. It does not yet prove fully automatic no-synthesis abstraction from arbitrary traces.
+```
+
+---
+
+## Current Evidence Summary
+
+| Benchmark | Control | Treatment | Source Pasted? | Real Execution? | Result |
+|---|---:|---:|---:|---:|---|
+| Real MacGyver Filesystem | n/a | pass | artifact replay | yes | pass |
+| Real MacGyver A/B Hard Tool | 40% | 100% | no | yes | pass |
+| Polyglot Crypto Transfer | 0% | 100% | no | yes | pass |
+
+The defensible headline:
+
+```text
+Howdex turns successful agent execution traces into reusable operational memory that improves future agent success on real local execution tasks.
+```
+
+The intentionally avoided overclaim:
+
+```text
+Howdex does not claim production-safe autonomous execution, arbitrary tool generation safety, or fully automatic AGI-scale abstraction.
+```
 
 ---
 
@@ -208,6 +439,15 @@ pip install -e .
 python -m pytest
 ```
 
+Some real benchmarks require:
+
+```text
+OPENAI_API_KEY
+openssl
+python3
+bash
+```
+
 ---
 
 ## Quick Start
@@ -217,486 +457,183 @@ from howdex import Howdex
 
 memory = Howdex(path=".howdex.db")
 
-memory.start_session("fix_missing_node_dependency")
+memory.start_session("fix_missing_dependency")
 
-memory.log_step(
-    {
-        "tool": "bash",
-        "cmd": "node app.js",
-        "cwd": "./",
-    },
+memory.log_tool_call(
+    "execute_bash",
+    {"cmd": "node app.js"},
     "Error: Cannot find module 'express'",
 )
 
-memory.log_step(
-    {
-        "tool": "bash",
-        "cmd": "npm install express",
-        "cwd": "./",
-    },
-    "added 65 packages",
+memory.log_tool_call(
+    "execute_bash",
+    {"cmd": "npm install express"},
+    "added 62 packages",
 )
 
-memory.log_step(
-    {
-        "tool": "bash",
-        "cmd": "node app.js",
-        "cwd": "./",
-    },
-    "App running!",
+memory.log_tool_call(
+    "execute_bash",
+    {"cmd": "node app.js"},
+    "App running on port 3000",
 )
 
 memory.end_session("success")
 
 procedures = memory.learn(min_samples=1)
 
-guidance = memory.render_procedure_guidance(procedures[0])
-print(guidance)
-```
-
-Example guidance:
-
-```text
-# PAST LEARNED PROCEDURE
-
-When fixing a missing Node dependency:
-
-Step 1: Run `node <FILE_PATH_1>` to reproduce the missing dependency error.
-Step 2: If the error says `Cannot find module '<PKG_1>'`, run `npm install <PKG_1>`.
-Step 3: Run `node <FILE_PATH_1>` again to verify the fix.
-```
-
----
-
-## Example: Using Learned Procedures
-
-```python
 suggestions = memory.suggest_procedure(
-    "Run server.js. It will crash because the missing package is cors.",
+    "Fix a Node app that cannot find module cors",
     top_k=3,
-    min_confidence=0.0,
 )
 
-guidance = memory.render_procedure_guidance(
-    suggestions,
-    bindings={
-        "<FILE_PATH_1>": "server.js",
-        "<PKG_1>": "cors",
-        "<PATH_1>": "./",
-    },
-)
-
-print(guidance)
-```
-
-The agent receives:
-
-```text
-Fast path for this task:
-- The objective already names the missing package as `cors`.
-- You may skip reproducing the crash and run `npm install cors` first.
-- Then verify with `node server.js`.
+for suggestion in suggestions:
+    print(suggestion)
 ```
 
 ---
 
-## Enterprise Agent Benchmarks
-
-Howdex is not just a trace logger. The following live benchmarks show learned procedural memory changing future agent behaviour.
-
----
-
-### 1. Missing Node Dependency Benchmark
-
-**Scenario:** an agent has to run a broken Node file.
-
-Training task:
-
-```text
-node app.js
-→ Cannot find module 'express'
-
-npm install express
-
-node app.js
-→ App running!
-```
-
-Howdex learned:
-
-```text
-Step 1: node <FILE_PATH_1>
-Step 2: npm install <PKG_1>
-Step 3: node <FILE_PATH_1>
-```
-
-Then it applied the same learned procedure to a different file and package:
-
-```text
-server.js
-cors
-```
-
-Benchmark result:
-
-```text
-First run tool calls without memory: 3
-Second run tool calls with Howdex guidance: 2
-RESULT: PASS — Howdex guidance reduced agent thrashing.
-```
-
-**What this proves:** Howdex can convert a live LLM terminal trace into a reusable parameterized procedure and reduce future tool calls.
-
----
-
-### 2. Context-Aware State Machine Benchmark
-
-**Scenario:** the same task, `db_migration`, has two conflicting safe procedures depending on environment.
-
-- `LOCAL`: safe to reset the database.
-- `PROD`: destructive reset commands must never run.
-
-Howdex learned both context-conditioned variants:
-
-```text
-[HOWDEX] learned procedures: 2
-
-Procedure 1: db_migration [env_type=LOCAL]
-Step 1: echo $ENV_TYPE
-Step 2: dropdb mydb
-Step 3: createdb mydb
-Step 4: migrate mydb
-Step 5: validate mydb
-
-Procedure 2: db_migration [env_type=PROD]
-Step 1: echo $ENV_TYPE
-Step 2: pg_dump mydb
-Step 3: migrate mydb
-Step 4: validate mydb
-```
-
-Final PROD memory-test result:
-
-```text
-PROD memory-test commands:
-['echo $ENV_TYPE', 'pg_dump mydb', 'migrate mydb', 'validate mydb']
-
-RESULT: PASS — Howdex guidance supported PROD-safe procedure selection.
-```
-
-**What this proves:** Howdex can learn competing procedures for the same task and preserve them as context-conditioned variants. It learns not just what worked, but when it is safe to use it.
-
----
-
-### 3. Semantic Leap Benchmark
-
-**Scenario:** the agent first learns an S3 deployment recovery path:
-
-```text
-aws s3 cp ./assets s3://staging-bucket
-→ AccessDenied
-
-aws sso login --profile staging
-
-aws s3 cp ./assets s3://staging-bucket
-→ success
-```
-
-Then it is given a different task it has never seen before: update a Lambda function in the same staging environment.
-
-Without Howdex memory:
-
-```text
-Control run commands:
-['aws lambda update-function-code --function-name api-staging',
- 'aws sso login --profile staging',
- 'aws lambda update-function-code --function-name api-staging']
-
-Control Run Tool Calls (No Memory): 3
-```
-
-With Howdex cross-task semantic retrieval:
-
-```text
-[HOWDEX SEMANTIC GUIDANCE]
-
-## deploy_s3
-
-Step 1: aws s3 cp <FILE_PATH_1> s3://staging-bucket
-Step 2: aws sso login --profile staging
-Step 3: aws s3 cp <FILE_PATH_1> s3://staging-bucket
-
-# SEMANTIC TRANSFER RULE
-
-Do not replay task-specific commands from the old procedure, such as `aws s3 cp`.
-Extract the reusable bottleneck-solving subroutine.
-
-Reusable subroutine discovered:
-- Prior staging cloud task failed with AccessDenied.
-- The successful recovery step was `aws sso login --profile staging`.
-- After that login, the cloud operation succeeded.
-```
-
-The agent reused only the transferable auth subroutine:
-
-```text
-Howdex semantic run commands:
-['aws sso login --profile staging',
- 'aws lambda update-function-code --function-name api-staging']
-
-Howdex Run Tool Calls (Semantic Transfer): 2
-
-RESULT: PASS — JAW DROPPED. Howdex transferred the staging auth procedure across different cloud tasks.
-```
-
-**What this proves:** Howdex can retrieve and reuse an operational skill learned from one task (`deploy_s3`) inside a different task (`deploy_lambda_test`). This is cross-task procedural transfer, not same-task replay.
-
----
-
-### Benchmark Summary
-
-| Benchmark | Without Howdex | With Howdex | Result |
-|---|---:|---:|---|
-| Missing Node dependency | 3 tool calls | 2 tool calls | Learned package-install fix and skipped known failure |
-| PROD database migration | Unsafe path possible | `pg_dump → migrate → validate` | Context-conditioned safe procedure selected |
-| Cross-task cloud auth | 3 tool calls | 2 tool calls | S3 auth recovery transferred to Lambda deploy |
-
-Howdex turns messy execution traces into reusable, parameterized, context-aware procedures that agents can apply before repeating known mistakes.
-
----
-
-## API Overview
-
-### `Howdex(path=None, embedder="hashing")`
-
-Creates a local Howdex memory store.
+## Typical API
 
 ```python
+from howdex import Howdex
+
 memory = Howdex(path=".howdex.db", embedder="hashing")
-```
 
-### `start_session(task)`
-
-Starts an episodic trace.
-
-```python
-memory.start_session("deploy_s3")
-```
-
-### `log_step(action, observation)`
-
-Logs a structured step and its result.
-
-```python
-memory.log_step(
-    {"tool": "bash", "cmd": "aws sso login --profile staging"},
-    "Successfully logged into profile: staging",
-)
-```
-
-### `end_session(outcome)`
-
-Ends the current episode.
-
-```python
+memory.start_session("task_signature")
+memory.log_tool_call("tool_name", {"arg": "value"}, "observation")
 memory.end_session("success")
-```
 
-### `learn(min_samples=1)`
-
-Compiles observed episodes into procedures.
-
-```python
 procedures = memory.learn(min_samples=1)
+suggestions = memory.suggest_procedure("new task description", top_k=5)
 ```
 
-### `suggest_procedure(task, context=None, top_k=3, min_confidence=0.0)`
+The exact internal schema continues to evolve, but the product boundary is stable:
 
-Retrieves learned procedures that may apply to a new task.
-
-```python
-suggestions = memory.suggest_procedure(
-    "Update the backend API in staging using Lambda",
-    top_k=3,
-    min_confidence=0.0,
-)
-```
-
-### `render_procedure_guidance(procedures, bindings=None)`
-
-Formats learned procedures as agent-usable instructions.
-
-```python
-guidance = memory.render_procedure_guidance(
-    suggestions[0],
-    bindings={"<PROFILE_1>": "staging"},
-)
+```text
+trace → learn → retrieve → render guidance → future agent acts with memory
 ```
 
 ---
 
 ## Design Principles
 
-### 1. Evidence over vibes
+### 1. Evidence Before Guidance
 
-Howdex procedures are grounded in observed episodes.
-
-Each learned procedure can carry:
-
-- support count,
-- success rate,
-- confidence,
-- source episode IDs,
-- verification status,
-- provenance.
+Howdex should not render a procedure as guidance unless it has evidence that the procedure worked.
 
 ---
 
-### 2. Parameterization before reuse
+### 2. Failures Are First-Class
 
-Howdex avoids memorizing brittle one-off strings.
+A failed command is not noise. It is operational information.
 
-It turns:
-
-```text
-npm install express
-```
-
-into:
-
-```text
-npm install <PKG_1>
-```
-
-and:
-
-```text
-node app.js
-```
-
-into:
-
-```text
-node <FILE_PATH_1>
-```
+Knowing which path failed prevents future agents from wasting attempts.
 
 ---
 
-### 3. Context matters
+### 3. Parameterize the World
+
+Do not memorize `express` when the reusable concept is `<PKG_1>`.
+
+Do not memorize `data_1.zdat` when the reusable concept is `<INPUT_FILE_1>`.
+
+---
+
+### 4. Context Matters
 
 A procedure that is safe locally may be dangerous in production.
 
-Howdex supports preconditions such as:
-
-```text
-env_type=LOCAL
-env_type=PROD
-```
-
-so agents can distinguish safe branches.
+Howdex should preserve context and render warnings when context changes.
 
 ---
 
-### 4. Procedures should teach agents
+### 5. Real Verifiers Beat Self-Report
 
-A memory object is not enough.
+A benchmark only counts when an external state change, process result, receipt, or verifier confirms the outcome.
 
-Howdex renders procedures as guidance that agents can actually follow.
-
----
-
-### 5. Cross-task transfer is the goal
-
-The strongest agent memory is not same-task replay.
-
-It is reusable operational skill:
-
-```text
-AccessDenied in staging → aws sso login --profile staging
-```
-
-applied across S3, Lambda, deployment, and other cloud tasks.
+The model saying “DONE” is not enough.
 
 ---
 
-## Repository Benchmarks
+## What Howdex Is Not
 
-The benchmark scripts used above are intended to be run locally:
+Howdex is not:
 
-```bash
-python3 live_agent.py
-python3 tough_test.py
-python3 god_mode_test.py
-```
+- an autonomous agent framework,
+- a browser automation tool,
+- a hosted orchestration system,
+- a vector database wrapper,
+- a replacement for sandboxing or policy enforcement,
+- proof that arbitrary generated code is safe to reuse.
 
-They mock dangerous operations and cloud commands, so they can be run safely without touching real infrastructure.
-
----
-
-## Testing
-
-Run the full suite:
-
-```bash
-python -m pytest
-```
-
-Current benchmarked state:
-
-```text
-223 passed
-```
-
----
-
-## Project Status
-
-Howdex is early but functional.
-
-It currently demonstrates:
-
-- structured procedural extraction,
-- parameterized command memory,
-- context-conditioned variants,
-- deterministic guidance rendering,
-- verification/provenance-aware output,
-- cross-task semantic procedure retrieval,
-- live LLM benchmark improvement.
+Howdex is the memory layer underneath agents that need to remember operational know-how.
 
 ---
 
 ## Roadmap
 
-Planned improvements:
+Near-term:
 
-- stronger semantic retrieval over learned subroutines,
-- richer precondition inference,
-- procedure conflict detection,
-- policy-aware unsafe-action filtering,
-- better visualization of learned DAGs,
-- first-class benchmark harness,
-- integration adapters for common agent frameworks,
-- MCP server support,
-- hosted procedure registry.
+- stronger real benchmark suite,
+- no-synthesis abstraction experiments,
+- richer renderer for procedure guidance,
+- safer artifact handling,
+- procedure provenance and receipts,
+- improved hydration of raw examples from storage,
+- benchmark folders for staged vs real tests.
+
+Future:
+
+- policy-aware memory rendering,
+- sandbox-aware generated tool replay,
+- multi-agent memory merge with receipts,
+- production connectors,
+- hosted registry of verified operational procedures.
 
 ---
 
-## Philosophy
+## Development
 
-Agents should not rediscover the same operational truth forever.
+Run tests:
 
-They should learn:
+```bash
+python -m pytest
+```
 
-- this error means this recovery,
-- this environment requires this safety path,
-- this setup step unlocks future work,
-- this procedure worked before,
-- this branch is dangerous in production.
+Run the real benchmark suite manually:
 
-Howdex is the memory layer for that.
+```bash
+python3 real_macgyver_test.py
+HOWDEX_AB_TRIALS=5 HOWDEX_AB_MAX_TURNS=20 python3 real_macgyver_ab_test.py
+HOWDEX_POLY_TRIALS=5 HOWDEX_POLY_MAX_TURNS=12 python3 polyglot_macgyver_test.py
+```
+
+The real benchmarks use live model calls and may incur API cost.
+
+---
+
+## Positioning
+
+The short version:
+
+```text
+Howdex is procedural memory for agents.
+```
+
+The sharper version:
+
+```text
+Howdex turns one expensive agent discovery into reusable operational intelligence.
+```
+
+The benchmark-backed version:
+
+```text
+Howdex improved success from 0% to 100% in a real Python-to-Bash crypto transfer benchmark without pasting source code.
+```
 
 ---
 
 ## License
 
-Apache-2.0
+See `LICENSE`.
