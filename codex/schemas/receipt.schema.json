@@ -2,6 +2,18 @@
   "$id": "https://github.com/rossbuckley1990-hash/Howdex/codex/schemas/receipt.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "procedure_id"
+      ]
+    },
+    {
+      "required": [
+        "task_signature"
+      ]
+    }
+  ],
   "description": "Run-specific verification evidence for a Howdex Codex procedure.",
   "properties": {
     "artifact_hashes": {
@@ -12,6 +24,17 @@
       "type": "object"
     },
     "environment": {
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      },
+      "type": "object"
+    },
+    "environment_fingerprint": {
       "additionalProperties": {
         "type": [
           "string",
@@ -41,12 +64,21 @@
       "minLength": 1,
       "type": "string"
     },
+    "source_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
     "status": {
       "enum": [
-        "pass",
-        "fail",
+        "verified",
+        "failed",
+        "stale",
         "unknown"
       ],
+      "type": "string"
+    },
+    "task_signature": {
+      "minLength": 1,
       "type": "string"
     },
     "verified_at": {
@@ -64,15 +96,15 @@
   },
   "required": [
     "receipt_id",
-    "procedure_id",
     "verifier_type",
     "verifier_command",
     "expected_signal",
     "observed_signal",
     "exit_code",
     "verified_at",
-    "environment",
+    "environment_fingerprint",
     "artifact_hashes",
+    "source_episode_id",
     "status"
   ],
   "title": "Howdex Codex Verification Receipt",

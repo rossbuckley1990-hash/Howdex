@@ -6,12 +6,19 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from openai import OpenAI
+from benchmark_openai import get_openai_client
 from howdex import Howdex
 from howdex.core.guidance import render_procedure_guidance
 
 
-client = OpenAI()
+_CLIENT = None
+
+
+def _openai_client():
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = get_openai_client()
+    return _CLIENT
 
 DB_PATH = ".howdex_real_macgyver.db"
 for suffix in ("", "-wal", "-shm"):
@@ -285,7 +292,7 @@ Reply DONE only after the real Python process extracts 7781.
     extracted = None
 
     for _ in range(10):
-        response = client.chat.completions.create(
+        response = _openai_client().chat.completions.create(
             model=model,
             messages=messages,
             tools=tools,

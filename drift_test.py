@@ -2,12 +2,19 @@ import json
 import os
 from pathlib import Path
 
-from openai import OpenAI
+from benchmark_openai import get_openai_client
 from howdex import Howdex
 from howdex.core.guidance import render_procedure_guidance
 
 
-client = OpenAI()
+_CLIENT = None
+
+
+def _openai_client():
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = get_openai_client()
+    return _CLIENT
 
 DB_PATH = ".howdex_drift.db"
 for suffix in ("", "-shm", "-wal"):
@@ -179,7 +186,7 @@ Do not use bash to print DONE. DONE must be a normal final assistant message.
     success = False
 
     for _turn in range(max_turns):
-        response = client.chat.completions.create(
+        response = _openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
             tools=tools,

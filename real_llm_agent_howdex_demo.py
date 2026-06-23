@@ -3,7 +3,7 @@ import os
 import shutil
 from pathlib import Path
 
-from openai import OpenAI
+from benchmark_openai import get_openai_client
 from howdex import Howdex
 
 
@@ -21,7 +21,14 @@ env_file = demo_dir / ".env.production"
 migration_file = demo_dir / "migration.sql"
 
 mem = Howdex(path=str(db_path))
-client = OpenAI()
+_CLIENT = None
+
+
+def _openai_client():
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = get_openai_client()
+    return _CLIENT
 
 
 TOOLS = [
@@ -158,7 +165,7 @@ Return ONLY valid JSON in this exact format:
 }}
 """.strip()
 
-    response = client.responses.create(
+    response = _openai_client().responses.create(
         model=MODEL,
         input=prompt,
     )
