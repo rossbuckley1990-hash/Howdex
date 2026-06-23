@@ -1,0 +1,70 @@
+{
+  "avoid": [
+    "Do not trust readable TARGET or VAL strings because the file contains decoys.",
+    "Do not hardcode the XOR key, payload offset, or payload length.",
+    "Do not skip checksum validation before accepting the decoded payload.",
+    "Do not include or replay a prior decoder implementation as source."
+  ],
+  "category": "binary_format_recovery",
+  "id": "howdex.macgyver_zb2_decoder",
+  "learned_facts": [
+    "Inspect the binary file as indexed bytes rather than treating it as plain text.",
+    "Require the ZB2 magic marker before interpreting the compact header.",
+    "Read the dynamic XOR key from the key byte in the header.",
+    "Read the payload offset and payload length from their header bytes.",
+    "Slice only the encoded payload described by the header.",
+    "XOR payload bytes with the dynamic key and reverse the payload in the learned order.",
+    "Validate the decoded payload checksum against the trailing checksum byte.",
+    "Extract the real TARGET value only from the validated decoded payload."
+  ],
+  "policy": {
+    "allowed": [
+      "Inspect and decode an owned local benchmark fixture.",
+      "Create a fresh local decoder under sandbox file policy.",
+      "Run the deterministic local verifier against the current fixture."
+    ],
+    "forbidden": [
+      "Reusing the procedure to access data without authorization.",
+      "Accepting visible decoy text as verified output.",
+      "Pasting historical decoder source into guidance."
+    ],
+    "requires_human_review": false,
+    "source_artifacts": "excluded"
+  },
+  "provenance": {
+    "evidence": [
+      "The real MacGyver filesystem benchmark requires the decoded TARGET to match the hidden fixture value.",
+      "The real MacGyver A/B benchmark compares no-memory and Howdex-guided student runs."
+    ],
+    "learned_from": [
+      "real_macgyver_test.py",
+      "real_macgyver_ab_test.py"
+    ],
+    "limitations": [
+      "The procedure applies only to the documented ZB2 benchmark format.",
+      "It is not a general binary-analysis or security authorization."
+    ]
+  },
+  "risk_level": "medium",
+  "source": {
+    "kind": "benchmark-derived",
+    "name": "Real MacGyver ZB2 recovery benchmarks",
+    "reference": "real_macgyver_ab_test.py"
+  },
+  "status": "experimental",
+  "tags": [
+    "binary",
+    "checksum",
+    "decoder",
+    "macgyver",
+    "xor"
+  ],
+  "title": "Recover the validated TARGET from a ZB2 binary fixture",
+  "verification": {
+    "expected_signal": "The verifier reports SUCCESS and the decoder output contains the true hidden TARGET value.",
+    "status": "required",
+    "verifier_command": "python3 decoder.py challenge.zb2",
+    "verifier_type": "hidden_target_verifier"
+  },
+  "version": "1.0.0"
+}

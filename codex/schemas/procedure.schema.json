@@ -1,0 +1,206 @@
+{
+  "$id": "https://github.com/rossbuckley1990-hash/Howdex/codex/schemas/procedure.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A public, versioned Howdex operational procedure.",
+  "properties": {
+    "avoid": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "category": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "learned_facts": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "forbidden": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requires_human_review": {
+          "type": "boolean"
+        },
+        "source_artifacts": {
+          "enum": [
+            "excluded",
+            "excluded_by_default",
+            "policy_controlled"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "allowed",
+        "forbidden",
+        "requires_human_review",
+        "source_artifacts"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "learned_from": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "evidence",
+        "learned_from",
+        "limitations"
+      ],
+      "type": "object"
+    },
+    "risk_level": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reference": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "reference"
+      ],
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "candidate",
+        "experimental",
+        "verified",
+        "deprecated"
+      ],
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "verification": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_signal": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "required",
+            "verified",
+            "failed",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "verifier_command": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "verifier_type": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_signal",
+        "status",
+        "verifier_command",
+        "verifier_type"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "version",
+    "category",
+    "status",
+    "source",
+    "risk_level",
+    "learned_facts",
+    "avoid",
+    "verification",
+    "policy",
+    "provenance",
+    "tags"
+  ],
+  "title": "Howdex Codex Procedure",
+  "type": "object"
+}
