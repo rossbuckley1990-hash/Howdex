@@ -42,6 +42,7 @@ from typing import Any
 from openai import OpenAI
 
 from howdex import Howdex
+from howdex.core.guidance import render_agent_guidance
 
 
 DB_PATH = ".howdex_real_macgyver_ab.db"
@@ -222,6 +223,24 @@ def extract_raw_examples_from_sqlite() -> list[dict[str, Any]]:
     return examples
 
 
+def source_pasted_in_guidance(guidance: str) -> bool:
+    """Detect decoder-source leakage conservatively in treatment guidance."""
+    patterns = (
+        r"```",
+        r"(?m)^\s*(?:from\s+\S+\s+import\s+|import\s+\S+)",
+        r"(?m)^\s*(?:async\s+)?def\s+\w+\s*\(",
+        r"(?m)^\s*class\s+\w+",
+        r"(?m)^\s*#!.*python",
+        r"\bopen\s*\(",
+        r"\bread_bytes\s*\(",
+        r"\bread_text\s*\(",
+        r"\bsys\.argv\b",
+        r"\bPath\s*\(",
+        r"\bbytes\s*\(\s*\([^)]*\^",
+    )
+    return any(re.search(pattern, guidance) for pattern in patterns)
+
+
 def build_howdex_operational_memory(memory: Howdex) -> tuple[str, bool, bool]:
     """Return non-source operational memory.
 
@@ -300,44 +319,38 @@ def build_howdex_operational_memory(memory: Howdex) -> tuple[str, bool, bool]:
 
     has_memory = bool(suggestions) and observed_success and bool(learned_facts)
 
-    guidance = [
-        "# HOWDEX PRIOR OPERATIONAL MEMORY",
-        "",
-        "Use this as prior operational memory. It is not source code.",
-        "Do not copy any previous decoder implementation; write a fresh decoder for the current file.",
-        "",
-        "Learned facts:",
-    ]
-
-    for fact in learned_facts:
-        guidance.append(f"- {fact}")
-
-    if observed_failed_attempts:
-        guidance.extend(["", "Previously observed failed commands:"])
-        for cmd in sorted(set(observed_failed_attempts)):
-            guidance.append(f"- {cmd}")
-
-    guidance.extend(
-        [
-            "",
-            "Verification:",
-            "- Write decoder.py.",
-            "- Run exactly: python3 decoder.py challenge.zb2.",
-            "- Only mark done after the real verifier reports SUCCESS.",
-        ]
+    primary = suggestions[0] if suggestions else None
+    payload = {
+        "task_signature": (
+            getattr(primary, "task_signature", None)
+            or "hard ZB2 decoder transfer"
+        ),
+        "confidence": getattr(primary, "confidence", None),
+        "support_count": getattr(primary, "support_count", None),
+        "learned_facts": learned_facts,
+        "failed_attempts": sorted(set(observed_failed_attempts)),
+        "verification": [
+            "Write a fresh decoder.py for the current challenge.",
+            "Run exactly: python3 decoder.py challenge.zb2.",
+            "Only mark done after the real verifier reports SUCCESS.",
+            "The decoder output must contain the true hidden TARGET integer.",
+        ],
+    }
+    rendered = render_agent_guidance(
+        [payload],
+        objective="Decode challenge.zb2 and extract the hidden TARGET integer.",
+        constraints=[
+            "Do not copy or paste a previous decoder implementation.",
+            "Write a fresh decoder.py for the current challenge file.",
+            "Treat readable TARGET and VAL strings as decoys.",
+        ],
+        target_environment="restricted Python filesystem tool sandbox",
+        include_source=False,
+        include_failed_attempts=True,
+        include_verification=True,
     )
 
-    rendered = "\n".join(guidance)
-
-    source_pasted = (
-        "```" in rendered
-        or "import " in rendered
-        or "def " in rendered
-        or "open(" in rendered
-        or "read_bytes" in rendered
-    )
-
-    return rendered, has_memory, source_pasted
+    return rendered, has_memory, source_pasted_in_guidance(rendered)
 
 
 def run_agent(
@@ -687,6 +700,7 @@ def main() -> None:
         teacher.success
         and memory_available
         and source_not_pasted
+        and treatment_summary["success_rate"] >= 0.80
         and treatment_summary["success_rate"] > control_summary["success_rate"]
     )
 
