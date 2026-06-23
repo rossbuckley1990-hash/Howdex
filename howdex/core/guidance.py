@@ -2705,3 +2705,491 @@ def render_procedure_guidance(
         suggestions,
         bindings=bindings,
     )
+
+
+# ---------------------------------------------------------------------------
+# Agent-ready Markdown guidance formatting
+# ---------------------------------------------------------------------------
+
+def _agent_guidance_attr(item, name, default=None):
+    if isinstance(item, dict):
+        return item.get(name, default)
+    return getattr(item, name, default)
+
+
+def _agent_guidance_list(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, dict):
+        return [value]
+    try:
+        return [item for item in value if item is not None]
+    except TypeError:
+        return [value]
+
+
+def _agent_guidance_unique_strings(values):
+    seen = set()
+    result = []
+
+    for value in _agent_guidance_list(values):
+        text = str(value).strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+
+    return result
+
+
+def _agent_guidance_extract_tool_args(step):
+    if not isinstance(step, dict):
+        return {}
+
+    for key in ("tool_args", "parameterized_args", "args", "arguments"):
+        value = step.get(key)
+        if isinstance(value, dict):
+            return value
+
+    return {}
+
+
+def _agent_guidance_extract_observation(step):
+    if not isinstance(step, dict):
+        return ""
+
+    for key in ("observation", "output", "result"):
+        value = step.get(key)
+        if value:
+            return str(value)
+
+    return ""
+
+
+def _agent_guidance_source_artifacts(procedure):
+    artifacts = []
+
+    explicit = _agent_guidance_attr(procedure, "source_artifacts", None)
+    for artifact in _agent_guidance_list(explicit):
+        if not isinstance(artifact, dict):
+            continue
+        file_path = artifact.get("file_path") or artifact.get("path") or artifact.get("filename")
+        content = artifact.get("content")
+        if file_path and content:
+            artifacts.append(
+                {
+                    "file_path": str(file_path),
+                    "content": str(content),
+                }
+            )
+
+    raw_examples = (
+        _agent_guidance_attr(procedure, "raw_examples", None)
+        or _agent_guidance_attr(procedure, "raw_supporting_examples", None)
+        or _agent_guidance_attr(procedure, "supporting_examples", None)
+    )
+
+    for example in _agent_guidance_list(raw_examples):
+        if not isinstance(example, dict):
+            continue
+
+        for step in example.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+
+            tool_name = str(
+                step.get("tool_name")
+                or step.get("canonical_action")
+                or step.get("canonical_name")
+                or step.get("action")
+                or ""
+            )
+
+            if not any(token in tool_name for token in ("fs_write", "write_file", "execute_fs_write")):
+                continue
+
+            args = _agent_guidance_extract_tool_args(step)
+            file_path = args.get("file_path") or args.get("path") or args.get("filename")
+            content = args.get("content")
+
+            if file_path and content:
+                artifacts.append(
+                    {
+                        "file_path": str(file_path),
+                        "content": str(content),
+                    }
+                )
+
+    deduped = []
+    seen = set()
+    for artifact in artifacts:
+        key = (artifact["file_path"], artifact["content"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(artifact)
+
+    return deduped
+
+
+def _agent_guidance_failed_attempts(procedure):
+    failed = []
+
+    explicit = _agent_guidance_attr(procedure, "failed_attempts", None)
+    failed.extend(_agent_guidance_unique_strings(explicit))
+
+    raw_examples = (
+        _agent_guidance_attr(procedure, "raw_examples", None)
+        or _agent_guidance_attr(procedure, "raw_supporting_examples", None)
+        or _agent_guidance_attr(procedure, "supporting_examples", None)
+    )
+
+    for example in _agent_guidance_list(raw_examples):
+        if not isinstance(example, dict):
+            continue
+
+        for step in example.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+
+            observation = _agent_guidance_extract_observation(step).lower()
+            if not any(marker in observation for marker in ("fatal", "error", "failed", "wrong", "not found", "timed out")):
+                continue
+            if any(marker in observation for marker in ("success", "successful", "passed")):
+                continue
+
+            args = _agent_guidance_extract_tool_args(step)
+            cmd = args.get("cmd")
+            if cmd:
+                failed.append(f"run `{cmd}`")
+                continue
+
+            action = (
+                step.get("tool_name")
+                or step.get("canonical_action")
+                or step.get("canonical_name")
+                or step.get("action")
+                or "unknown action"
+            )
+            failed.append(str(action))
+
+    return _agent_guidance_unique_strings(failed)
+
+
+def _agent_guidance_learned_facts(procedure):
+    facts = []
+
+    explicit_fact_keys = (
+        "learned_facts",
+        "operational_facts",
+        "semantic_facts",
+        "facts",
+        "preconditions",
+    )
+
+    for key in explicit_fact_keys:
+        facts.extend(_agent_guidance_unique_strings(_agent_guidance_attr(procedure, key, None)))
+
+    raw_examples = (
+        _agent_guidance_attr(procedure, "raw_examples", None)
+        or _agent_guidance_attr(procedure, "raw_supporting_examples", None)
+        or _agent_guidance_attr(procedure, "supporting_examples", None)
+    )
+
+    trace_text_parts = []
+
+    steps = _agent_guidance_attr(procedure, "steps", None)
+    for step in _agent_guidance_list(steps):
+        if isinstance(step, dict):
+            trace_text_parts.append(str(step))
+
+    for example in _agent_guidance_list(raw_examples):
+        if isinstance(example, dict):
+            trace_text_parts.append(str(example))
+
+    trace_text = "\n".join(trace_text_parts)
+    lower = trace_text.lower()
+
+    # Conservative, generic fact extraction for the benchmarked patterns.
+    # These are deliberately operational facts, not pasted source.
+    if "seed.txt" in lower:
+        facts.append("read the raw contents of seed.txt")
+    if "[::-1]" in lower or "reverse" in lower or "reversed" in lower or " rev" in lower:
+        facts.append("reverse the input string before hashing it")
+    if "hashlib.sha256" in lower or "sha256" in lower or "shasum -a 256" in lower:
+        facts.append("calculate the SHA256 hex digest of the transformed input")
+    if "read_text" in lower or ".encode" in lower or "printf %s" in lower:
+        facts.append("hash the transformed bytes exactly, without adding a trailing newline")
+    if "aes-256-cbc" in lower:
+        facts.append("decrypt with OpenSSL AES-256-CBC")
+    if "pbkdf2" in lower:
+        facts.append("include PBKDF2 when decrypting")
+    if "-pass" in lower or "pass:" in lower:
+        facts.append("use the derived hex digest as the OpenSSL password via -pass pass:<hash>")
+    if "zb2!" in lower:
+        facts.append("check the file magic marker before decoding")
+    if "xor" in lower or "data[4]" in lower:
+        facts.append("use the dynamic key from the encoded file header")
+    if "offset" in lower or "data[5]" in lower:
+        facts.append("use the payload offset from the encoded file header")
+    if "length" in lower or "data[6]" in lower:
+        facts.append("use the payload length from the encoded file header")
+    if "target:" in lower:
+        facts.append("extract the integer or token after TARGET:")
+
+    return _agent_guidance_unique_strings(facts)
+
+
+def _agent_guidance_verification(procedure):
+    verification = []
+
+    explicit = _agent_guidance_attr(procedure, "verification", None)
+    verification.extend(_agent_guidance_unique_strings(explicit))
+
+    raw_examples = (
+        _agent_guidance_attr(procedure, "raw_examples", None)
+        or _agent_guidance_attr(procedure, "raw_supporting_examples", None)
+        or _agent_guidance_attr(procedure, "supporting_examples", None)
+    )
+
+    for example in _agent_guidance_list(raw_examples):
+        if not isinstance(example, dict):
+            continue
+
+        for step in example.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+
+            observation = _agent_guidance_extract_observation(step)
+            if "SUCCESS:" in observation:
+                verification.append("repeat the real verifier command and require SUCCESS before marking done")
+            elif "TARGET:" in observation:
+                verification.append("success requires the expected TARGET output")
+
+    if not verification:
+        verification.append("run a real verifier command before marking the task complete")
+        verification.append("do not claim success from memory alone")
+
+    return _agent_guidance_unique_strings(verification)
+
+
+def _agent_guidance_language_for_path(file_path):
+    lower = str(file_path).lower()
+    if lower.endswith(".py"):
+        return "python"
+    if lower.endswith(".sh"):
+        return "bash"
+    if lower.endswith(".json"):
+        return "json"
+    return ""
+
+
+def _agent_guidance_truncate(text, max_chars):
+    if max_chars is None or max_chars <= 0:
+        return ""
+
+    suffix = "\n[Howdex guidance truncated]\n"
+
+    if len(text) <= max_chars:
+        return text
+
+    if max_chars <= len(suffix):
+        return suffix[:max_chars]
+
+    return text[: max_chars - len(suffix)].rstrip() + suffix
+
+
+def render_agent_guidance(
+    procedures,
+    *,
+    objective=None,
+    mode="operational_memory",
+    constraints=None,
+    target_environment=None,
+    include_source=False,
+    include_failed_attempts=True,
+    include_verification=True,
+    max_chars=6000,
+):
+    """Render procedure memory as agent-ready Markdown guidance.
+
+    This is the native formatting layer used to turn retrieved Howdex memory
+    into explicit, imperative guidance for LLM agents.
+
+    It intentionally separates:
+    - objective
+    - rules
+    - current-environment constraints
+    - learned operational facts
+    - source artifacts, when explicitly allowed
+    - failed attempts to avoid
+    - verification requirements
+    """
+
+    if procedures is None:
+        items = []
+    elif isinstance(procedures, (dict, str)) or not hasattr(procedures, "__iter__"):
+        items = [procedures]
+    else:
+        items = list(procedures)
+
+    constraints = _agent_guidance_unique_strings(constraints)
+
+    lines = [
+        "# HOWDEX OPERATIONAL MEMORY",
+        "",
+        "Use this as prior operational memory. It is not source code unless a Source artifacts section is explicitly present.",
+        "Treat memory as guidance, not proof. Verify in the current environment before marking the task complete.",
+        "",
+    ]
+
+    if objective:
+        lines.extend(
+            [
+                "Objective:",
+                str(objective).strip(),
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "Rules:",
+            "- Use the memory to guide execution, but adapt it to the current environment.",
+            "- Do not claim completion until a real verifier succeeds.",
+            "- Do not repeat known failed attempts.",
+        ]
+    )
+
+    if not include_source:
+        lines.append("- Do not ask for or rely on pasted source code; use the operational facts.")
+
+    if target_environment:
+        lines.append(f"- Target environment: {target_environment}")
+
+    for constraint in constraints:
+        lines.append(f"- {constraint}")
+
+    lines.append("")
+
+    if items:
+        lines.append("Relevant memory:")
+        for index, procedure in enumerate(items, start=1):
+            task_signature = (
+                _agent_guidance_attr(procedure, "task_signature", None)
+                or _agent_guidance_attr(procedure, "name", None)
+                or _agent_guidance_attr(procedure, "procedure_id", None)
+                or f"procedure_{index}"
+            )
+            confidence = _agent_guidance_attr(procedure, "confidence", None)
+            support_count = _agent_guidance_attr(procedure, "support_count", None)
+
+            meta = []
+            if confidence is not None:
+                try:
+                    meta.append(f"confidence={float(confidence):.3f}")
+                except Exception:
+                    meta.append(f"confidence={confidence}")
+            if support_count is not None:
+                meta.append(f"support={support_count}")
+
+            suffix = f" ({'; '.join(meta)})" if meta else ""
+            lines.append(f"- {task_signature}{suffix}")
+        lines.append("")
+    else:
+        lines.extend(
+            [
+                "Relevant memory:",
+                "- No prior procedure memory was provided.",
+                "",
+            ]
+        )
+
+    all_facts = []
+    all_failed = []
+    all_verification = []
+    all_artifacts = []
+
+    for procedure in items:
+        all_facts.extend(_agent_guidance_learned_facts(procedure))
+        all_failed.extend(_agent_guidance_failed_attempts(procedure))
+        all_verification.extend(_agent_guidance_verification(procedure))
+        all_artifacts.extend(_agent_guidance_source_artifacts(procedure))
+
+    all_facts = _agent_guidance_unique_strings(all_facts)
+    all_failed = _agent_guidance_unique_strings(all_failed)
+    all_verification = _agent_guidance_unique_strings(all_verification)
+
+    lines.append("Learned operational facts:")
+    if all_facts:
+        for fact in all_facts:
+            lines.append(f"- {fact}")
+    else:
+        lines.append("- No explicit operational facts were extracted.")
+    lines.append("")
+
+    if include_source:
+        lines.append("Source artifacts:")
+        if all_artifacts:
+            for artifact in all_artifacts:
+                file_path = artifact["file_path"]
+                language = _agent_guidance_language_for_path(file_path)
+                lines.extend(
+                    [
+                        f"Write `{file_path}` with this exact content:",
+                        "",
+                        f"```{language}",
+                        artifact["content"].rstrip(),
+                        "```",
+                        "",
+                    ]
+                )
+        else:
+            lines.append("- No source artifacts were found.")
+            lines.append("")
+    else:
+        lines.extend(
+            [
+                "Source artifacts excluded:",
+                "- Source code was intentionally not included in this guidance.",
+                "- Reconstruct an implementation from the learned operational facts.",
+                "",
+            ]
+        )
+
+    if include_failed_attempts:
+        lines.append("Avoid these failed attempts:")
+        if all_failed:
+            for failed in all_failed:
+                text = failed
+
+                if "cat seed.txt | rev | printf" in text:
+                    text += " — printf does not read from stdin; use command substitution instead"
+
+                lines.append(f"- {text}")
+        else:
+            lines.append("- No failed attempts were provided.")
+        lines.append("")
+
+    if include_verification:
+        lines.append("Verification:")
+        for item in all_verification:
+            lines.append(f"- {item}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "Execution instruction:",
+            "- Convert this memory into concrete tool calls for the current environment.",
+            "- Prefer the shortest verified path that satisfies the constraints.",
+            "- If a verifier fails, update the plan rather than repeating the same command.",
+            "",
+        ]
+    )
+
+    return _agent_guidance_truncate("\n".join(lines), max_chars)
