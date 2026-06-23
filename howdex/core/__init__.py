@@ -53,6 +53,7 @@ from howdex.core.parameterize import (
 from howdex.core.receipts import (
     VerificationReceipt,
     parse_bootproof_attestation,
+    procedure_trust_status,
     procedure_verification_status,
 )
 from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
@@ -97,7 +98,7 @@ __all__ = [
     "ProcedureSuggestion", "suggest_procedures", "render_procedure_guidance",
     "procedure_feedback_confidence", "procedure_success_rate",
     "VerificationReceipt", "parse_bootproof_attestation",
-    "procedure_verification_status",
+    "procedure_trust_status", "procedure_verification_status",
     "ParameterizedAction", "ParameterizedStep",
     "parameterize_action", "parameterize_steps",
     "parameterize_step_for_learning", "parameterize_steps_for_learning",

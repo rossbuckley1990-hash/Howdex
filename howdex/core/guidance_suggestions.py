@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from howdex.core.actions import canonicalize_steps
-from howdex.core.receipts import procedure_verification_status
+from howdex.core.receipts import (
+    procedure_trust_status,
+    procedure_verification_status,
+)
 from howdex.core.retrieval import tokenize
 from howdex.core.types import Procedure
 
@@ -31,6 +34,7 @@ class ProcedureSuggestion:
     match_explanation: dict[str, Any]
     proof_status: str
     verification_status: str
+    procedure_status: str
     procedure_verified: bool
     verification_receipts: list[dict[str, Any]]
     trace_evidence: list[dict[str, Any]] = field(
@@ -56,6 +60,7 @@ class ProcedureSuggestion:
             "match_explanation": self.match_explanation,
             "proof_status": self.proof_status,
             "verification_status": self.verification_status,
+            "procedure_status": self.procedure_status,
             "procedure_verified": self.procedure_verified,
             "verification_receipts": self.verification_receipts,
         }
@@ -72,9 +77,7 @@ def suggest_procedures(
     """Rank relevant learned procedures using deterministic local evidence."""
     task_text = " ".join(str(task or "").split())
     task_tokens = set(tokenize(task_text))
-    context_text, context_actions, context_targets, context_domains = (
-        _context_features(context)
-    )
+    context_text, context_actions, context_targets, context_domains = _context_features(context)
     for action in canonicalize_steps([task_text]) if task_text else []:
         if action.canonical_name in {
             "unknown_action",
@@ -101,18 +104,20 @@ def suggest_procedures(
         )
         domain_overlap = _domain_overlap(context_domains, procedure)
         semantic_transfer = _semantic_transfer_score(task_text, procedure)
-        if max(
-            task_similarity,
-            action_overlap,
-            target_overlap,
-            domain_overlap,
-            semantic_transfer,
-        ) <= 0.0:
+        if (
+            max(
+                task_similarity,
+                action_overlap,
+                target_overlap,
+                domain_overlap,
+                semantic_transfer,
+            )
+            <= 0.0
+        ):
             continue
 
         quality = round(
-            (0.55 * _bounded(procedure.confidence))
-            + (0.45 * _bounded(procedure.success_rate)),
+            (0.55 * _bounded(procedure.confidence)) + (0.45 * _bounded(procedure.success_rate)),
             6,
         )
         score = round(
@@ -135,9 +140,8 @@ def suggest_procedures(
             )
             if value > 0.0
         ]
-        verification_status = procedure_verification_status(
-            procedure.receipts
-        )
+        verification_status = procedure_verification_status(procedure.receipts)
+        trust_status = procedure_trust_status(procedure)
         ranked.append(
             ProcedureSuggestion(
                 procedure_id=procedure.id,
@@ -161,11 +165,10 @@ def suggest_procedures(
                 },
                 proof_status=_proof_status(procedure),
                 verification_status=verification_status,
-                procedure_verified=verification_status == "verified",
+                procedure_status=trust_status,
+                procedure_verified=trust_status == "verified",
                 verification_receipts=list(procedure.receipts),
-                trace_evidence=list(
-                    procedure.raw_supporting_examples
-                ),
+                trace_evidence=list(procedure.raw_supporting_examples),
             )
         )
 
@@ -179,9 +182,7 @@ def suggest_procedures(
             suggestion.procedure_id,
         )
     )
-    return ranked[
-        : min(MAX_PROCEDURE_SUGGESTIONS, max(0, int(top_k)))
-    ]
+    return ranked[: min(MAX_PROCEDURE_SUGGESTIONS, max(0, int(top_k)))]
 
 
 def _procedure_search_text(procedure: Procedure) -> str:
@@ -301,8 +302,7 @@ def _context_features(
     actions = {
         action.canonical_name
         for action in canonical
-        if action.canonical_name
-        not in {"unknown_action", "internal_memory_action"}
+        if action.canonical_name not in {"unknown_action", "internal_memory_action"}
     }
     targets = {
         action.target
@@ -346,8 +346,7 @@ def _task_similarity(
     if task_text and task_text.lower() == signature.lower():
         return 1.0
     if task_text and (
-        task_text.lower() in signature.lower()
-        or signature.lower() in task_text.lower()
+        task_text.lower() in signature.lower() or signature.lower() in task_text.lower()
     ):
         return 0.95
     return _jaccard(task_tokens, set(tokenize(signature)))
@@ -371,13 +370,9 @@ def _target_overlap(
     procedure: Procedure,
 ) -> float:
     targets = {
-        str(step.get("target"))
-        for step in _normalise_steps(procedure.steps)
-        if step.get("target")
+        str(step.get("target")) for step in _normalise_steps(procedure.steps) if step.get("target")
     }
-    target_tokens = {
-        token for target in targets for token in tokenize(target)
-    }
+    target_tokens = {token for target in targets for token in tokenize(target)}
     return round(
         max(
             _coverage(context_targets, targets),
@@ -403,18 +398,23 @@ def _domain_overlap(
 
 
 def _proof_status(procedure: Procedure) -> str:
+    trust_status = procedure_trust_status(procedure)
+    if trust_status in {
+        "verified",
+        "stale",
+        "failed_verification",
+    }:
+        return trust_status
     if procedure.unverified_use_count > 0:
         return "pending_unverified_use"
-    if procedure.source_episode_ids and procedure.support_count > 0:
+    if trust_status == "observed_episode_support":
         return "observed_episode_support_not_independently_verified"
     return "unverified"
 
 
 def _normalise_steps(steps: list[Any]) -> list[dict[str, Any]]:
     return [
-        dict(step)
-        if isinstance(step, dict)
-        else {"action": str(step), "canonical_name": str(step)}
+        dict(step) if isinstance(step, dict) else {"action": str(step), "canonical_name": str(step)}
         for step in steps
     ]
 

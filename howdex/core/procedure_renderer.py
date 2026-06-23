@@ -11,6 +11,10 @@ from howdex.core.guidance_artifacts import (
     render_artifact,
 )
 from howdex.core.guidance_utils import get_value
+from howdex.core.receipts import (
+    procedure_trust_status,
+    procedure_verification_status,
+)
 
 DEFAULT_GUIDANCE_MAX_CHARS = 4_000
 
@@ -42,6 +46,7 @@ def render_procedure_guidance(
 
     all_commands: list[str] = []
     receipt_statuses: list[str] = []
+    trust_statuses: list[str] = []
     for procedure_index, procedure in enumerate(procedure_list, start=1):
         title = (
             get_value(procedure, "task_signature")
@@ -55,9 +60,7 @@ def render_procedure_guidance(
             title = f"Procedure {procedure_index}: {title}"
 
         steps = _extract_steps(procedure)
-        commands = [
-            command for step in steps if (command := _extract_command(step))
-        ]
+        commands = [command for step in steps if (command := _extract_command(step))]
         labels = _step_labels(steps)
         all_commands.extend(commands)
         lines.extend(["", f"## {title}", ""])
@@ -65,11 +68,7 @@ def render_procedure_guidance(
         if _is_node_missing_dependency(commands):
             lines.extend(["When fixing a missing Node dependency:", ""])
             for index, command in enumerate(commands, start=1):
-                label = (
-                    labels[index - 1]
-                    if index - 1 < len(labels)
-                    else f"Step {index}"
-                )
+                label = labels[index - 1] if index - 1 < len(labels) else f"Step {index}"
                 if "npm install <PKG_1>" in command:
                     lines.append(
                         f"{label}: If the error says "
@@ -77,21 +76,13 @@ def render_procedure_guidance(
                     )
                 elif "node <FILE_PATH_1>" in command and index == 1:
                     lines.append(
-                        f"{label}: Run `{command}` to reproduce the missing "
-                        "dependency error."
+                        f"{label}: Run `{command}` to reproduce the missing dependency error."
                     )
                 elif "node <FILE_PATH_1>" in command:
-                    lines.append(
-                        f"{label}: Run `{command}` again to verify the fix."
-                    )
+                    lines.append(f"{label}: Run `{command}` again to verify the fix.")
                 else:
                     lines.append(f"{label}: {command}")
-            if (
-                objective
-                and bindings
-                and "<PKG_1>" in bindings
-                and "<FILE_PATH_1>" in bindings
-            ):
+            if objective and bindings and "<PKG_1>" in bindings and "<FILE_PATH_1>" in bindings:
                 lines.extend(
                     [
                         "",
@@ -105,26 +96,17 @@ def render_procedure_guidance(
                             f"`cd test_env && npm install "
                             f"{bindings['<PKG_1>']}` first."
                         ),
-                        (
-                            "- Then verify with `cd test_env && node "
-                            f"{bindings['<FILE_PATH_1>']}`."
-                        ),
+                        (f"- Then verify with `cd test_env && node {bindings['<FILE_PATH_1>']}`."),
                     ]
                 )
         else:
             lines.extend(["Follow this learned procedure:", ""])
             if commands:
                 for index, command in enumerate(commands, start=1):
-                    label = (
-                        labels[index - 1]
-                        if index - 1 < len(labels)
-                        else f"Step {index}"
-                    )
+                    label = labels[index - 1] if index - 1 < len(labels) else f"Step {index}"
                     lines.append(f"{label}: {command}")
             else:
-                lines.append(
-                    "Step 1: Review the learned procedure before acting."
-                )
+                lines.append("Step 1: Review the learned procedure before acting.")
 
         provenance = _provenance(procedure)
         if provenance:
@@ -134,6 +116,9 @@ def render_procedure_guidance(
         status = _receipt_status_text(procedure)
         if status and status not in receipt_statuses:
             receipt_statuses.append(status)
+        trust_status = procedure_trust_status(procedure)
+        if trust_status not in trust_statuses:
+            trust_statuses.append(trust_status)
 
     placeholders = _find_placeholders("\n".join(all_commands))
     if placeholders or bindings:
@@ -148,9 +133,7 @@ def render_procedure_guidance(
             if target:
                 lines.append(f"- Bind `{placeholder}` to {target}.")
             else:
-                lines.append(
-                    f"- Bind `{placeholder}` from the current task context."
-                )
+                lines.append(f"- Bind `{placeholder}` from the current task context.")
         if bindings:
             lines.extend(["", "Known bindings:"])
             for key in sorted(bindings):
@@ -166,10 +149,7 @@ def render_procedure_guidance(
             "- Re-run the final verification command before marking the task done.",
             "",
             "Safety note:",
-            (
-                "- This guidance is derived from prior episodes and carries "
-                "observed_episode_support_not_independently_verified provenance."
-            ),
+            _trust_warning(trust_statuses),
         ]
     )
     rendered = _bound("\n".join(lines).strip() + "\n", max_chars)
@@ -267,22 +247,14 @@ def _extract_command(step: Any) -> str:
     ):
         args = get_value(step, args_key)
         if isinstance(args, dict):
-            command = (
-                args.get("cmd")
-                or args.get("command")
-                or args.get("action")
-            )
+            command = args.get("cmd") or args.get("command") or args.get("action")
             if command:
                 return str(command)
     template = get_value(step, "template")
     if isinstance(template, dict):
         arguments = template.get("arguments")
         if isinstance(arguments, dict):
-            command = (
-                arguments.get("cmd")
-                or arguments.get("command")
-                or arguments.get("action")
-            )
+            command = arguments.get("cmd") or arguments.get("command") or arguments.get("action")
             if command:
                 return str(command)
     parameterized_action = get_value(step, "parameterized_action")
@@ -323,15 +295,11 @@ def _step_labels(steps: list[Any]) -> list[str]:
         except (TypeError, ValueError):
             raw_orders.append(index - 1)
     display_orders = [order + 1 for order in raw_orders]
-    counts = {
-        order: display_orders.count(order) for order in set(display_orders)
-    }
+    counts = {order: display_orders.count(order) for order in set(display_orders)}
     branches: dict[int, int] = {}
     labels: list[str] = []
     for index, step in enumerate(steps):
-        explicit = get_value(step, "step_label") or get_value(
-            step, "display_label"
-        )
+        explicit = get_value(step, "step_label") or get_value(step, "display_label")
         if explicit and str(explicit).startswith("Step "):
             labels.append(str(explicit).rstrip(":"))
             continue
@@ -350,9 +318,7 @@ def _step_labels(steps: list[Any]) -> list[str]:
         if is_parallel:
             branch = branches.get(order, 0)
             branches[order] = branch + 1
-            labels.append(
-                f"Step {order}{chr(ord('a') + branch)} (parallel)"
-            )
+            labels.append(f"Step {order}{chr(ord('a') + branch)} (parallel)")
         else:
             labels.append(f"Step {order}")
     return labels
@@ -360,10 +326,7 @@ def _step_labels(steps: list[Any]) -> list[str]:
 
 def _is_node_missing_dependency(commands: list[str]) -> bool:
     joined = "\n".join(commands)
-    return (
-        "node <FILE_PATH_1>" in joined
-        and "npm install <PKG_1>" in joined
-    )
+    return "node <FILE_PATH_1>" in joined and "npm install <PKG_1>" in joined
 
 
 def _find_placeholders(text: str) -> list[str]:
@@ -400,17 +363,9 @@ def _compact_strings(
             return [value]
         return []
     if isinstance(value, dict):
-        return [
-            result
-            for nested in value.values()
-            for result in _compact_strings(nested, seen)
-        ]
+        return [result for nested in value.values() for result in _compact_strings(nested, seen)]
     if isinstance(value, (list, tuple, set)):
-        return [
-            result
-            for nested in value
-            for result in _compact_strings(nested, seen)
-        ]
+        return [result for nested in value for result in _compact_strings(nested, seen)]
     return [
         result
         for key, nested in getattr(value, "__dict__", {}).items()
@@ -461,7 +416,8 @@ def _provenance(procedure: Any) -> list[str]:
 
 def _receipt_status_text(procedure: Any) -> str | None:
     status = (
-        get_value(procedure, "verification_status")
+        get_value(procedure, "procedure_status")
+        or get_value(procedure, "verification_status")
         or get_value(procedure, "receipt_status")
         or get_value(procedure, "status")
     )
@@ -480,6 +436,8 @@ def _receipt_status_text(procedure: Any) -> str | None:
             or verification.get("verification_receipts")
             or []
         )
+    if not status and receipts:
+        status = procedure_verification_status(receipts)
     nested = (
         get_value(procedure, "procedure")
         or get_value(procedure, "suggestion")
@@ -497,6 +455,34 @@ def _receipt_status_text(procedure: Any) -> str | None:
     if count:
         return f"Verification status: {status} ({count} receipts)"
     return f"Verification status: {status}"
+
+
+def _trust_warning(statuses: list[str]) -> str:
+    if "failed_verification" in statuses:
+        return (
+            "- Warning: this procedure has failed independent verification; "
+            "do not rely on it without investigation and fresh proof."
+        )
+    if "stale" in statuses:
+        return (
+            "- Warning: verification evidence is stale; re-verify the "
+            "procedure in the current environment before relying on it."
+        )
+    if statuses and all(status == "verified" for status in statuses):
+        return (
+            "- Independent verification receipts exist, but current-environment "
+            "verification is still required before completion."
+        )
+    if "observed_episode_support" in statuses:
+        return (
+            "- Warning: this procedure has "
+            "observed_episode_support_not_independently_verified provenance; "
+            "treat it as guidance until a fresh verifier succeeds."
+        )
+    return (
+        "- Warning: this procedure is unverified memory with no independent "
+        "receipt; treat it as guidance until a fresh verifier succeeds."
+    )
 
 
 def _bound(text: str, max_chars: int | None) -> str:
@@ -517,9 +503,7 @@ def _enrich_artifact_guidance(
     for procedure in procedures:
         if not hasattr(procedure, "raw_examples"):
             continue
-        found_artifacts, found_failures = ordered_artifacts_and_failures(
-            procedure
-        )
+        found_artifacts, found_failures = ordered_artifacts_and_failures(procedure)
         artifacts.update(found_artifacts)
         failures.update(found_failures)
     if not artifacts and not failures:
@@ -530,14 +514,8 @@ def _enrich_artifact_guidance(
     next_step = 1
     for line in rendered.splitlines():
         stripped = line.strip()
-        if (
-            stripped.startswith("Step ")
-            and "execute_fs_write" in stripped
-            and 0 in artifacts
-        ):
-            enriched.append(
-                f"Step {next_step}: {render_artifact(artifacts[0])}"
-            )
+        if stripped.startswith("Step ") and "execute_fs_write" in stripped and 0 in artifacts:
+            enriched.append(f"Step {next_step}: {render_artifact(artifacts[0])}")
             next_step += 1
             continue
         if (
@@ -546,17 +524,10 @@ def _enrich_artifact_guidance(
             and 1 in failures
         ):
             failed = command_from_step(failures[1], bindings)
-            avoided.append(
-                f"run `{failed or 'python custom_parser.py data_2.zdat'}`"
-            )
+            avoided.append(f"run `{failed or 'python custom_parser.py data_2.zdat'}`")
             continue
-        if (
-            stripped.startswith("Step ")
-            and "python3 <FILE_PATH_1> data_1.zdat" in stripped
-        ):
-            enriched.append(
-                f"Step {next_step}: run `python3 custom_parser.py data_2.zdat`"
-            )
+        if stripped.startswith("Step ") and "python3 <FILE_PATH_1> data_1.zdat" in stripped:
+            enriched.append(f"Step {next_step}: run `python3 custom_parser.py data_2.zdat`")
             next_step += 1
             continue
         enriched.append(line)
