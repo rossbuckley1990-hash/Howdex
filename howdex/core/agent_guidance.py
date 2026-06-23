@@ -10,9 +10,11 @@ from howdex.core.guidance_artifacts import (
     source_artifacts,
 )
 from howdex.core.guidance_facts import (
-    learned_facts,
-    operational_data_flow,
-    verification_requirements,
+    procedure_relevant_to_objective,
+    relevant_learned_facts,
+    relevant_operational_data_flow,
+    relevant_verification_requirements,
+    text_relevant_to_objective,
 )
 from howdex.core.guidance_utils import (
     as_list,
@@ -40,6 +42,7 @@ def render_agent_guidance(
     """Render procedure memory as deterministic agent-ready Markdown."""
     del mode  # Reserved public compatibility argument.
     items = as_list(procedures)
+    relevant_items = _relevant_items(items, objective)
     lines = [
         "# HOWDEX OPERATIONAL MEMORY",
         "",
@@ -72,8 +75,8 @@ def render_agent_guidance(
     lines.append("")
 
     lines.append("Relevant memory:")
-    if items:
-        for index, procedure in enumerate(items, start=1):
+    if relevant_items:
+        for index, procedure in enumerate(relevant_items, start=1):
             task_signature = (
                 get_value(procedure, "task_signature")
                 or get_value(procedure, "name")
@@ -96,9 +99,9 @@ def render_agent_guidance(
         lines.append("- No prior procedure memory was provided.")
     lines.append("")
 
-    if items:
+    if relevant_items:
         lines.append("Procedure trust:")
-        for index, procedure in enumerate(items, start=1):
+        for index, procedure in enumerate(relevant_items, start=1):
             task_signature = (
                 get_value(procedure, "task_signature")
                 or get_value(procedure, "name")
@@ -109,15 +112,48 @@ def render_agent_guidance(
             lines.append(f"- {task_signature}: {status}. {_trust_instruction(status)}")
         lines.append("")
 
-    facts = unique_strings([fact for procedure in items for fact in learned_facts(procedure)])
+    facts = unique_strings(
+        [
+            fact
+            for procedure in relevant_items
+            for fact in relevant_learned_facts(
+                procedure,
+                objective=objective,
+            )
+        ]
+    )
     failures = unique_strings(
-        [failed for procedure in items for failed in failed_attempts(procedure)]
+        [
+            failed
+            for procedure in relevant_items
+            for failed in failed_attempts(procedure)
+            if text_relevant_to_objective(
+                failed,
+                procedure,
+                objective=objective,
+            )
+        ]
     )
     verification = unique_strings(
-        [requirement for procedure in items for requirement in verification_requirements(procedure)]
+        [
+            requirement
+            for procedure in relevant_items
+            for requirement in relevant_verification_requirements(
+                procedure,
+                objective=objective,
+            )
+        ]
     )
-    artifacts = [artifact for procedure in items for artifact in source_artifacts(procedure)]
-    flows = [flow for procedure in items if (flow := operational_data_flow(procedure)).steps]
+    artifacts = [
+        artifact
+        for procedure in relevant_items
+        for artifact in source_artifacts(procedure)
+    ]
+    flows = [
+        flow
+        for procedure in relevant_items
+        if (flow := relevant_operational_data_flow(procedure, objective=objective)).steps
+    ]
 
     lines.append("Learned operational facts:")
     if facts:
@@ -212,3 +248,16 @@ def _trust_instruction(status: str) -> str:
     if status == "observed_episode_support":
         return "Successful episodes support it, but it is not independently verified."
     return "Unverified memory; treat it only as guidance until a real verifier succeeds."
+
+
+def _relevant_items(items: list[Any], objective: str | None) -> list[Any]:
+    """Filter suggested procedures before rendering task-specific guidance."""
+    if not items:
+        return []
+    if not str(objective or "").strip():
+        return items
+    return [
+        item
+        for item in items
+        if procedure_relevant_to_objective(item, objective=objective)
+    ]
