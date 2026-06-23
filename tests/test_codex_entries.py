@@ -27,12 +27,12 @@ REQUIRED_PROCEDURE_FIELDS = {
 }
 REQUIRED_RECEIPT_FIELDS = {
     "artifact_hashes",
-    "environment",
+    "environment_fingerprint",
     "exit_code",
     "expected_signal",
     "observed_signal",
-    "procedure_id",
     "receipt_id",
+    "source_episode_id",
     "status",
     "verified_at",
     "verifier_command",
@@ -125,6 +125,11 @@ def test_schema_files_exist_and_require_contract_fields():
     assert set(receipt["required"]) == REQUIRED_RECEIPT_FIELDS
     assert REQUIRED_PROCEDURE_FIELDS <= procedure["properties"].keys()
     assert REQUIRED_RECEIPT_FIELDS <= receipt["properties"].keys()
+    assert {"procedure_id", "task_signature"} <= (receipt["properties"].keys())
+    assert receipt["anyOf"] == [
+        {"required": ["procedure_id"]},
+        {"required": ["task_signature"]},
+    ]
 
 
 def test_all_codex_json_is_canonical_pretty_printed():

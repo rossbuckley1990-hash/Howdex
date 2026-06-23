@@ -20,6 +20,7 @@ from howdex.core.guidance_utils import (
     truncate_with_marker,
     unique_strings,
 )
+from howdex.core.receipts import procedure_trust_status
 
 DEFAULT_AGENT_GUIDANCE_MAX_CHARS = 6_000
 
@@ -58,19 +59,13 @@ def render_agent_guidance(
     lines.extend(
         [
             "Rules:",
-            (
-                "- Use the memory to guide execution, but adapt it to the "
-                "current environment."
-            ),
+            ("- Use the memory to guide execution, but adapt it to the current environment."),
             "- Do not claim completion until a real verifier succeeds.",
             "- Do not repeat known failed attempts.",
         ]
     )
     if not include_source:
-        lines.append(
-            "- Do not ask for or rely on pasted source code; use the "
-            "operational facts."
-        )
+        lines.append("- Do not ask for or rely on pasted source code; use the operational facts.")
     if target_environment:
         lines.append(f"- Target environment: {target_environment}")
     lines.extend(f"- {item}" for item in unique_strings(constraints))
@@ -101,35 +96,28 @@ def render_agent_guidance(
         lines.append("- No prior procedure memory was provided.")
     lines.append("")
 
-    facts = unique_strings(
-        [fact for procedure in items for fact in learned_facts(procedure)]
-    )
+    if items:
+        lines.append("Procedure trust:")
+        for index, procedure in enumerate(items, start=1):
+            task_signature = (
+                get_value(procedure, "task_signature")
+                or get_value(procedure, "name")
+                or get_value(procedure, "procedure_id")
+                or f"procedure_{index}"
+            )
+            status = procedure_trust_status(procedure)
+            lines.append(f"- {task_signature}: {status}. {_trust_instruction(status)}")
+        lines.append("")
+
+    facts = unique_strings([fact for procedure in items for fact in learned_facts(procedure)])
     failures = unique_strings(
-        [
-            failed
-            for procedure in items
-            for failed in failed_attempts(procedure)
-        ]
+        [failed for procedure in items for failed in failed_attempts(procedure)]
     )
     verification = unique_strings(
-        [
-            requirement
-            for procedure in items
-            for requirement in verification_requirements(procedure)
-        ]
+        [requirement for procedure in items for requirement in verification_requirements(procedure)]
     )
-    artifacts = [
-        artifact
-        for procedure in items
-        for artifact in source_artifacts(procedure)
-    ]
-    flows = [
-        flow
-        for procedure in items
-        if (
-            flow := operational_data_flow(procedure)
-        ).steps
-    ]
+    artifacts = [artifact for procedure in items for artifact in source_artifacts(procedure)]
+    flows = [flow for procedure in items if (flow := operational_data_flow(procedure)).steps]
 
     lines.append("Learned operational facts:")
     if facts:
@@ -139,16 +127,8 @@ def render_agent_guidance(
     lines.append("")
 
     if flows:
-        data_flow_steps = unique_strings(
-            [step for flow in flows for step in flow.steps]
-        )
-        execution_hints = unique_strings(
-            [
-                hint
-                for flow in flows
-                for hint in flow.execution_hints
-            ]
-        )
+        data_flow_steps = unique_strings([step for flow in flows for step in flow.steps])
+        execution_hints = unique_strings([hint for flow in flows for hint in flow.execution_hints])
         lines.append("Data flow:")
         lines.extend(f"- {step}" for step in data_flow_steps)
         lines.append("")
@@ -178,10 +158,7 @@ def render_agent_guidance(
             [
                 "Source artifacts excluded:",
                 "- Source code was intentionally not included in this guidance.",
-                (
-                    "- Reconstruct an implementation from the learned "
-                    "operational facts."
-                ),
+                ("- Reconstruct an implementation from the learned operational facts."),
                 "",
             ]
         )
@@ -210,18 +187,9 @@ def render_agent_guidance(
     lines.extend(
         [
             "Execution instruction:",
-            (
-                "- Convert this memory into concrete tool calls for the "
-                "current environment."
-            ),
-            (
-                "- Prefer the shortest verified path that satisfies the "
-                "constraints."
-            ),
-            (
-                "- If a verifier fails, update the plan rather than repeating "
-                "the same command."
-            ),
+            ("- Convert this memory into concrete tool calls for the current environment."),
+            ("- Prefer the shortest verified path that satisfies the constraints."),
+            ("- If a verifier fails, update the plan rather than repeating the same command."),
             "",
         ]
     )
@@ -230,3 +198,17 @@ def render_agent_guidance(
         max_chars,
         marker="\n[Howdex guidance truncated]\n",
     )
+
+
+def _trust_instruction(status: str) -> str:
+    if status == "verified":
+        return "Independent evidence exists; still verify in the current environment."
+    if status == "failed_verification":
+        return (
+            "Independent verification failed; do not rely on this procedure without investigation."
+        )
+    if status == "stale":
+        return "Evidence is stale; require fresh verification before relying on it."
+    if status == "observed_episode_support":
+        return "Successful episodes support it, but it is not independently verified."
+    return "Unverified memory; treat it only as guidance until a real verifier succeeds."

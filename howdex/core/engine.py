@@ -7,6 +7,7 @@ import json
 import os
 import time
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -40,6 +41,7 @@ from howdex.core.guidance import (
 from howdex.core.receipts import (
     VerificationReceipt,
     parse_bootproof_attestation,
+    procedure_trust_status,
     procedure_verification_status,
 )
 from howdex.core.parameterize import redact_parameter_evidence
@@ -997,12 +999,95 @@ class Howdex:
             if isinstance(receipt, VerificationReceipt)
             else VerificationReceipt.from_dict(receipt)
         )
+        procedure = self._procedure_by_id(procedure_id)
+        if (
+            normalized.procedure_id
+            and normalized.procedure_id != procedure_id
+        ):
+            raise ValueError(
+                "verification receipt procedure_id does not match "
+                f"{procedure_id!r}"
+            )
+        if (
+            normalized.task_signature
+            and normalized.task_signature != procedure.task_signature
+        ):
+            raise ValueError(
+                "verification receipt task_signature does not match "
+                f"{procedure.task_signature!r}"
+            )
+        normalized = replace(
+            normalized,
+            procedure_id=procedure_id,
+            task_signature=procedure.task_signature,
+        )
         self.store.attach_receipt(
             procedure_id,
-            normalized.receipt_id,
+            str(normalized.receipt_id),
             normalized.to_dict(),
         )
         return normalized
+
+    def verify_procedure(
+        self,
+        procedure_id: str,
+        *,
+        verifier_type: str,
+        verifier_command: str,
+        expected_signal: str,
+        observed_signal: str,
+        exit_code: int,
+        status: str | None = None,
+        verified_at: float | str | None = None,
+        environment_fingerprint: Optional[dict[str, Any]] = None,
+        artifact_hashes: Optional[dict[str, Any]] = None,
+        source_episode_id: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> VerificationReceipt:
+        """Create and attach deterministic independent verification evidence.
+
+        When ``status`` is omitted, verification succeeds only when the
+        verifier exits with code zero and the expected signal is present in
+        the observed signal. Callers can explicitly attach ``stale`` or
+        ``unknown`` evidence when no fresh verifier result exists.
+        """
+        resolved_status = status
+        signal_matches = (
+            str(expected_signal).casefold()
+            in str(observed_signal).casefold()
+        )
+        if resolved_status is None:
+            resolved_status = (
+                "verified"
+                if int(exit_code) == 0 and signal_matches
+                else "failed"
+            )
+        elif (
+            str(resolved_status).strip().lower() in {"verified", "pass"}
+            and (int(exit_code) != 0 or not signal_matches)
+        ):
+            raise ValueError(
+                "verified procedure receipt requires exit_code=0 and "
+                "the expected signal in observed_signal"
+            )
+        return self.attach_receipt(
+            procedure_id,
+            VerificationReceipt(
+                verifier_type=verifier_type,
+                verifier_command=verifier_command,
+                expected_signal=expected_signal,
+                observed_signal=observed_signal,
+                exit_code=exit_code,
+                verified_at=verified_at,
+                environment_fingerprint=dict(
+                    environment_fingerprint or {}
+                ),
+                artifact_hashes=dict(artifact_hashes or {}),
+                source_episode_id=source_episode_id,
+                status=resolved_status,
+                metadata=dict(metadata or {}),
+            ),
+        )
 
     def list_receipts(self, procedure_id: str) -> list[VerificationReceipt]:
         """List generic verification receipts attached to a procedure."""
@@ -1027,6 +1112,12 @@ class Howdex:
     def procedure_verification_status(self, procedure_id: str) -> str:
         """Return the receipt-backed verification state for one procedure."""
         return procedure_verification_status(self.list_receipts(procedure_id))
+
+    def procedure_status(self, procedure_id: str) -> str:
+        """Return the conservative trust status for one learned procedure."""
+        return procedure_trust_status(
+            self._procedure_by_id(procedure_id)
+        )
 
     def _require_procedure_id(self, procedure_id: str) -> None:
         if self.store.get_procedure_by_id(procedure_id) is None:

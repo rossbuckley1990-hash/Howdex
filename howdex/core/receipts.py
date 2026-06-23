@@ -13,11 +13,12 @@ from typing import Any
 
 from howdex.core.tool_calls import redact_secrets
 
-VERIFICATION_STATUSES = {
+PROCEDURE_TRUST_STATUSES = {
     "unverified",
+    "observed_episode_support",
     "verified",
+    "stale",
     "failed_verification",
-    "mixed",
 }
 
 _PASS_STATUSES = {
@@ -35,6 +36,11 @@ _FAIL_STATUSES = {
     "failed",
     "failure",
     "invalid",
+}
+_STALE_STATUSES = {
+    "expired",
+    "outdated",
+    "stale",
 }
 _UNKNOWN_STATUSES = {
     "",
@@ -54,10 +60,14 @@ _URI_CREDENTIAL_RE = re.compile(r"(://[^:/@\s]+:)([^@\s]+)(@)")
 
 @dataclass(frozen=True)
 class VerificationReceipt:
-    """One optional piece of evidence that a procedure worked."""
+    """One structured, provider-neutral piece of procedure evidence.
 
-    receipt_type: str
-    status: str
+    The original ``receipt_type``, ``command``, ``timestamp``, and ``digest``
+    fields remain compatibility aliases for the more explicit verifier fields.
+    """
+
+    receipt_type: str = ""
+    status: str = "unknown"
     command: str | None = None
     target: str | None = None
     timestamp: float | None = None
@@ -66,30 +76,101 @@ class VerificationReceipt:
     source: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     raw_payload: dict[str, Any] | None = None
+    receipt_id: str | None = None
+    procedure_id: str | None = None
+    task_signature: str | None = None
+    verifier_type: str | None = None
+    verifier_command: str | None = None
+    expected_signal: str | None = None
+    observed_signal: str | None = None
+    exit_code: int | None = None
+    verified_at: float | None = None
+    environment_fingerprint: dict[str, Any] = field(default_factory=dict)
+    artifact_hashes: dict[str, Any] = field(default_factory=dict)
+    source_episode_id: str | None = None
 
     def __post_init__(self) -> None:
-        receipt_type = str(self.receipt_type or "").strip().lower()
-        if not receipt_type:
-            raise ValueError("verification receipt requires receipt_type")
+        verifier_type = str(self.verifier_type or self.receipt_type or "").strip().lower()
+        if not verifier_type:
+            raise ValueError("verification receipt requires verifier_type or receipt_type")
         status = normalize_receipt_status(self.status)
-        object.__setattr__(self, "receipt_type", receipt_type)
+        verifier_command = _safe_text(self.verifier_command or self.command)
+        verified_at = _parse_timestamp(
+            self.verified_at if self.verified_at is not None else self.timestamp
+        )
+        object.__setattr__(self, "receipt_type", verifier_type)
+        object.__setattr__(self, "verifier_type", verifier_type)
         object.__setattr__(self, "status", status)
-        object.__setattr__(self, "command", _safe_text(self.command))
+        object.__setattr__(self, "command", verifier_command)
+        object.__setattr__(
+            self,
+            "verifier_command",
+            verifier_command,
+        )
         object.__setattr__(self, "target", _safe_text(self.target))
-        object.__setattr__(self, "timestamp", _parse_timestamp(self.timestamp))
+        object.__setattr__(self, "timestamp", verified_at)
+        object.__setattr__(self, "verified_at", verified_at)
         object.__setattr__(self, "digest", _safe_text(self.digest))
         object.__setattr__(self, "signature", _safe_text(self.signature))
         object.__setattr__(self, "source", _safe_text(self.source))
+        object.__setattr__(
+            self,
+            "procedure_id",
+            _safe_text(self.procedure_id),
+        )
+        object.__setattr__(
+            self,
+            "task_signature",
+            _safe_text(self.task_signature),
+        )
+        object.__setattr__(
+            self,
+            "expected_signal",
+            _safe_text(self.expected_signal),
+        )
+        object.__setattr__(
+            self,
+            "observed_signal",
+            _safe_text(self.observed_signal),
+        )
+        object.__setattr__(
+            self,
+            "source_episode_id",
+            _safe_text(self.source_episode_id),
+        )
+        object.__setattr__(
+            self,
+            "exit_code",
+            _parse_exit_code(self.exit_code),
+        )
         object.__setattr__(self, "metadata", _safe_mapping(self.metadata))
+        object.__setattr__(
+            self,
+            "environment_fingerprint",
+            _safe_mapping(self.environment_fingerprint),
+        )
+        object.__setattr__(
+            self,
+            "artifact_hashes",
+            _safe_mapping(self.artifact_hashes),
+        )
         if self.raw_payload is not None:
             object.__setattr__(
                 self,
                 "raw_payload",
                 _safe_mapping(self.raw_payload),
             )
+        supplied_id = _safe_text(self.receipt_id)
+        object.__setattr__(
+            self,
+            "receipt_id",
+            supplied_id or self._content_id(),
+        )
 
-    @property
-    def receipt_id(self) -> str:
+    def to_dict(self) -> dict[str, Any]:
+        return {"receipt_id": self.receipt_id, **self._payload()}
+
+    def _content_id(self) -> str:
         """Return a stable content identity for idempotent attachment."""
         encoded = json.dumps(
             self._payload(),
@@ -99,19 +180,27 @@ class VerificationReceipt:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
-    def to_dict(self) -> dict[str, Any]:
-        return {"receipt_id": self.receipt_id, **self._payload()}
-
     def _payload(self) -> dict[str, Any]:
         return {
             "receipt_type": self.receipt_type,
+            "verifier_type": self.verifier_type,
             "status": self.status,
             "command": self.command,
+            "verifier_command": self.verifier_command,
             "target": self.target,
             "timestamp": self.timestamp,
+            "verified_at": self.verified_at,
             "digest": self.digest,
             "signature": self.signature,
             "source": self.source,
+            "procedure_id": self.procedure_id,
+            "task_signature": self.task_signature,
+            "expected_signal": self.expected_signal,
+            "observed_signal": self.observed_signal,
+            "exit_code": self.exit_code,
+            "environment_fingerprint": self.environment_fingerprint,
+            "artifact_hashes": self.artifact_hashes,
+            "source_episode_id": self.source_episode_id,
             "metadata": self.metadata,
             "raw_payload": self.raw_payload,
         }
@@ -124,9 +213,14 @@ class VerificationReceipt:
         if status is None:
             status = payload.get("passed", payload.get("success"))
         return cls(
-            receipt_type=str(payload.get("receipt_type") or ""),
+            receipt_type=str(payload.get("receipt_type") or payload.get("verifier_type") or ""),
             status=status,
-            command=_first(payload, "command", "verification_command"),
+            command=_first(
+                payload,
+                "command",
+                "verification_command",
+                "verifier_command",
+            ),
             target=_first(
                 payload,
                 "target",
@@ -144,18 +238,50 @@ class VerificationReceipt:
             source=_first(payload, "source", "source_path", "source_uri"),
             metadata=payload.get("metadata") or {},
             raw_payload=payload.get("raw_payload"),
+            receipt_id=payload.get("receipt_id"),
+            procedure_id=payload.get("procedure_id"),
+            task_signature=payload.get("task_signature"),
+            verifier_type=_first(
+                payload,
+                "verifier_type",
+                "receipt_type",
+            ),
+            verifier_command=_first(
+                payload,
+                "verifier_command",
+                "verification_command",
+                "command",
+            ),
+            expected_signal=payload.get("expected_signal"),
+            observed_signal=payload.get("observed_signal"),
+            exit_code=payload.get("exit_code"),
+            verified_at=_first(
+                payload,
+                "verified_at",
+                "timestamp",
+                "created_at",
+            ),
+            environment_fingerprint=payload.get(
+                "environment_fingerprint",
+                payload.get("environment"),
+            )
+            or {},
+            artifact_hashes=payload.get("artifact_hashes") or {},
+            source_episode_id=payload.get("source_episode_id"),
         )
 
 
 def normalize_receipt_status(value: Any) -> str:
-    """Normalize provider-specific results to pass, fail, or unknown."""
+    """Normalize provider-specific results to the public receipt states."""
     if isinstance(value, bool):
-        return "pass" if value else "fail"
+        return "verified" if value else "failed"
     normalized = str(value or "").strip().lower().replace("-", "_")
     if normalized in _PASS_STATUSES:
-        return "pass"
+        return "verified"
     if normalized in _FAIL_STATUSES:
-        return "fail"
+        return "failed"
+    if normalized in _STALE_STATUSES:
+        return "stale"
     if normalized in _UNKNOWN_STATUSES:
         return "unknown"
     raise ValueError(f"unsupported verification receipt status: {value!r}")
@@ -164,7 +290,7 @@ def normalize_receipt_status(value: Any) -> str:
 def procedure_verification_status(
     receipts: list[VerificationReceipt | Mapping[str, Any]],
 ) -> str:
-    """Summarize attached receipt results without overclaiming."""
+    """Summarize independent receipt results without overclaiming."""
     statuses = {
         (
             receipt.status
@@ -173,15 +299,35 @@ def procedure_verification_status(
         )
         for receipt in receipts
     }
-    has_pass = "pass" in statuses
-    has_fail = "fail" in statuses
-    if has_pass and has_fail:
-        return "mixed"
-    if has_fail:
+    if "failed" in statuses:
         return "failed_verification"
-    if has_pass:
+    if "stale" in statuses:
+        return "stale"
+    if "verified" in statuses:
         return "verified"
     return "unverified"
+
+
+def procedure_trust_status(procedure: Any) -> str:
+    """Combine independent receipts with deterministic episode support."""
+    explicit = _value(procedure, "procedure_status")
+    if explicit in PROCEDURE_TRUST_STATUSES:
+        return str(explicit)
+    receipts = _value(procedure, "receipts") or _value(
+        procedure,
+        "verification_receipts",
+    )
+    receipt_status = procedure_verification_status(list(receipts or []))
+    if receipt_status != "unverified":
+        return receipt_status
+
+    source_episode_ids = _value(procedure, "source_episode_ids") or []
+    support_count = _value(procedure, "support_count") or 0
+    try:
+        has_support = bool(source_episode_ids) and int(support_count) > 0
+    except (TypeError, ValueError):
+        has_support = bool(source_episode_ids)
+    return "observed_episode_support" if has_support else "unverified"
 
 
 def parse_bootproof_attestation(
@@ -217,8 +363,7 @@ def parse_bootproof_attestation(
     return VerificationReceipt(
         receipt_type="bootproof",
         status=_bootproof_status(payload, verification),
-        command=_first(verification, "command")
-        or _first(payload, "command"),
+        command=_first(verification, "command") or _first(payload, "command"),
         target=_first(
             verification,
             "target",
@@ -244,8 +389,7 @@ def parse_bootproof_attestation(
         digest=_first(verification, "digest", "hash", "sha256")
         or _first(payload, "digest", "hash", "sha256")
         or f"sha256:{hashlib.sha256(raw_bytes).hexdigest()}",
-        signature=_first(verification, "signature")
-        or _first(payload, "signature"),
+        signature=_first(verification, "signature") or _first(payload, "signature"),
         source=str(source),
         metadata=metadata,
         raw_payload=payload,
@@ -258,6 +402,12 @@ def _first(payload: Mapping[str, Any], *keys: str) -> Any:
         if value not in (None, ""):
             return value
     return None
+
+
+def _value(value: Any, key: str) -> Any:
+    if isinstance(value, Mapping):
+        return value.get(key)
+    return getattr(value, key, None)
 
 
 def _bootproof_status(
@@ -282,9 +432,7 @@ def _bootproof_status(
         if explicit is not None:
             return explicit
         if "booted" in candidate or "healthVerified" in candidate:
-            return bool(candidate.get("booted")) and bool(
-                candidate.get("healthVerified")
-            )
+            return bool(candidate.get("booted")) and bool(candidate.get("healthVerified"))
     return "unknown"
 
 
@@ -318,6 +466,15 @@ def _parse_timestamp(value: Any) -> float | None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.timestamp()
     except ValueError as exc:
-        raise ValueError(
-            "verification receipt timestamp must be numeric or ISO-8601"
-        ) from exc
+        raise ValueError("verification receipt timestamp must be numeric or ISO-8601") from exc
+
+
+def _parse_exit_code(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        raise ValueError("verification receipt exit_code must be an integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("verification receipt exit_code must be an integer") from exc
