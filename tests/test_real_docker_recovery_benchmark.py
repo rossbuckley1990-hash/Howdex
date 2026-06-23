@@ -146,11 +146,6 @@ def test_treatment_uses_native_guidance_without_source(
             calls["suggest"] = kwargs
             return [suggestion]
 
-        def guidance(self, objective, **kwargs):
-            calls["objective"] = objective
-            calls["guidance"] = kwargs
-            return "# HOWDEX OPERATIONAL MEMORY\n- inspect prior recovery"
-
     import howdex.core.guidance
 
     monkeypatch.setattr(
@@ -163,11 +158,9 @@ def test_treatment_uses_native_guidance_without_source(
         Memory(), 43123
     )
 
-    assert "# HOWDEX OPERATIONAL MEMORY" in guidance
+    assert "# HOWDEX PROCEDURAL MEMORY" in guidance
     assert "# PAST LEARNED PROCEDURE" in guidance
-    assert calls["guidance"]["include_source"] is False
-    assert calls["guidance"]["include_failed_attempts"] is True
-    assert calls["guidance"]["include_verification"] is True
+    assert calls["suggest"] == {"top_k": 3, "min_confidence": 0.0}
     assert memory_used is True
     assert source_pasted is False
 
