@@ -27,8 +27,12 @@ from howdex.core.feedback import (
     procedure_success_rate,
 )
 from howdex.core.guidance import (
+    GuidanceBudget,
+    GuidanceProcedureSelection,
+    GuidanceSelectionDecision,
     ProcedureSuggestion,
     render_procedure_guidance,
+    select_guidance_procedures,
     suggest_procedures,
 )
 from howdex.core.learning import (
@@ -100,7 +104,9 @@ __all__ = [
     "rank_working_memories", "select_working_context",
     "DEFAULT_MAX_SEGMENT_STEPS", "DEFAULT_IDLE_GAP_S", "segment_episode",
     "SemanticExtractor", "SemanticRecord", "derive_tool_semantics",
-    "ProcedureSuggestion", "suggest_procedures", "render_procedure_guidance",
+    "GuidanceBudget", "GuidanceProcedureSelection", "GuidanceSelectionDecision",
+    "ProcedureSuggestion", "suggest_procedures", "select_guidance_procedures",
+    "render_procedure_guidance",
     "procedure_feedback_confidence", "procedure_success_rate",
     "VerificationReceipt", "parse_bootproof_attestation",
     "procedure_trust_status", "procedure_verification_status",

@@ -11,6 +11,10 @@ from howdex.core.codex_staleness import (
     has_compatibility_metadata,
     staleness_guidance_text,
 )
+from howdex.core.guidance_budget import (
+    GuidanceProcedureSelection,
+    select_guidance_procedures,
+)
 from howdex.core.guidance_artifacts import (
     failed_attempts,
     language_for_path,
@@ -45,12 +49,25 @@ def render_agent_guidance(
     include_failed_attempts: bool = True,
     include_verification: bool = True,
     current_environment: Any = None,
+    retrieval_budget: Any = None,
+    debug: bool = False,
     max_chars: int = DEFAULT_AGENT_GUIDANCE_MAX_CHARS,
 ) -> str:
     """Render procedure memory as deterministic agent-ready Markdown."""
     del mode  # Reserved public compatibility argument.
     items = as_list(procedures)
-    relevant_items = _relevant_items(items, objective)
+    selection: GuidanceProcedureSelection | None = None
+    if retrieval_budget is not None:
+        selection = select_guidance_procedures(
+            str(objective or ""),
+            items,
+            retrieval_budget,
+        )
+        relevant_items = list(selection.selected)
+        if selection.max_guidance_chars:
+            max_chars = min(max_chars, selection.max_guidance_chars)
+    else:
+        relevant_items = _relevant_items(items, objective)
     staleness_environment = (
         current_environment if current_environment is not None else target_environment
     )
@@ -90,6 +107,32 @@ def render_agent_guidance(
         lines.append(f"- Target environment: {target_environment}")
     lines.extend(f"- {item}" for item in unique_strings(constraints))
     lines.append("")
+
+    if selection is not None:
+        lines.extend(
+            [
+                "Retrieval budget:",
+                f"- Selected procedures: {len(selection.selected)}",
+                f"- Omitted procedures: {selection.omitted_count}",
+                (
+                    "- Context budget used: "
+                    f"{selection.context_budget_used}/{selection.max_guidance_chars} chars"
+                ),
+            ]
+        )
+        if debug:
+            lines.append("- Omission reasons:")
+            if selection.excluded:
+                for excluded in selection.excluded:
+                    lines.append(
+                        f"  - {excluded.procedure_id}: {excluded.reason} "
+                        f"(score={excluded.relevance_score:.3f}, "
+                        f"status={excluded.status}, "
+                        f"staleness={excluded.staleness_status})"
+                    )
+            else:
+                lines.append("  - None")
+        lines.append("")
 
     lines.append("Relevant memory:")
     if relevant_items:

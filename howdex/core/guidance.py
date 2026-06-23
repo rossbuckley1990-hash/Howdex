@@ -5,6 +5,12 @@ Implementation lives in focused internal modules. Imports from
 """
 
 from howdex.core.agent_guidance import render_agent_guidance
+from howdex.core.guidance_budget import (
+    GuidanceBudget,
+    GuidanceProcedureSelection,
+    GuidanceSelectionDecision,
+    select_guidance_procedures,
+)
 from howdex.core.guidance_suggestions import (
     MAX_PROCEDURE_SUGGESTIONS,
     ProcedureSuggestion,
@@ -17,9 +23,13 @@ from howdex.core.procedure_renderer import (
 
 __all__ = [
     "DEFAULT_GUIDANCE_MAX_CHARS",
+    "GuidanceBudget",
+    "GuidanceProcedureSelection",
+    "GuidanceSelectionDecision",
     "MAX_PROCEDURE_SUGGESTIONS",
     "ProcedureSuggestion",
     "render_agent_guidance",
     "render_procedure_guidance",
+    "select_guidance_procedures",
     "suggest_procedures",
 ]
