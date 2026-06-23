@@ -128,7 +128,8 @@ def failed_attempts(procedure: Any) -> list[str]:
 
 def raw_examples(procedure: Any) -> list[Any]:
     examples = (
-        get_value(procedure, "raw_examples")
+        get_value(procedure, "trace_evidence")
+        or get_value(procedure, "raw_examples")
         or get_value(procedure, "raw_supporting_examples")
         or get_value(procedure, "supporting_examples")
         or []
@@ -242,4 +243,3 @@ def language_for_path(file_path: str) -> str:
     if lower.endswith(".json"):
         return "json"
     return ""
-

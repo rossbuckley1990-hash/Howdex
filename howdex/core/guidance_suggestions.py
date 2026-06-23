@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from howdex.core.actions import canonicalize_steps
@@ -33,6 +33,10 @@ class ProcedureSuggestion:
     verification_status: str
     procedure_verified: bool
     verification_receipts: list[dict[str, Any]]
+    trace_evidence: list[dict[str, Any]] = field(
+        default_factory=list,
+        repr=False,
+    )
 
     @property
     def canonical_steps(self) -> list[dict[str, Any]]:
@@ -159,6 +163,9 @@ def suggest_procedures(
                 verification_status=verification_status,
                 procedure_verified=verification_status == "verified",
                 verification_receipts=list(procedure.receipts),
+                trace_evidence=list(
+                    procedure.raw_supporting_examples
+                ),
             )
         )
 
