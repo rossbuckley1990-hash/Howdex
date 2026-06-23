@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shlex
+import hashlib
 import shutil
 import socket
 import subprocess
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
 
 DB_PATH = ".howdex_real_docker_recovery.db"
 BASE_IMAGE = "python:3.12-alpine"
+PROMPT_HASH_PORT = 43123
 TEACHER_MODEL = os.getenv("HOWDEX_DOCKER_TEACHER_MODEL", "gpt-4o")
 STUDENT_MODEL = os.getenv("HOWDEX_DOCKER_STUDENT_MODEL", "gpt-4o-mini")
 N_TRIALS = int(os.getenv("HOWDEX_DOCKER_TRIALS", "5"))
@@ -71,6 +73,15 @@ class AgentResult:
     actions: list[tuple[str, str]]
     used_memory: bool
     source_pasted: bool
+
+
+@dataclass(frozen=True)
+class DockerPromptParts:
+    """Rendered prompt pieces used to prove A/B framing equivalence."""
+
+    base_prompt: str
+    memory_section: str
+    full_prompt: str
 
 
 def reset_db() -> None:
@@ -230,6 +241,54 @@ def _compose_environment(sandbox: DockerSandbox) -> dict[str, str]:
     return environment
 
 
+def allowed_execute_bash_commands(sandbox_port: int) -> tuple[str, ...]:
+    """Return the exact command strings advertised to both student arms."""
+    return (
+        "cat docker-compose.yml",
+        "cat Dockerfile",
+        "cat app.py",
+        "cat runtime.env",
+        "cat health-policy.conf",
+        "docker compose build",
+        "docker compose up -d",
+        "docker compose up -d --build",
+        "docker compose up -d --force-recreate",
+        "docker compose up -d --build --force-recreate",
+        "docker compose ps",
+        "docker compose logs",
+        "docker compose logs app",
+        "docker compose logs --tail 100 app",
+        "docker compose down -v",
+        f"curl -sS -i http://127.0.0.1:{sandbox_port}/health",
+    )
+
+
+def docker_objective(sandbox_port: int) -> str:
+    """Return the exact recovery objective shared by both student arms."""
+    return f"Make http://127.0.0.1:{sandbox_port}/health return HTTP 200."
+
+
+def docker_sandbox_rules() -> tuple[str, ...]:
+    """Return non-memory sandbox constraints shared by both student arms."""
+    return (
+        "Only runtime.env may be modified.",
+        "runtime.env must contain APP_PORT and HEALTH_MODE.",
+        "Use execute_fs_write to change runtime.env.",
+        (
+            "Do not use shell redirects, sed, sudo, docker exec, docker run, "
+            "docker pull, external URLs, or host paths."
+        ),
+    )
+
+
+def docker_verifier_requirement() -> str:
+    """Return the identical verifier rule shared by both student arms."""
+    return (
+        "Do not claim completion until execute_bash reports SUCCESS from "
+        "the real health verifier."
+    )
+
+
 def validate_bash_command(cmd: str, sandbox_port: int) -> CommandDecision:
     """Allow a small, inspectable set of local recovery commands."""
     if not isinstance(cmd, str) or not cmd.strip():
@@ -246,53 +305,19 @@ def validate_bash_command(cmd: str, sandbox_port: int) -> CommandDecision:
     except ValueError:
         return CommandDecision(False, "command could not be parsed")
 
-    allowed_compose = {
-        ("docker", "compose", "build"),
-        ("docker", "compose", "ps"),
-        ("docker", "compose", "logs"),
-        ("docker", "compose", "logs", "app"),
-        ("docker", "compose", "logs", "--tail", "100", "app"),
-        ("docker", "compose", "up", "-d"),
-        ("docker", "compose", "up", "-d", "--build"),
-        (
-            "docker",
-            "compose",
-            "up",
-            "-d",
-            "--build",
-            "--force-recreate",
-        ),
-        (
-            "docker",
-            "compose",
-            "up",
-            "-d",
-            "--force-recreate",
-        ),
-        ("docker", "compose", "down", "-v"),
+    allowed = {
+        tuple(shlex.split(command))
+        for command in allowed_execute_bash_commands(sandbox_port)
     }
-    allowed_reads = {
-        ("cat", "docker-compose.yml"),
-        ("cat", "Dockerfile"),
-        ("cat", "app.py"),
-        ("cat", "runtime.env"),
-        ("cat", "health-policy.conf"),
-    }
-    allowed_health = {
-        (
-            "curl",
-            "-sS",
-            "-i",
-            f"http://127.0.0.1:{sandbox_port}/health",
-        ),
+    allowed.add(
         (
             "curl",
             "-sS",
             "-i",
             f"http://localhost:{sandbox_port}/health",
-        ),
-    }
-    if argv in allowed_compose | allowed_reads | allowed_health:
+        )
+    )
+    if argv in allowed:
         return CommandDecision(True, "allowed benchmark command", argv)
     return CommandDecision(
         False,
@@ -449,37 +474,16 @@ def native_recovery_guidance(
     """Render only native Howdex guidance from learned procedure memory."""
     from howdex.core.guidance import render_procedure_guidance
 
-    objective = (
-        "Recover the broken Docker Compose HTTP service and make "
-        f"http://127.0.0.1:{sandbox_port}/health return HTTP 200."
-    )
     suggestions = memory.suggest_procedure(
         "recover broken Docker Compose HTTP health endpoint",
         top_k=3,
         min_confidence=0.0,
     )
-    agent_guidance = memory.guidance(
-        objective,
-        query="recover broken Docker Compose HTTP health endpoint",
-        top_k=3,
-        min_confidence=0.0,
-        constraints=[
-            "Operate only inside the disposable benchmark sandbox.",
-            "Modify only runtime.env.",
-            "Use only approved Docker Compose, cat, and localhost curl commands.",
-            "Require the real HTTP verifier before claiming success.",
-        ],
-        target_environment="isolated local Docker Compose sandbox",
-        include_source=False,
-        include_failed_attempts=True,
-        include_verification=True,
-    )
     procedure_guidance = render_procedure_guidance(
         suggestions,
-        objective=objective,
         max_chars=3500,
     )
-    guidance = agent_guidance.rstrip() + "\n\n" + procedure_guidance
+    guidance = howdex_memory_section(procedure_guidance)
     return (
         guidance,
         bool(suggestions),
@@ -525,45 +529,134 @@ def _tool_definitions(sandbox_port: int) -> list[dict[str, Any]]:
     ]
 
 
+def build_base_docker_task_prompt(
+    objective: str,
+    sandbox_rules: tuple[str, ...],
+    allowed_commands: tuple[str, ...],
+    verifier: str,
+) -> str:
+    """Build the byte-identical non-memory prompt shared by both A/B arms."""
+    lines = [
+        "You are recovering a broken HTTP application in an isolated temporary Docker",
+        "Compose sandbox.",
+        "",
+        "Objective:",
+        objective,
+        "",
+        "Available files:",
+        "- docker-compose.yml",
+        "- Dockerfile",
+        "- app.py",
+        "- runtime.env",
+        "- health-policy.conf",
+        "",
+        "Sandbox rules:",
+    ]
+    lines.extend(f"- {rule}" for rule in sandbox_rules)
+    lines.extend(
+        [
+            "",
+            "Allowed execute_bash commands:",
+            *[f"- {command}" for command in allowed_commands],
+            "",
+            "Verifier requirement:",
+            verifier,
+        ]
+    )
+    return "\n".join(lines).strip()
+
+
 def _base_prompt(sandbox_port: int) -> str:
-    return f"""
-You are recovering a broken HTTP application in an isolated temporary Docker
-Compose sandbox.
+    """Compatibility wrapper for tests and older benchmark helpers."""
+    return build_base_docker_task_prompt(
+        docker_objective(sandbox_port),
+        docker_sandbox_rules(),
+        allowed_execute_bash_commands(sandbox_port),
+        docker_verifier_requirement(),
+    )
 
-Objective:
-Make http://127.0.0.1:{sandbox_port}/health return HTTP 200.
 
-Available files:
-- docker-compose.yml
-- Dockerfile
-- app.py
-- runtime.env
-- health-policy.conf
+def no_memory_section() -> str:
+    """Return the control-arm memory-shaped section without learned content."""
+    return """
+# HOWDEX PROCEDURAL MEMORY
 
-Only runtime.env may be modified. It must contain APP_PORT and HEALTH_MODE.
+No prior Howdex procedural memory is available for this arm.
+Use only the shared task framing above and observations from this run.
+""".strip()
 
-Allowed execute_bash commands:
-- cat docker-compose.yml
-- cat Dockerfile
-- cat app.py
-- cat runtime.env
-- cat health-policy.conf
-- docker compose build
-- docker compose up -d
-- docker compose up -d --build
-- docker compose up -d --force-recreate
-- docker compose up -d --build --force-recreate
-- docker compose ps
-- docker compose logs
-- docker compose logs app
-- docker compose logs --tail 100 app
-- docker compose down -v
-- curl -sS -i http://127.0.0.1:{sandbox_port}/health
 
-Use execute_fs_write to change runtime.env. Do not use shell redirects, sed,
-sudo, docker exec, docker run, docker pull, external URLs, or host paths.
-Do not claim completion until execute_bash reports SUCCESS from the real health
-verifier.
+def howdex_memory_section(rendered_memory: str) -> str:
+    """Return the treatment-arm memory-shaped section with learned content."""
+    memory = str(rendered_memory or "").strip()
+    if not memory:
+        memory = "# PAST LEARNED PROCEDURE\n\nNo learned procedure was available."
+    return (
+        "# HOWDEX PROCEDURAL MEMORY\n\n"
+        "Prior learned Howdex procedural memory is available for this arm.\n\n"
+        f"{memory}"
+    ).strip()
+
+
+def build_control_docker_prompt(sandbox_port: int) -> DockerPromptParts:
+    """Build the no-memory student prompt for a sandbox."""
+    base_prompt = _base_prompt(sandbox_port)
+    memory_section = no_memory_section()
+    return DockerPromptParts(
+        base_prompt=base_prompt,
+        memory_section=memory_section,
+        full_prompt=f"{base_prompt}\n\n{memory_section}",
+    )
+
+
+def build_treatment_docker_prompt(
+    sandbox_port: int,
+    memory_section: str,
+) -> DockerPromptParts:
+    """Build the treatment student prompt for a sandbox."""
+    base_prompt = _base_prompt(sandbox_port)
+    section = str(memory_section or "").strip()
+    if not section.startswith("# HOWDEX PROCEDURAL MEMORY"):
+        section = howdex_memory_section(section)
+    return DockerPromptParts(
+        base_prompt=base_prompt,
+        memory_section=section,
+        full_prompt=f"{base_prompt}\n\n{section}",
+    )
+
+
+def prompt_sha256(text: str) -> str:
+    """Return a stable SHA256 digest for benchmark prompt reporting."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def docker_ab_prompt_hashes(
+    sandbox_port: int,
+    treatment_memory_section: str,
+) -> dict[str, str]:
+    """Return comparable A/B prompt hashes for one deterministic port."""
+    control = build_control_docker_prompt(sandbox_port)
+    treatment = build_treatment_docker_prompt(
+        sandbox_port,
+        treatment_memory_section,
+    )
+    if control.base_prompt != treatment.base_prompt:
+        raise AssertionError("control/treatment base prompts must be byte-identical")
+    return {
+        "base_prompt_sha256": prompt_sha256(control.base_prompt),
+        "control_prompt_sha256": prompt_sha256(control.full_prompt),
+        "treatment_prompt_sha256": prompt_sha256(treatment.full_prompt),
+        "memory_section_sha256": prompt_sha256(treatment.memory_section),
+    }
+
+
+def _teacher_scaffold() -> str:
+    return """
+You are the teacher. Diagnose the service rather than guessing. Inspect its
+Compose wiring, runtime environment, application behavior, and health policy.
+Start the real service, use logs and curl to distinguish reachability failures
+from application-health failures, repair the runtime configuration, recreate
+the container, and verify HTTP 200.
 """.strip()
 
 
@@ -598,20 +691,17 @@ def run_agent(
     if record_to_memory:
         memory.start_session("recover broken Docker Compose HTTP service until /health is 200")
 
-    prompt = _base_prompt(sandbox.port)
     if record_to_memory:
-        prompt += """
-
-You are the teacher. Diagnose the service rather than guessing. Inspect its
-Compose wiring, runtime environment, application behavior, and health policy.
-Start the real service, use logs and curl to distinguish reachability failures
-from application-health failures, repair the runtime configuration, recreate
-the container, and verify HTTP 200.
-"""
+        prompt = f"{_base_prompt(sandbox.port)}\n\n{_teacher_scaffold()}"
     elif use_memory:
-        prompt += "\n\nUse this prior Howdex operational memory:\n\n" + guidance
+        prompt_parts = build_treatment_docker_prompt(
+            sandbox.port,
+            guidance,
+        )
+        prompt = prompt_parts.full_prompt
     else:
-        prompt += "\n\nNo prior recovery memory is available."
+        prompt_parts = build_control_docker_prompt(sandbox.port)
+        prompt = prompt_parts.full_prompt
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": prompt}]
     actions: list[tuple[str, str]] = []
@@ -846,6 +936,14 @@ def main() -> int:
     treatment = summarize(treatment_results)
     delta = treatment["success_rate"] - control["success_rate"]
     attempt_reduction = control["avg_attempts"] - treatment["avg_attempts"]
+    framing_memory_section, _, _ = native_recovery_guidance(
+        memory,
+        PROMPT_HASH_PORT,
+    )
+    framing_hashes = docker_ab_prompt_hashes(
+        PROMPT_HASH_PORT,
+        framing_memory_section,
+    )
     pass_condition = (
         teacher.success
         and treatment["success_rate"] >= 0.80
@@ -877,6 +975,11 @@ def main() -> int:
     print("\nDelta:")
     print(f"  success_rate_lift: {delta:+.2f}")
     print(f"  attempt_reduction: {attempt_reduction:+.2f}")
+    print("\nA/B framing: identical base prompt; only learned memory differs")
+    print(f"  base_prompt_sha256: {framing_hashes['base_prompt_sha256']}")
+    print(f"  control_prompt_sha256: {framing_hashes['control_prompt_sha256']}")
+    print(f"  treatment_prompt_sha256: {framing_hashes['treatment_prompt_sha256']}")
+    print(f"  memory_section_sha256: {framing_hashes['memory_section_sha256']}")
     print("\nVerdict:")
     if pass_condition:
         print("  PASS")
@@ -896,6 +999,12 @@ def main() -> int:
                 "treatment": treatment,
                 "success_rate_lift": delta,
                 "attempt_reduction": attempt_reduction,
+                "ab_framing": {
+                    "statement": (
+                        "identical base prompt; only learned memory differs"
+                    ),
+                    **framing_hashes,
+                },
                 "pass": pass_condition,
             },
             indent=2,
