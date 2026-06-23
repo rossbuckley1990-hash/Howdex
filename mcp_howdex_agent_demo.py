@@ -6,8 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
-
+from benchmark_openai import get_openai_client
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -30,7 +29,14 @@ trace_file = demo_dir / "mcp_tool_trace.log"
 context_file = demo_dir / "howdex_context.txt"
 
 mem = Howdex(path=str(db_path))
-client = OpenAI()
+_CLIENT = None
+
+
+def _openai_client():
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = get_openai_client()
+    return _CLIENT
 
 TASK = "deploy api to production with database migration"
 
@@ -168,7 +174,7 @@ Rules:
     ]
 
     for _ in range(10):
-        response = client.chat.completions.create(
+        response = _openai_client().chat.completions.create(
             model=MODEL,
             messages=messages,
             tools=tool_schemas,

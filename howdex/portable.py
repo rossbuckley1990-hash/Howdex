@@ -22,6 +22,21 @@ PROCEDURE_FORMAT = "howdex.procedure"
 PROCEDURE_FORMAT_VERSION = 2
 CODEX_FORMAT = "howdex.codex"
 CODEX_FORMAT_VERSION = 1
+CODEX_ENTRY_REQUIRED_FIELDS = {
+    "avoid",
+    "category",
+    "id",
+    "learned_facts",
+    "policy",
+    "provenance",
+    "risk_level",
+    "source",
+    "status",
+    "tags",
+    "title",
+    "verification",
+    "version",
+}
 
 
 def default_procedure_directory() -> Path:
@@ -133,14 +148,28 @@ def publish_codex(
 ) -> dict[str, Any]:
     """Publish local learned procedures into a local Codex folder."""
     codex = init_codex(path)
-    exported = export_procedures(store, codex["procedures"])
+    output_dir = codex["procedures"]
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    exported_files: list[Path] = []
+    for payload in store.all_procedures():
+        procedure = _procedure_from_store(payload)
+        document = codex_entry_document(procedure, store=store)
+        destination = output_dir / _procedure_filename(procedure)
+        _write_json(destination, document)
+        exported_files.append(destination)
 
     manifest = json.loads(codex["manifest"].read_text(encoding="utf-8"))
-    manifest["procedure_count"] = exported["exported"]
+    manifest["procedure_count"] = len(exported_files)
     manifest["updated_at"] = _iso_timestamp(time.time())
     _write_json(codex["manifest"], manifest)
 
-    return {**codex, **exported}
+    return {
+        **codex,
+        "output": output_dir,
+        "exported": len(exported_files),
+        "files": exported_files,
+    }
 
 
 def pull_codex(store: Store, path: str | Path) -> dict[str, int]:
@@ -211,6 +240,58 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
     }
 
 
+def codex_entry_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
+    """Build a public Howdex Codex entry for one learned procedure."""
+    verification = _codex_verification(procedure)
+    return {
+        "avoid": _codex_avoid(procedure),
+        "category": "learned_procedure",
+        "id": _codex_entry_id(procedure),
+        "learned_facts": _codex_learned_facts(procedure),
+        "policy": {
+            "allowed": [
+                "Use this entry as operational guidance for owned, in-scope agent work.",
+                "Adapt placeholders and verifier commands to the current environment.",
+                "Run an independent verifier before treating the procedure as proven.",
+            ],
+            "forbidden": [
+                "Treating operational memory as executable authority.",
+                "Running side-effecting steps without policy approval.",
+                "Claiming production safety from a local learned procedure alone.",
+            ],
+            "requires_human_review": _codex_requires_review(procedure),
+            "source_artifacts": "excluded_by_default",
+        },
+        "provenance": {
+            "evidence": _codex_provenance_evidence(procedure),
+            "learned_from": _codex_learned_from(procedure, store=store),
+            "limitations": [
+                "Generated from local Howdex procedure memory.",
+                "Environment-specific commands, permissions, and policies may differ.",
+                "A candidate entry is not independently verified.",
+            ],
+        },
+        "risk_level": _codex_risk_level(procedure),
+        "source": {
+            "kind": "howdex-local-procedure",
+            "name": "Howdex local procedure memory",
+            "reference": procedure.id,
+        },
+        "status": resolve_codex_status(procedure),
+        "tags": _codex_tags(procedure),
+        "title": _codex_title(procedure),
+        "verification": verification,
+        "version": "1.0.0",
+    }
+
+
+def resolve_codex_status(procedure: Procedure) -> str:
+    """Return the public Codex status without overclaiming verification."""
+    if _verified_receipts(procedure):
+        return "verified"
+    return "candidate"
+
+
 def procedure_from_document(
     document: dict[str, Any],
     *,
@@ -219,6 +300,8 @@ def procedure_from_document(
     """Validate and decode a v1 portable procedure document."""
     label = str(source_path) if source_path is not None else "procedure document"
     if document.get("format") != PROCEDURE_FORMAT:
+        if _is_codex_entry(document):
+            return _procedure_from_codex_entry(document)
         raise ValueError(f"{label} is not a Howdex procedure document")
     format_version = document.get("format_version")
     if format_version not in {1, PROCEDURE_FORMAT_VERSION}:
@@ -326,6 +409,54 @@ def procedure_from_document(
         created_at=_parse_timestamp(timestamps.get("created_at")) or time.time(),
         last_used_at=_parse_timestamp(timestamps.get("last_used_at")),
         use_count=int(usage.get("use_count", 0)),
+    )
+
+
+def _procedure_from_codex_entry(entry: dict[str, Any]) -> Procedure:
+    title = str(entry.get("title") or entry.get("id") or "").strip()
+    if not title:
+        raise ValueError("Codex entry has no title")
+    learned_facts = [
+        str(fact).strip()
+        for fact in entry.get("learned_facts", [])
+        if str(fact).strip()
+    ]
+    if not learned_facts:
+        raise ValueError("Codex entry has no learned_facts")
+    verification = entry.get("verification") or {}
+    status = str(entry.get("status") or "").strip().lower()
+    confidence = 0.8 if status == "verified" else 0.6
+    if status == "deprecated":
+        confidence = 0.0
+    return Procedure(
+        id=str(entry.get("id") or Procedure().id),
+        task_signature=title,
+        extraction_method="parameterized_lcs",
+        steps=[
+            {
+                "action": fact,
+                "parameterized_action": fact,
+                "canonical_name": "codex_entry_step",
+                "confidence": confidence,
+            }
+            for fact in learned_facts
+        ],
+        preconditions=[],
+        expected_outcome=str(verification.get("expected_signal") or ""),
+        success_rate=1.0 if status == "verified" else 0.0,
+        sample_count=0,
+        support_count=0,
+        success_count=0,
+        failure_count=0,
+        confidence=confidence,
+        base_confidence=confidence,
+        raw_supporting_examples=[],
+        parameter_bindings=[],
+        source_episode_ids=[],
+        receipts=[],
+        created_at=0.0,
+        last_used_at=None,
+        use_count=0,
     )
 
 
@@ -480,6 +611,191 @@ def _procedure_filename(procedure: Procedure) -> str:
     slug = slug[:80] or "procedure"
     identity = hashlib.sha256(procedure.task_signature.encode("utf-8")).hexdigest()[:10]
     return f"{slug}--{identity}.json"
+
+
+def _is_codex_entry(document: dict[str, Any]) -> bool:
+    return CODEX_ENTRY_REQUIRED_FIELDS <= document.keys()
+
+
+def _codex_entry_id(procedure: Procedure) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", procedure.task_signature.lower()).strip("_")
+    if not slug:
+        slug = re.sub(r"[^a-z0-9]+", "_", procedure.id.lower()).strip("_")
+    digest = hashlib.sha256(procedure.id.encode("utf-8")).hexdigest()[:10]
+    return f"howdex.{slug[:64] or 'procedure'}.{digest}"
+
+
+def _codex_title(procedure: Procedure) -> str:
+    return str(procedure.task_signature or procedure.id or "Learned procedure").strip()
+
+
+def _codex_learned_facts(procedure: Procedure) -> list[str]:
+    facts: list[str] = []
+    for step in procedure.parameterized_steps or procedure.canonical_steps or procedure.steps:
+        if not isinstance(step, dict):
+            continue
+        action = _step_action_text(step)
+        if action:
+            facts.append(action)
+    if not facts and procedure.preconditions:
+        facts.extend(str(value).strip() for value in procedure.preconditions if str(value).strip())
+    if not facts:
+        facts.append(f"Apply the learned procedure for: {_codex_title(procedure)}.")
+    return _unique_preserving_order(facts)
+
+
+def _step_action_text(step: dict[str, Any]) -> str:
+    args = step.get("arguments") or step.get("parameterized_args") or {}
+    if isinstance(args, dict):
+        command = args.get("cmd") or args.get("command")
+        if command:
+            return f"Run command template: {command}"
+    action = (
+        step.get("action")
+        or step.get("parameterized_action")
+        or step.get("canonical_name")
+    )
+    if not action:
+        return ""
+    target = step.get("target") or step.get("parameterized_target")
+    if target:
+        return f"Apply {action} to {target}"
+    return f"Apply {action}"
+
+
+def _codex_avoid(procedure: Procedure) -> list[str]:
+    avoid = [
+        "Do not treat this Codex entry as executable authority.",
+        "Do not claim success until an independent verifier observes the expected signal.",
+    ]
+    if resolve_codex_status(procedure) != "verified":
+        avoid.append("Do not describe this candidate procedure as independently verified.")
+    return avoid
+
+
+def _codex_verification(procedure: Procedure) -> dict[str, str]:
+    verified = _first_receipt(_verified_receipts(procedure))
+    if verified is not None:
+        return {
+            "expected_signal": verified.expected_signal
+            or "Independent verifier produced the expected success signal.",
+            "status": "verified",
+            "verifier_command": verified.verifier_command
+            or "inspect attached verification receipt",
+            "verifier_type": verified.verifier_type or verified.receipt_type,
+        }
+
+    receipt_status = procedure_verification_status(procedure.receipts)
+    failed = _first_receipt(_receipts_with_status(procedure, "failed"))
+    if receipt_status == "failed_verification" and failed is not None:
+        return {
+            "expected_signal": failed.expected_signal
+            or "Independent verifier should produce the expected success signal.",
+            "status": "failed",
+            "verifier_command": failed.verifier_command
+            or "inspect attached verification receipt",
+            "verifier_type": failed.verifier_type or failed.receipt_type,
+        }
+
+    return {
+        "expected_signal": procedure.expected_outcome
+        or "Independent verifier confirms the procedure works in the target environment.",
+        "status": "required",
+        "verifier_command": "external verifier required",
+        "verifier_type": "manual_or_automated_verifier",
+    }
+
+
+def _codex_provenance_evidence(procedure: Procedure) -> list[str]:
+    evidence = [
+        f"support_count={procedure.support_count}",
+        f"success_count={procedure.success_count}",
+        f"confidence={procedure.confidence:.4f}",
+    ]
+    if procedure.source_episode_ids:
+        evidence.append(f"source_episodes={len(procedure.source_episode_ids)}")
+    return evidence
+
+
+def _codex_learned_from(procedure: Procedure, *, store: Store) -> list[str]:
+    learned_from = [f"howdex:{store.node_id}:{procedure.id}"]
+    learned_from.extend(f"episode:{episode_id}" for episode_id in procedure.source_episode_ids)
+    return learned_from
+
+
+def _codex_risk_level(procedure: Procedure) -> str:
+    classes = {
+        str(step.get("side_effect_class") or "")
+        for step in procedure.steps
+        if isinstance(step, dict)
+    }
+    if {"destructive", "financial", "security_sensitive"} & classes:
+        return "high"
+    if {"external_write", "local_write", "write"} & classes:
+        return "medium"
+    if {"unknown"} & classes:
+        return "unknown"
+    return "low"
+
+
+def _codex_requires_review(procedure: Procedure) -> bool:
+    return _codex_risk_level(procedure) in {"medium", "high", "critical", "unknown"}
+
+
+def _codex_tags(procedure: Procedure) -> list[str]:
+    tags = {"howdex", "procedure"}
+    for step in procedure.canonical_steps:
+        name = str(step.get("canonical_name") or "").strip().lower()
+        if name:
+            tags.add(re.sub(r"[^a-z0-9_-]+", "-", name).strip("-"))
+    return sorted(tag for tag in tags if tag)
+
+
+def _verified_receipts(procedure: Procedure) -> list[VerificationReceipt]:
+    return [
+        receipt
+        for receipt in _procedure_receipts(procedure)
+        if (
+            receipt.status == "verified"
+            and bool(receipt.verifier_command)
+            and bool(receipt.expected_signal)
+            and bool(receipt.observed_signal)
+            and receipt.exit_code == 0
+        )
+    ]
+
+
+def _receipts_with_status(procedure: Procedure, status: str) -> list[VerificationReceipt]:
+    return [
+        receipt
+        for receipt in _procedure_receipts(procedure)
+        if receipt.status == status
+    ]
+
+
+def _procedure_receipts(procedure: Procedure) -> list[VerificationReceipt]:
+    receipts: list[VerificationReceipt] = []
+    for payload in procedure.receipts:
+        try:
+            receipts.append(VerificationReceipt.from_dict(payload))
+        except ValueError:
+            continue
+    return receipts
+
+
+def _first_receipt(receipts: list[VerificationReceipt]) -> VerificationReceipt | None:
+    return receipts[0] if receipts else None
+
+
+def _unique_preserving_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        text = value.strip()
+        if text and text not in seen:
+            seen.add(text)
+            unique.append(text)
+    return unique
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:

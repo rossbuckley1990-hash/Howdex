@@ -173,9 +173,17 @@ Independent verification receipts are stored separately from procedure
 feedback in `procedure_receipts`, keyed by procedure and a deterministic
 content digest. This makes attachment idempotent and leaves existing procedure
 rows portable. Receipts are provider-neutral; BootProof attestations are one
-optional JSON input, not a runtime dependency. Suggestions report receipt
-verification as `unverified`, `verified`, `failed_verification`, or `mixed`
-without conflating it with episode support or an unresolved procedure use.
+optional JSON input, not a runtime dependency. Receipts record the verifier
+type and command, expected and observed signals, exit code, verification time,
+environment fingerprint, artifact hashes, and source episode. Provider results
+are normalized to `verified`, `failed`, `stale`, or `unknown`.
+
+Procedure trust is deliberately stricter than episode outcome. The public
+`procedure_status()` API returns `unverified`, `observed_episode_support`,
+`verified`, `stale`, or `failed_verification`. A successful episode can support
+a procedure, but only independent receipt evidence can mark it verified;
+failed or stale evidence takes precedence. `verify_procedure()` creates and
+attaches deterministic evidence from a real verifier result.
 
 ## Storage: SQLite
 

@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from benchmark_openai import get_openai_client
 
 from howdex import Howdex
 from howdex.core.guidance import render_agent_guidance
@@ -52,7 +52,14 @@ STUDENT_MODEL = os.getenv("HOWDEX_AB_STUDENT_MODEL", "gpt-4o-mini")
 N_TRIALS = int(os.getenv("HOWDEX_AB_TRIALS", "3"))
 MAX_AGENT_TURNS = int(os.getenv("HOWDEX_AB_MAX_TURNS", "15"))
 
-client = OpenAI()
+_CLIENT = None
+
+
+def _openai_client():
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = get_openai_client()
+    return _CLIENT
 
 
 @dataclass
@@ -478,7 +485,7 @@ Record a robust decoder.py once you discover the format.
     extracted: str | None = None
 
     for _turn in range(MAX_AGENT_TURNS):
-        response = client.chat.completions.create(
+        response = _openai_client().chat.completions.create(
             model=model,
             messages=messages,
             tools=tools,

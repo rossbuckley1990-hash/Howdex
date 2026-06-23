@@ -794,9 +794,9 @@ def summarize(results: list[AgentResult]) -> dict[str, Any]:
 
 
 def _openai_client() -> Any:
-    from openai import OpenAI
+    from benchmark_openai import get_openai_client
 
-    return OpenAI()
+    return get_openai_client()
 
 
 def main() -> int:

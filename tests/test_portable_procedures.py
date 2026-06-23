@@ -11,6 +11,21 @@ from pathlib import Path
 from howdex import Howdex
 
 CLI = [sys.executable, "-m", "howdex.cli"]
+PUBLIC_CODEX_REQUIRED_FIELDS = {
+    "avoid",
+    "category",
+    "id",
+    "learned_facts",
+    "policy",
+    "provenance",
+    "risk_level",
+    "source",
+    "status",
+    "tags",
+    "title",
+    "verification",
+    "version",
+}
 
 
 def _run(cwd: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -37,6 +52,35 @@ def _seed_procedure(db: Path, task: str = "deploy api") -> None:
         assert len(learned) == 1
     finally:
         mem.close()
+
+
+def _assert_public_codex_entry(entry: dict) -> None:
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "codex" / "schemas" / "procedure.schema.json")
+        .read_text(encoding="utf-8")
+    )
+    assert set(schema["required"]) == PUBLIC_CODEX_REQUIRED_FIELDS
+    assert PUBLIC_CODEX_REQUIRED_FIELDS <= entry.keys()
+    assert set(entry) <= set(schema["properties"])
+    assert entry["status"] in schema["properties"]["status"]["enum"]
+    assert entry["status"] is not None
+    assert isinstance(entry["learned_facts"], list)
+    assert entry["learned_facts"]
+    assert entry["verification"]["status"] in schema["properties"]["verification"]["properties"][
+        "status"
+    ]["enum"]
+    assert entry["verification"]["verifier_type"]
+    assert entry["verification"]["verifier_command"]
+    assert entry["verification"]["expected_signal"]
+    assert entry["policy"]["source_artifacts"] in schema["properties"]["policy"]["properties"][
+        "source_artifacts"
+    ]["enum"]
+    for object_field in ("policy", "provenance", "source", "verification"):
+        assert set(entry[object_field]) <= set(
+            schema["properties"][object_field]["properties"]
+        )
+    assert isinstance(entry["provenance"]["evidence"], list)
+    assert entry["provenance"]["evidence"]
 
 
 def test_procedure_export_creates_json_files_and_is_safe_to_repeat(tmp_path):
@@ -294,6 +338,66 @@ def test_codex_publish_creates_manifest_and_procedure_artifacts(tmp_path):
     assert manifest["format_version"] == 1
     assert manifest["procedure_count"] == 1
     assert len(files) == 1
+    entry = json.loads(files[0].read_text(encoding="utf-8"))
+    _assert_public_codex_entry(entry)
+    assert entry["title"] == "deploy api"
+    assert entry["status"] == "candidate"
+    assert entry["status"] is not None
+    assert entry["verification"]["status"] == "required"
+    assert "format" not in entry
+
+
+def test_codex_publish_candidate_for_receipt_without_inspectable_proof(tmp_path):
+    db = tmp_path / "source.db"
+    _seed_procedure(db)
+    mem = Howdex(path=db, embedder="hashing")
+    try:
+        procedure = mem.list_procedures()[0]
+        mem.attach_receipt(
+            procedure.id,
+            {
+                "receipt_type": "test",
+                "status": "pass",
+                "command": "pytest -q",
+            },
+        )
+        published = mem.publish_codex(tmp_path / "codex")
+    finally:
+        mem.close()
+
+    entry = json.loads(published["files"][0].read_text(encoding="utf-8"))
+    _assert_public_codex_entry(entry)
+    assert entry["status"] == "candidate"
+    assert entry["verification"]["status"] == "required"
+
+
+def test_codex_publish_verified_only_with_verified_receipt(tmp_path):
+    db = tmp_path / "source.db"
+    _seed_procedure(db)
+    mem = Howdex(path=db, embedder="hashing")
+    try:
+        procedure = mem.list_procedures()[0]
+        mem.verify_procedure(
+            procedure.id,
+            verifier_type="test",
+            verifier_command="pytest -q",
+            expected_signal="passed",
+            observed_signal="338 passed",
+            exit_code=0,
+        )
+        published = mem.publish_codex(tmp_path / "codex")
+    finally:
+        mem.close()
+
+    entry = json.loads(published["files"][0].read_text(encoding="utf-8"))
+    _assert_public_codex_entry(entry)
+    assert entry["status"] == "verified"
+    assert entry["verification"] == {
+        "expected_signal": "passed",
+        "status": "verified",
+        "verifier_command": "pytest -q",
+        "verifier_type": "test",
+    }
 
 
 def test_codex_pull_imports_another_local_codex_idempotently(tmp_path):

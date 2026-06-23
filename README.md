@@ -99,6 +99,29 @@ It extracts:
 - support and confidence counts,
 - context-conditioned variants.
 
+Procedure evidence remains inspectable:
+
+```python
+receipt = memory.verify_procedure(
+    procedure.id,
+    verifier_type="test",
+    verifier_command="python -m pytest -q",
+    expected_signal="passed",
+    observed_signal="all tests passed",
+    exit_code=0,
+    environment_fingerprint={"python": "3.12", "platform": "linux"},
+    artifact_hashes={"wheel": "sha256:..."},
+)
+
+memory.procedure_status(procedure.id)
+# verified
+```
+
+Without independent evidence, a learned procedure is either `unverified` or
+`observed_episode_support`. Failed and stale receipts remain visible as
+`failed_verification` and `stale`; guidance never silently promotes an observed
+episode into independent proof.
+
 ---
 
 ## Key Capabilities
