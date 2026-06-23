@@ -11,6 +11,7 @@ from howdex.core.guidance_artifacts import (
 )
 from howdex.core.guidance_facts import (
     learned_facts,
+    operational_data_flow,
     verification_requirements,
 )
 from howdex.core.guidance_utils import (
@@ -122,6 +123,13 @@ def render_agent_guidance(
         for procedure in items
         for artifact in source_artifacts(procedure)
     ]
+    flows = [
+        flow
+        for procedure in items
+        if (
+            flow := operational_data_flow(procedure)
+        ).steps
+    ]
 
     lines.append("Learned operational facts:")
     if facts:
@@ -129,6 +137,24 @@ def render_agent_guidance(
     else:
         lines.append("- No explicit operational facts were extracted.")
     lines.append("")
+
+    if flows:
+        data_flow_steps = unique_strings(
+            [step for flow in flows for step in flow.steps]
+        )
+        execution_hints = unique_strings(
+            [
+                hint
+                for flow in flows
+                for hint in flow.execution_hints
+            ]
+        )
+        lines.append("Data flow:")
+        lines.extend(f"- {step}" for step in data_flow_steps)
+        lines.append("")
+        lines.append("For Bash:")
+        lines.extend(f"- {hint}" for hint in execution_hints)
+        lines.append("")
 
     if include_source:
         lines.append("Source artifacts:")
@@ -166,8 +192,10 @@ def render_agent_guidance(
             for failed in failures:
                 if "cat seed.txt | rev | printf" in failed:
                     failed += (
-                        " — printf does not read from stdin; use command "
-                        "substitution instead"
+                        " — printf does not read from stdin. Do not pipe into "
+                        "printf; printf does not read stdin. Use command "
+                        "substitution such as "
+                        'printf %s "$(cat seed.txt | rev)".'
                     )
                 lines.append(f"- {failed}")
         else:
