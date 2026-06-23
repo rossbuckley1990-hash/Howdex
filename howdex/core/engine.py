@@ -33,6 +33,7 @@ from howdex.core.segmentation import (
 from howdex.core.semantic import derive_tool_semantics
 from howdex.core.guidance import (
     ProcedureSuggestion,
+    render_agent_guidance,
     render_procedure_guidance,
     suggest_procedures,
 )
@@ -917,6 +918,37 @@ class Howdex:
                 )
 
         return suggestions
+
+    def guidance(
+        self,
+        objective: str,
+        *,
+        query: str | None = None,
+        top_k: int = 3,
+        min_confidence: float = 0.0,
+        constraints: list[str] | None = None,
+        target_environment: str | None = None,
+        include_source: bool = False,
+        include_failed_attempts: bool = True,
+        include_verification: bool = True,
+        max_chars: int = 6_000,
+    ) -> str:
+        """Retrieve relevant procedures and render agent-ready guidance."""
+        suggestions = self.suggest_procedure(
+            objective if query is None else query,
+            top_k=top_k,
+            min_confidence=min_confidence,
+        )
+        return render_agent_guidance(
+            suggestions,
+            objective=objective,
+            constraints=constraints,
+            target_environment=target_environment,
+            include_source=include_source,
+            include_failed_attempts=include_failed_attempts,
+            include_verification=include_verification,
+            max_chars=max_chars,
+        )
 
     def mark_procedure_suggested(
         self,
