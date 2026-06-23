@@ -1,0 +1,80 @@
+{
+  "$id": "https://github.com/rossbuckley1990-hash/Howdex/codex/schemas/receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Run-specific verification evidence for a Howdex Codex procedure.",
+  "properties": {
+    "artifact_hashes": {
+      "additionalProperties": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "environment": {
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      },
+      "type": "object"
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "expected_signal": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "observed_signal": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "procedure_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "receipt_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pass",
+        "fail",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "verified_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "verifier_command": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "verifier_type": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "receipt_id",
+    "procedure_id",
+    "verifier_type",
+    "verifier_command",
+    "expected_signal",
+    "observed_signal",
+    "exit_code",
+    "verified_at",
+    "environment",
+    "artifact_hashes",
+    "status"
+  ],
+  "title": "Howdex Codex Verification Receipt",
+  "type": "object"
+}
