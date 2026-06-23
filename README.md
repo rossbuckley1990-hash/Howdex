@@ -1,10 +1,21 @@
 # Howdex
 
-**The procedural memory layer for AI agents.**
+## Own your AI learning loop.
 
-Howdex turns successful and failed agent execution traces into reusable operational memory: parameterized procedures, context-conditioned workflows, failure lessons, verification evidence, and cross-task guidance that future agents can apply before repeating the same expensive discovery.
+**Howdex is procedural memory for AI agents.**
+
+Howdex helps teams own their AI learning loop. It turns execution traces into
+verified reusable procedures that remain inside the customer's perimeter and
+work across models, agents, frameworks, and clouds.
+
+Execution traces are the raw material. Howdex turns them into procedural
+capital: verified guidance, failed-attempt memory, policy context, and Codex
+entries.
 
 > One expensive discovery. Many cheap executions.
+
+If your learning loop only works inside one model stack or cloud, you do not
+fully own it.
 
 Howdex is not chat history. It is not prompt stuffing. It is not a vector database full of notes. It is a memory system for **how work was actually done**.
 
@@ -124,6 +135,99 @@ episode into independent proof.
 
 ---
 
+## Why this is different from renting model intelligence
+
+Model calls can solve individual tasks, but the learning from those runs often
+stays trapped in a transcript, prompt, vendor-specific feature, or one agent
+stack. Howdex stores the operational learning itself: what was tried, what
+failed, what worked, what verifier proved it, and which policy/environment
+context mattered.
+
+That makes the learning loop portable. A team can change models, swap agent
+frameworks, move clouds, or run local-first without throwing away the procedural
+capital accumulated from prior execution.
+
+---
+
+## Own your loop, not your cloud lock-in
+
+Howdex is designed for perimeter-owned memory:
+
+- traces can be recorded locally;
+- procedures can be rendered without mandatory LLM calls;
+- receipts and provenance remain inspectable;
+- Codex entries can move between agents and environments;
+- policy context travels with the procedure instead of living in one prompt.
+
+If your learning loop only works inside one model stack or cloud, you do not
+fully own it.
+
+---
+
+## What the benchmark proves
+
+The committed Docker A/B n20 log at
+`benchmark_results/docker_hard_ab_n20_20260623_172737.txt` records:
+
+| Metric | Control | Treatment |
+|---|---:|---:|
+| n per arm | 20 | 20 |
+| successes | 7 | 18 |
+| success rate | 0.35 | 0.90 |
+| avg_attempts | 13.00 | 8.75 |
+| memory_used | 0/20 | 20/20 |
+| source_pasted | 0/20 | 0/20 |
+
+The logged lift was `+0.55` success rate with `+4.25` fewer attempts on
+average. The verdict was `PASS`: “Howdex transferred a verified local Docker
+recovery procedure without pasting source.”
+
+The benchmark framing is: identical base prompt; only learned memory differs.
+
+This demonstrates one verified procedure transferring to fresh agents. It does
+not yet prove compounding over many accumulated traces.
+
+---
+
+## What it does not prove yet
+
+The Docker n20 result is intentionally narrow. It does not claim:
+
+- production-safe autonomous execution;
+- universal memory across every task family;
+- that every Codex entry is verified;
+- that no-synthesis transfer is solved;
+- that compounding has been proven across many accumulated traces.
+
+It proves a specific operational transfer: one verified Docker recovery
+procedure helped fresh agents recover a fresh broken local runtime under the
+logged benchmark conditions.
+
+---
+
+## Reproduce the result
+
+Run the headline Docker A/B benchmark with:
+
+```bash
+make bench-docker-n20
+```
+
+Equivalent command:
+
+```bash
+HOWDEX_DOCKER_TRIALS=20 HOWDEX_DOCKER_MAX_TURNS=15 python3 real_docker_recovery_ab_test.py
+```
+
+Prerequisites:
+
+- Docker running;
+- `python:3.12-alpine` already present locally;
+- `OPENAI_API_KEY` set for the live model calls;
+- no automatic image pulls.
+
+---
+
 ## Key Capabilities
 
 ### Parameterized Procedural Memory
@@ -171,6 +275,32 @@ When applying this template:
 ```
 
 This makes memory usable by future agents without forcing them to parse raw traces.
+
+For large team Codexes, Howdex can also budget retrieval before rendering so a
+generic procedure catalogue does not flood the prompt with irrelevant memory:
+
+```python
+from howdex.core.guidance import GuidanceBudget, select_guidance_procedures
+
+selection = select_guidance_procedures(
+    "recover Docker Compose health endpoint",
+    codex_entries,
+    GuidanceBudget(
+        max_procedures=3,
+        max_guidance_chars=6000,
+        min_relevance_score=0.05,
+        suppress_stale_or_incompatible=True,
+        include_verified_only=False,
+    ),
+)
+```
+
+Selection is deterministic. It ranks by task relevance, prefers verified and
+fresh procedures, suppresses stale or incompatible entries by default, avoids
+near-duplicate procedure spam, and records why each omitted entry was excluded.
+`render_agent_guidance(..., retrieval_budget=budget, debug=True)` includes the
+selected count, omitted count, context budget used, and optional omission
+reasons.
 
 ---
 

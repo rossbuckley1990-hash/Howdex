@@ -8,12 +8,25 @@ reuse.
 
 It is machine-readable operational memory for agents that do work.
 
+The Howdex Codex is the open catalogue of operational memory. It is not a
+prompt library. It is not executable authority.
+
+Execution traces are the raw material. Howdex turns them into procedural
+capital: verified guidance, failed-attempt memory, policy context, and Codex
+entries. The Codex is where that operational memory can become portable across
+models, agents, frameworks, and clouds without forcing the learning loop into
+one vendor stack.
+
 ## What it is not
 
 The Codex is not a prompt library, a list of tips, a source-snippet collection,
 or an instruction to execute commands blindly. Entries encode procedural
 knowledge and evidence boundaries. They do not grant permission, bypass local
 policy, or prove that a procedure is safe in a new environment.
+
+If your learning loop only works inside one model stack or cloud, you do not
+fully own it. Codex entries are designed to keep know-how inspectable and
+portable while preserving local policy, provenance, and verification context.
 
 ## Why entries are open source
 
