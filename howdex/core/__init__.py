@@ -9,6 +9,10 @@ from howdex.core.classification import (
     infer_side_effect_class,
 )
 from howdex.core.consolidation import consolidate
+from howdex.core.codex_staleness import (
+    StalenessDecision,
+    evaluate_codex_staleness,
+)
 from howdex.core.engine import Howdex
 from howdex.core.errors import (
     ConsolidationError,
@@ -88,6 +92,7 @@ __all__ = [
     "Memory", "MemoryLayer", "MemoryType", "HowdexResult", "Episode", "Procedure",
     "HowdexError", "StoreError", "HowdexNotFoundError", "ConsolidationError", "SyncError", "EmbeddingError",
     "consolidate", "tokenize", "keyword_score", "graph_neighbors",
+    "StalenessDecision", "evaluate_codex_staleness",
     "CanonicalAction", "canonicalize_action", "canonicalize_steps",
     "canonicalize_tool_call", "normalize_tool_name",
     "INTENTS", "SIDE_EFFECT_CLASSES", "infer_side_effect_class",

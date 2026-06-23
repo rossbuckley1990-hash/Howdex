@@ -62,6 +62,26 @@ Verification is environment-specific. A receipt from one operating system,
 runtime, dependency graph, or policy context does not automatically validate a
 different one.
 
+## Semantic drift and staleness
+
+Codex entries may optionally include `compatibility` metadata describing the
+ecosystem, framework or tool, version range, tested versions, last verification
+time, stale-after window, deprecation signals, and known incompatible versions.
+Howdex evaluates that metadata against the current environment before rendering
+guidance.
+
+- Fresh entries render normally.
+- Warning or unknown entries render with explicit reverification warnings and
+  lower confidence.
+- Stale entries remain available only with a reverification warning.
+- Incompatible entries are treated as blocked historical memory rather than
+  recommended guidance.
+
+This prevents old procedures, deprecated flags, or framework-specific know-how
+from silently becoming operational landmines. Entries are never deleted
+automatically; stale memory is preserved for audit and must be reverified before
+reuse.
+
 ## Rendering entries into guidance
 
 A Codex consumer can map an entry into Howdex's native guidance renderers:
@@ -113,4 +133,3 @@ Future agents can:
 
 An agent should never treat a match as an instruction to execute automatically.
 Codex entries are operational memory, not executable authority.
-

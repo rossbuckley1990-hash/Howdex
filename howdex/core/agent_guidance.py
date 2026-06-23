@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from howdex.core.codex_staleness import (
+    StalenessDecision,
+    apply_staleness_confidence,
+    evaluate_codex_staleness,
+    has_compatibility_metadata,
+    staleness_guidance_text,
+)
 from howdex.core.guidance_artifacts import (
     failed_attempts,
     language_for_path,
@@ -37,12 +44,22 @@ def render_agent_guidance(
     include_source: bool = False,
     include_failed_attempts: bool = True,
     include_verification: bool = True,
+    current_environment: Any = None,
     max_chars: int = DEFAULT_AGENT_GUIDANCE_MAX_CHARS,
 ) -> str:
     """Render procedure memory as deterministic agent-ready Markdown."""
     del mode  # Reserved public compatibility argument.
     items = as_list(procedures)
     relevant_items = _relevant_items(items, objective)
+    staleness_environment = (
+        current_environment if current_environment is not None else target_environment
+    )
+    staleness = _staleness_decisions(relevant_items, staleness_environment)
+    active_items = [
+        procedure
+        for procedure in relevant_items
+        if staleness.get(id(procedure), StalenessDecision()).status != "incompatible"
+    ]
     lines = [
         "# HOWDEX OPERATIONAL MEMORY",
         "",
@@ -77,17 +94,22 @@ def render_agent_guidance(
     lines.append("Relevant memory:")
     if relevant_items:
         for index, procedure in enumerate(relevant_items, start=1):
-            task_signature = (
-                get_value(procedure, "task_signature")
-                or get_value(procedure, "name")
-                or get_value(procedure, "procedure_id")
-                or f"procedure_{index}"
-            )
+            task_signature = _procedure_label(procedure, index)
             meta: list[str] = []
             confidence = get_value(procedure, "confidence")
             if confidence is not None:
                 try:
-                    meta.append(f"confidence={float(confidence):.3f}")
+                    confidence_value = float(confidence)
+                    decision = staleness.get(id(procedure))
+                    if decision is not None:
+                        confidence_value = apply_staleness_confidence(
+                            confidence_value,
+                            decision,
+                        )
+                        meta.append(
+                            f"staleness={decision.status}"
+                        )
+                    meta.append(f"confidence={confidence_value:.3f}")
                 except (TypeError, ValueError):
                     meta.append(f"confidence={confidence}")
             support = get_value(procedure, "support_count")
@@ -102,20 +124,43 @@ def render_agent_guidance(
     if relevant_items:
         lines.append("Procedure trust:")
         for index, procedure in enumerate(relevant_items, start=1):
-            task_signature = (
-                get_value(procedure, "task_signature")
-                or get_value(procedure, "name")
-                or get_value(procedure, "procedure_id")
-                or f"procedure_{index}"
-            )
+            task_signature = _procedure_label(procedure, index)
             status = procedure_trust_status(procedure)
             lines.append(f"- {task_signature}: {status}. {_trust_instruction(status)}")
+        lines.append("")
+
+    if staleness:
+        lines.append("Codex staleness:")
+        for index, procedure in enumerate(relevant_items, start=1):
+            decision = staleness.get(id(procedure))
+            if decision is None:
+                continue
+            lines.append(
+                f"- {_procedure_label(procedure, index)}: "
+                f"{staleness_guidance_text(decision)}"
+            )
+        lines.append("")
+
+    blocked_items = [
+        (index, procedure, decision)
+        for index, procedure in enumerate(relevant_items, start=1)
+        if (decision := staleness.get(id(procedure))) is not None
+        and decision.status == "incompatible"
+    ]
+    if blocked_items:
+        lines.append("Blocked/historical memory:")
+        for index, procedure, decision in blocked_items:
+            lines.append(
+                f"- {_procedure_label(procedure, index)}: not recommended for "
+                "the current environment; keep only as historical context "
+                f"until reverified ({'; '.join(decision.reasons)})."
+            )
         lines.append("")
 
     facts = unique_strings(
         [
             fact
-            for procedure in relevant_items
+            for procedure in active_items
             for fact in relevant_learned_facts(
                 procedure,
                 objective=objective,
@@ -125,7 +170,7 @@ def render_agent_guidance(
     failures = unique_strings(
         [
             failed
-            for procedure in relevant_items
+            for procedure in active_items
             for failed in failed_attempts(procedure)
             if text_relevant_to_objective(
                 failed,
@@ -137,21 +182,31 @@ def render_agent_guidance(
     verification = unique_strings(
         [
             requirement
-            for procedure in relevant_items
+            for procedure in active_items
             for requirement in relevant_verification_requirements(
                 procedure,
                 objective=objective,
             )
         ]
     )
+    for index, procedure in enumerate(relevant_items, start=1):
+        decision = staleness.get(id(procedure))
+        if decision is None or decision.status == "fresh":
+            continue
+        verification.append(
+            (
+                f"Reverify {_procedure_label(procedure, index)} before relying "
+                f"on it because Codex staleness status is {decision.status}."
+            )
+        )
     artifacts = [
         artifact
-        for procedure in relevant_items
+        for procedure in active_items
         for artifact in source_artifacts(procedure)
     ]
     flows = [
         flow
-        for procedure in relevant_items
+        for procedure in active_items
         if (flow := relevant_operational_data_flow(procedure, objective=objective)).steps
     ]
 
@@ -261,3 +316,29 @@ def _relevant_items(items: list[Any], objective: str | None) -> list[Any]:
         for item in items
         if procedure_relevant_to_objective(item, objective=objective)
     ]
+
+
+def _procedure_label(procedure: Any, index: int) -> str:
+    return (
+        get_value(procedure, "task_signature")
+        or get_value(procedure, "name")
+        or get_value(procedure, "title")
+        or get_value(procedure, "procedure_id")
+        or get_value(procedure, "id")
+        or f"procedure_{index}"
+    )
+
+
+def _staleness_decisions(
+    procedures: list[Any],
+    current_environment: Any,
+) -> dict[int, StalenessDecision]:
+    decisions: dict[int, StalenessDecision] = {}
+    for procedure in procedures:
+        if not has_compatibility_metadata(procedure):
+            continue
+        decisions[id(procedure)] = evaluate_codex_staleness(
+            procedure,
+            current_environment,
+        )
+    return decisions

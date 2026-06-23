@@ -15,6 +15,62 @@
       "minLength": 1,
       "type": "string"
     },
+    "compatibility": {
+      "additionalProperties": false,
+      "description": "Optional environment compatibility metadata used to detect semantic drift and stale procedures.",
+      "properties": {
+        "deprecation_signals": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ecosystem": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "framework": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "known_incompatible_versions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "last_verified_at": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "package_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "stale_after_days": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tested_versions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tool": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "version_range": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "id": {
       "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
       "type": "string"
