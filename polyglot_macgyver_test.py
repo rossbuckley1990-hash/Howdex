@@ -36,6 +36,7 @@ from typing import Any
 from openai import OpenAI
 
 from howdex import Howdex
+from howdex.core.guidance import render_agent_guidance
 
 
 DB_PATH = ".howdex_polyglot.db"
@@ -367,6 +368,21 @@ def raw_examples_from_sqlite() -> list[dict[str, Any]]:
     return examples
 
 
+def source_pasted_in_guidance(guidance: str) -> bool:
+    """Detect source-code leakage conservatively in treatment guidance."""
+    patterns = (
+        r"```",
+        r"(?m)^\s*(?:from\s+\S+\s+import\s+|import\s+\S+)",
+        r"(?m)^\s*(?:async\s+)?def\s+\w+\s*\(",
+        r"(?m)^\s*class\s+\w+",
+        r"\bhashlib\.",
+        r"\bsubprocess(?:\.|\s+import\b)",
+        r"\bseed\s*\[\s*::\s*-1\s*\]",
+        r"(?m)^\s*#!.*python",
+    )
+    return any(re.search(pattern, guidance) for pattern in patterns)
+
+
 def build_polyglot_memory(memory: Howdex) -> tuple[str, bool, bool]:
     suggestions = memory.suggest_procedure(
         "Decrypt vault.enc from seed.txt by deriving the openssl password.",
@@ -425,42 +441,57 @@ def build_polyglot_memory(memory: Howdex) -> tuple[str, bool, bool]:
 
     has_memory = bool(suggestions) and observed_success and len(facts) >= 4
 
-    guidance_lines = [
-        "# HOWDEX POLYGLOT OPERATIONAL MEMORY",
-        "",
-        "Use this as prior operational memory. It is not source code.",
-        "Do not ask for Python. Translate the remembered algorithm into Bash tools.",
-        "",
-        "Learned facts:",
+    learned_facts = [
+        *facts,
+        "reverse text with rev",
+        (
+            "avoid adding a newline before hashing by using command "
+            "substitution"
+        ),
+        (
+            "use this exact corrected Bash hash shape: "
+            "printf %s \"$(cat seed.txt | rev)\" | shasum -a 256 | "
+            "awk '{print $1}'"
+        ),
+        "compute SHA256 on macOS with shasum -a 256",
+        "extract the hash column with awk '{print $1}'",
+        "decrypt using openssl enc -d -aes-256-cbc -pbkdf2",
     ]
-    guidance_lines.extend(f"- {fact}" for fact in facts)
-    guidance_lines.extend(
-        [
-            "",
-            "Available Bash translation hints:",
-            "- reverse text with rev",
-            "- avoid adding a newline before hashing: use command substitution exactly like printf %s \"$(cat seed.txt | rev)\"",
-            "- do not use cat seed.txt | rev | printf %s; printf does not read from stdin and will hash an empty string",
-            "- compute SHA256 on macOS with shasum -a 256",
-            "- extract the hash column with awk '{print $1}'",
-            "- decrypt using openssl enc -d -aes-256-cbc -pbkdf2",
-            "",
-            "Verification:",
-            "- Success requires the real openssl command to output the TARGET string.",
-        ]
+    primary = suggestions[0] if suggestions else None
+    payload = {
+        "task_signature": (
+            getattr(primary, "task_signature", None)
+            or "polyglot crypto transfer"
+        ),
+        "confidence": getattr(primary, "confidence", None),
+        "support_count": getattr(primary, "support_count", None),
+        "learned_facts": learned_facts,
+        "failed_attempts": [
+            "cat seed.txt | rev | printf %s | shasum -a 256",
+        ],
+        "verification": [
+            (
+                "Success requires the real openssl command to output the "
+                "TARGET string."
+            ),
+            "Do not claim completion until the real verifier reports SUCCESS.",
+        ],
+    }
+    guidance = render_agent_guidance(
+        [payload],
+        objective="Decrypt vault.enc and reveal the hidden TARGET string.",
+        constraints=[
+            "Python is unavailable.",
+            "Use Bash tools only.",
+            "Do not paste or reconstruct Python source code.",
+        ],
+        target_environment="Bash-only student sandbox",
+        include_source=False,
+        include_failed_attempts=True,
+        include_verification=True,
     )
 
-    guidance = "\n".join(guidance_lines)
-
-    source_pasted = (
-        "```" in guidance
-        or "import " in guidance
-        or "def " in guidance
-        or "hashlib." in guidance
-        or "subprocess" in guidance
-    )
-
-    return guidance, has_memory, source_pasted
+    return guidance, has_memory, source_pasted_in_guidance(guidance)
 
 
 def run_agent(
