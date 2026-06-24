@@ -18,6 +18,7 @@ Usage:
     howdex codex pull <path>            # import another local Codex
     howdex codex lint <path>            # lint Codex entries
     howdex codex policy-check <path>    # check Codex policy metadata
+    howdex registry init <path>         # create a Codex registry layout
     howdex forget <id>                  # delete a memory
     howdex vacuum                       # GC expired + tombstoned
     howdex mcp                          # start MCP server (stdio)
@@ -341,6 +342,84 @@ def cmd_codex_policy_check(args: argparse.Namespace) -> int:
         print("✓ codex policy-check passed")
         return 0
     return 1
+
+
+def _print_registry_findings(findings) -> None:
+    if not findings:
+        print("✓ no registry findings")
+        return
+    for finding in findings:
+        print(finding.format())
+
+
+def cmd_registry_init(args: argparse.Namespace) -> int:
+    from howdex.registry import registry_init
+
+    result = registry_init(args.registry_path)
+    print(f"✓ initialized registry at {result['root']}")
+    return 0
+
+
+def cmd_registry_index(args: argparse.Namespace) -> int:
+    from howdex.registry import registry_index
+
+    result = registry_index(args.registry_path)
+    print(
+        json.dumps(
+            {
+                "entries": result["entries"],
+                "root": str(result["root"]),
+                "root_hash": result["root_hash"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def cmd_registry_verify(args: argparse.Namespace) -> int:
+    from howdex.registry import registry_verify
+
+    result = registry_verify(args.registry_path)
+    _print_registry_findings(result.findings)
+    if result.ok:
+        print("✓ registry verify passed")
+        return 0
+    return 1
+
+
+def cmd_registry_pull(args: argparse.Namespace) -> int:
+    from howdex.registry import registry_pull
+
+    result = registry_pull(args.source, args.to)
+    print(
+        json.dumps(
+            {
+                "entries": result["entries"],
+                "root": str(result["root"]),
+                "root_hash": result["root_hash"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def cmd_registry_add(args: argparse.Namespace) -> int:
+    from howdex.registry import registry_add
+
+    result = registry_add(args.procedure_json, args.to)
+    print(f"✓ added {result['path']} to registry {result['root']}")
+    return 0
+
+
+def cmd_registry_trust_policy(args: argparse.Namespace) -> int:
+    from howdex.registry import registry_trust_policy
+
+    print(json.dumps(registry_trust_policy(args.registry_path), indent=2, sort_keys=True))
+    return 0
 
 
 def cmd_receipt_import(args: argparse.Namespace) -> int:
@@ -682,6 +761,56 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("codex_path")
     sp.set_defaults(func=cmd_codex_policy_check)
+
+    registry_parser = sub.add_parser(
+        "registry",
+        help="manage protocol-first Howdex Codex registries",
+    )
+    registry_sub = registry_parser.add_subparsers(dest="registry_cmd", required=True)
+
+    sp = registry_sub.add_parser(
+        "init",
+        help="create a local Codex registry layout",
+    )
+    sp.add_argument("registry_path")
+    sp.set_defaults(func=cmd_registry_init)
+
+    sp = registry_sub.add_parser(
+        "index",
+        help="rebuild registry indexes and manifest counts",
+    )
+    sp.add_argument("registry_path")
+    sp.set_defaults(func=cmd_registry_index)
+
+    sp = registry_sub.add_parser(
+        "verify",
+        help="verify registry manifest, indexes, schemas, root hash, and signatures",
+    )
+    sp.add_argument("registry_path")
+    sp.set_defaults(func=cmd_registry_verify)
+
+    sp = registry_sub.add_parser(
+        "pull",
+        help="copy a local or file:// registry into another local registry",
+    )
+    sp.add_argument("source")
+    sp.add_argument("--to", required=True)
+    sp.set_defaults(func=cmd_registry_pull)
+
+    sp = registry_sub.add_parser(
+        "add",
+        help="add one procedure JSON entry to a registry",
+    )
+    sp.add_argument("procedure_json")
+    sp.add_argument("--to", required=True)
+    sp.set_defaults(func=cmd_registry_add)
+
+    sp = registry_sub.add_parser(
+        "trust-policy",
+        help="print the registry trust_policy manifest field",
+    )
+    sp.add_argument("registry_path")
+    sp.set_defaults(func=cmd_registry_trust_policy)
 
     sp = sub.add_parser("forget", help="delete a memory")
     sp.add_argument("memory_id")
