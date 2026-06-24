@@ -1389,6 +1389,162 @@ class Howdex:
         at_risk.sort(key=lambda d: d["min_confidence"])
         return at_risk
 
+    # ------------------------------------------------------------------ #
+    # trust calibration (Day-2 risk: context window sizing)
+    # ------------------------------------------------------------------ #
+    def trust_calibration_curve(self) -> dict[str, Any]:
+        """Return the verified-vs-candidate distribution across all procedures.
+
+        Addresses the Day-2 risk: "If the HNSW vector index retrieves 10
+        slightly overlapping procedures for a single task, injecting all
+        of them will cause severe 'Needle in a Haystack' context collapse
+        for smaller models like Llama-3."
+
+        The trust calibration curve tells you how many of your procedures
+        are verified (independently proven) vs. candidate (observed only).
+        Use it to decide:
+
+        - If most procedures are candidates, raise ``min_relevance_score``
+          and set ``verified_only=True`` in ``guidance()`` to avoid
+          injecting unproven noise.
+        - If most procedures are verified, you can afford a larger
+          ``top_k`` because each injected procedure has proof.
+
+        Returns a dict with:
+        - ``total_procedures`` — count of all learned procedures
+        - ``verified`` — count with at least one verified receipt
+        - ``candidate`` — count with no verified receipt
+        - ``failed`` — count with a failed receipt
+        - ``verified_ratio`` — verified / total (0.0–1.0)
+        - ``recommended_top_k`` — suggested top_k for guidance() based on
+          the trust distribution (1 if ratio < 0.3, 2 if < 0.6, else 3)
+        - ``recommended_verified_only`` — True if ratio < 0.3
+        """
+        total = 0
+        verified = 0
+        candidate = 0
+        failed = 0
+        for proc_payload in self.store.all_procedures():
+            proc = _normalise_procedure_payload(proc_payload)
+            if proc is None:
+                continue
+            total += 1
+            receipts = proc.get("receipts") or []
+            has_verified = False
+            has_failed = False
+            for receipt in receipts:
+                if not isinstance(receipt, dict):
+                    continue
+                status = str(receipt.get("status", "")).lower()
+                if status == "verified":
+                    has_verified = True
+                elif status == "failed":
+                    has_failed = True
+            if has_verified:
+                verified += 1
+            elif has_failed:
+                failed += 1
+            else:
+                candidate += 1
+        ratio = (verified / total) if total > 0 else 0.0
+        if ratio < 0.3:
+            recommended_top_k = 1
+            recommended_verified_only = True
+        elif ratio < 0.6:
+            recommended_top_k = 2
+            recommended_verified_only = False
+        else:
+            recommended_top_k = 3
+            recommended_verified_only = False
+        return {
+            "total_procedures": total,
+            "verified": verified,
+            "candidate": candidate,
+            "failed": failed,
+            "verified_ratio": round(ratio, 3),
+            "recommended_top_k": recommended_top_k,
+            "recommended_verified_only": recommended_verified_only,
+        }
+
+    def needle_in_haystack_risk(
+        self,
+        objective: str,
+        *,
+        top_k: int = 5,
+        max_chars: int = 6_000,
+    ) -> dict[str, Any]:
+        """Assess the risk of context collapse for a given objective.
+
+        Returns a dict with:
+        - ``risk_level`` — "low" / "medium" / "high"
+        - ``retrieved_count`` — how many procedures matched
+        - ``overlapping_count`` — how many share >50% of canonical steps
+          with another retrieved procedure (the "haystack" problem)
+        - ``estimated_chars`` — estimated rendered size of all retrieved
+        - ``max_chars`` — the budget cap
+        - ``recommendation`` — a human-readable suggestion
+
+        A "high" risk means: too many overlapping procedures will be
+        injected, causing the LLM to lose the needle. Mitigate by
+        lowering ``top_k``, raising ``min_relevance_score``, or setting
+        ``verified_only=True``.
+        """
+        suggestions = self.suggest_procedure(objective, top_k=top_k)
+        retrieved_count = len(suggestions)
+        # Detect overlap: procedures sharing >50% of canonical step names
+        step_sets: list[set[str]] = []
+        for s in suggestions:
+            steps = set()
+            # Handle both dict-like and object-like suggestions
+            s_steps = getattr(s, "steps", None)
+            if s_steps is None and isinstance(s, dict):
+                s_steps = s.get("steps") or []
+            for step in (s_steps or []):
+                if isinstance(step, dict):
+                    cn = step.get("canonical_action") or step.get("action") or ""
+                    if cn:
+                        steps.add(str(cn))
+            step_sets.append(steps)
+        overlapping = 0
+        for i, s1 in enumerate(step_sets):
+            for j, s2 in enumerate(step_sets):
+                if i >= j:
+                    continue
+                if not s1 or not s2:
+                    continue
+                overlap = len(s1 & s2) / max(len(s1 | s2), 1)
+                if overlap > 0.5:
+                    overlapping += 1
+                    break
+        # Rough char estimate: ~500 chars per procedure
+        estimated_chars = retrieved_count * 500
+        if estimated_chars > max_chars * 0.9 or overlapping > 2:
+            risk = "high"
+        elif estimated_chars > max_chars * 0.7 or overlapping > 0:
+            risk = "medium"
+        else:
+            risk = "low"
+        recs = {
+            "high": (
+                "High needle-in-haystack risk. Lower top_k to 1-2, raise "
+                "min_relevance_score to 0.15+, and consider verified_only=True."
+            ),
+            "medium": (
+                "Medium risk. Consider lowering top_k or raising min_relevance_score."
+            ),
+            "low": (
+                "Low risk. Current retrieval settings should not cause context collapse."
+            ),
+        }
+        return {
+            "risk_level": risk,
+            "retrieved_count": retrieved_count,
+            "overlapping_count": overlapping,
+            "estimated_chars": estimated_chars,
+            "max_chars": max_chars,
+            "recommendation": recs[risk],
+        }
+
     def mark_procedure_suggested(
         self,
         procedure_id: str,
