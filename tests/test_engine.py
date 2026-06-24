@@ -3,7 +3,7 @@
 import pytest
 
 from howdex import Howdex
-from howdex.core.types import MemoryLayer, MemoryType
+from howdex.core.types import MemoryLayer
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def test_session_lifecycle(mem):
 
 def test_learn_produces_procedure(mem):
     """Run several episodes with the same task, then consolidate."""
-    for i in range(3):
+    for _i in range(3):
         mem.start_session("deploy to production")
         mem.log_step("run tests", "ok")
         mem.log_step("build image", "ok")
@@ -111,7 +111,7 @@ def test_vacuum_removes_expired(mem):
 def test_relations_and_graph_search(mem):
     """Memories linked by relations should be reachable via graph expansion."""
     m1 = mem.remember("Python is a programming language", layer="semantic")
-    m2 = mem.remember("Python was created by Guido van Rossum", layer="semantic",
+    mem.remember("Python was created by Guido van Rossum", layer="semantic",
                       relations=[{"type": "about", "target": m1.id}])
     # search for something that matches m1 directly; m2 should come via graph
     results = mem.recall("programming language", top_k=10, min_score=0.0)

@@ -27,12 +27,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
-import json
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from howdex import Howdex, __version__
 from howdex.core.types import MemoryLayer, MemoryType
@@ -53,7 +53,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     print(f"✓ Initialized Howdex at {mem.path}")
     print(f"  embedder: {mem.embedder.name} (dim={mem.embed_dim})")
     print(f"  node_id:  {mem.store.node_id}")
-    print(f"\nNext: howdex remember \"Hello, world\"")
+    print("\nNext: howdex remember \"Hello, world\"")
     return 0
 
 
@@ -149,7 +149,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         print(f"Howdex — {s['db_path']}")
         print(f"  node_id:           {s['node_id']}")
         print(f"  total memories:    {s['total_memories']}")
-        print(f"  per layer:")
+        print("  per layer:")
         for layer, n in s["per_layer"].items():
             print(f"    {layer:12s} {n}")
         print(f"  episodes:          {s['episodes']}")
@@ -566,7 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("remember", help="store a memory")
     sp.add_argument("content")
     sp.add_argument("--layer", default="semantic",
-                    choices=[l.value for l in MemoryLayer])
+                    choices=[layer.value for layer in MemoryLayer])
     sp.add_argument("--type", default=None, choices=[t.value for t in MemoryType])
     sp.add_argument("--metadata", default=None, help="JSON object")
     sp.add_argument("--importance", type=float, default=0.5)
@@ -580,7 +580,7 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         sp = sub.add_parser(name, help=help_text)
         sp.add_argument("query")
-        sp.add_argument("--layer", default=None, choices=[l.value for l in MemoryLayer])
+        sp.add_argument("--layer", default=None, choices=[layer.value for layer in MemoryLayer])
         sp.add_argument("--top-k", type=int, default=5)
         sp.add_argument("--min-score", type=float, default=0.1)
         sp.add_argument("-v", "--verbose", action="store_true")
@@ -879,7 +879,7 @@ def cmd_eval(args):
     return proc.returncode
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

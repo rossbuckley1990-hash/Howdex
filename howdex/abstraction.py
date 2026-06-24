@@ -48,7 +48,7 @@ SOURCE_MARKER_RE = re.compile(
     r"^\s*import\s+\w+|^\s*from\s+\w+.*\s+import\s+|#!/usr/bin/env)"
 )
 
-_PROPOSALS: dict[str, "AbstractionProposal"] = {}
+_PROPOSALS: dict[str, AbstractionProposal] = {}
 _CANDIDATE_ABSTRACTIONS: dict[str, dict[str, Any]] = {}
 
 
@@ -92,7 +92,7 @@ class AbstractionProposal:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "AbstractionProposal":
+    def from_dict(cls, payload: Mapping[str, Any]) -> AbstractionProposal:
         if not isinstance(payload, Mapping):
             raise ValueError("abstraction proposal must be an object")
         return cls(

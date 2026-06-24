@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-
 LIVE_BENCHMARK_MODULES = (
     "real_macgyver_ab_test",
     "polyglot_macgyver_test",

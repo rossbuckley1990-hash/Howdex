@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from howdex.attestation import load_attestation_file, verify_attestation
+from howdex.attestation import verify_attestation
 
 REQUIRED_FIELDS = {
     "avoid",

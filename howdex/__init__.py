@@ -13,12 +13,6 @@ repeated successful traces into reusable procedures.
 Visit https://github.com/rossbuckley1990-hash/Howdex for full docs.
 """
 
-from howdex.attestation import (
-    AttestationVerification,
-    SignedReceiptAttestation,
-    create_signed_attestation,
-    verify_attestation,
-)
 from howdex.abstraction import (
     AbstractionProposal,
     accept_abstraction,
@@ -26,6 +20,12 @@ from howdex.abstraction import (
     list_abstraction_proposals,
     propose_abstraction,
     reject_abstraction,
+)
+from howdex.attestation import (
+    AttestationVerification,
+    SignedReceiptAttestation,
+    create_signed_attestation,
+    verify_attestation,
 )
 from howdex.core.engine import Howdex
 from howdex.core.errors import (

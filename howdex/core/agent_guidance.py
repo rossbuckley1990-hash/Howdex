@@ -12,14 +12,14 @@ from howdex.core.codex_staleness import (
     has_compatibility_metadata,
     staleness_guidance_text,
 )
-from howdex.core.guidance_budget import (
-    GuidanceProcedureSelection,
-    select_guidance_procedures,
-)
 from howdex.core.guidance_artifacts import (
     failed_attempts,
     language_for_path,
     source_artifacts,
+)
+from howdex.core.guidance_budget import (
+    GuidanceProcedureSelection,
+    select_guidance_procedures,
 )
 from howdex.core.guidance_facts import (
     procedure_relevant_to_objective,
@@ -238,10 +238,10 @@ def render_agent_guidance(
         if decision is None or decision.status == "fresh":
             continue
         verification.append(
-            (
+
                 f"Reverify {_procedure_label(procedure, index)} before relying "
                 f"on it because Codex staleness status is {decision.status}."
-            )
+
         )
     artifacts = [
         artifact

@@ -8,11 +8,11 @@ from howdex.core.classification import (
     SIDE_EFFECT_CLASSES,
     infer_side_effect_class,
 )
-from howdex.core.consolidation import consolidate
 from howdex.core.codex_staleness import (
     StalenessDecision,
     evaluate_codex_staleness,
 )
+from howdex.core.consolidation import consolidate
 from howdex.core.engine import Howdex
 from howdex.core.errors import (
     ConsolidationError,

@@ -386,7 +386,7 @@ _PACKAGE_INSTALL_PATTERNS = [
 
 def _parameterize_package_installs(
     command: str,
-    registry: "_PlaceholderRegistry",
+    registry: _PlaceholderRegistry,
     parameter_map: dict[str, Any],
 ) -> str:
     def replace_match(match):

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Iterable
+from collections.abc import Iterable
 
 from howdex.core.types import Memory
-
 
 _TOKEN_RE = re.compile(r"\b\w+\b", re.UNICODE)
 

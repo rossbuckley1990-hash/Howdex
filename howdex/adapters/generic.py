@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import functools
 import inspect
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from howdex.adapters._shared import adapter_guidance, learned_summary
 

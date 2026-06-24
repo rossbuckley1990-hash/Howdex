@@ -11,7 +11,6 @@ import pytest
 
 from howdex import Howdex
 
-
 OPTIONAL_MODULES = {
     "autogen",
     "crewai",

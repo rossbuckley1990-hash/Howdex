@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import os
-from typing import Optional
 
 import numpy as np
 
 from howdex.core.errors import EmbeddingError
 
 
-from howdex.vectors.hash_embedder import HashEmbedder
 class Embedder:
     """Base interface. Subclasses implement ``embed(text) -> list[float]``."""
 
@@ -131,7 +129,7 @@ class OpenAIEmbedder(Embedder):
         return [d.embedding for d in resp.data]
 
 
-def auto_embedder(preferred: Optional[str] = None, dim: int = 384) -> Embedder:
+def auto_embedder(preferred: str | None = None, dim: int = 384) -> Embedder:
     """Pick the configured embedder.
 
     Priority:

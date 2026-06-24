@@ -1,10 +1,8 @@
 """Tests for CRDT sync."""
 
-import json
-import pytest
 
 from howdex import Howdex
-from howdex.sync import sync_to_file, sync_from_file, export_ops, import_ops
+from howdex.sync import export_ops, import_ops, sync_from_file, sync_to_file
 
 
 def test_export_import_roundtrip(tmp_path):

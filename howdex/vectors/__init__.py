@@ -1,11 +1,11 @@
-from howdex.vectors.index import VectorIndex
 from howdex.vectors.embedder import (
     Embedder,
     HashingEmbedder,
-    SentenceTransformerEmbedder,
     OpenAIEmbedder,
+    SentenceTransformerEmbedder,
     auto_embedder,
 )
+from howdex.vectors.index import VectorIndex
 
 __all__ = [
     "VectorIndex",

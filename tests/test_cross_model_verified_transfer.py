@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import os
 
 
 def test_dry_run_requires_no_openai(monkeypatch, tmp_path):

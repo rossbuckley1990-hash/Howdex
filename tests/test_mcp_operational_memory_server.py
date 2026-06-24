@@ -4,8 +4,7 @@ import importlib
 import json
 from pathlib import Path
 
-from howdex.mcp.server import MCPServer, TOOLS
-
+from howdex.mcp.server import TOOLS, MCPServer
 
 REQUIRED_TOOLS = {
     "howdex_remember_trace",
