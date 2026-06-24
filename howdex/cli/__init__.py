@@ -16,6 +16,8 @@ Usage:
     howdex codex init                   # create .howdex/codex
     howdex codex publish                # publish procedures to local Codex
     howdex codex pull <path>            # import another local Codex
+    howdex codex lint <path>            # lint Codex entries
+    howdex codex policy-check <path>    # check Codex policy metadata
     howdex forget <id>                  # delete a memory
     howdex vacuum                       # GC expired + tombstoned
     howdex mcp                          # start MCP server (stdio)
@@ -245,6 +247,100 @@ def cmd_codex_pull(args: argparse.Namespace) -> int:
         return 0
     finally:
         mem.close()
+
+
+def _print_governance_report(report) -> None:
+    if not report.findings:
+        print("✓ no governance findings")
+        return
+    for finding in report.findings:
+        print(finding.format())
+
+
+def cmd_codex_lint(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import lint_codex
+
+    report = lint_codex(args.codex_path, hmac_key=args.hmac_key)
+    _print_governance_report(report)
+    if report.ok:
+        print("✓ codex lint passed")
+        return 0
+    return 1
+
+
+def cmd_codex_diff(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import diff_codex_entries
+
+    lines = diff_codex_entries(args.left, args.right)
+    if not lines:
+        print("✓ no governance-relevant differences")
+        return 0
+    print("\n".join(lines))
+    return 1
+
+
+def cmd_codex_merge(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import merge_codex_entries
+
+    merged, messages = merge_codex_entries(
+        args.left,
+        args.right,
+        args.output,
+        interactive=args.interactive,
+    )
+    if not merged:
+        print("✗ merge blocked by governance conflict")
+        for message in messages:
+            print(f"- {message}")
+        return 1
+    print(f"✓ merged Codex entry written to {args.output}")
+    return 0
+
+
+def cmd_codex_verify(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import verify_codex
+
+    report = verify_codex(args.codex_path, hmac_key=args.hmac_key)
+    _print_governance_report(report)
+    if report.ok:
+        print("✓ codex verify passed")
+        return 0
+    return 1
+
+
+def cmd_codex_deprecate(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import deprecate_entry
+
+    path = deprecate_entry(
+        args.entry_id,
+        args.reason,
+        codex_path=args.codex_path,
+    )
+    print(f"✓ deprecated {args.entry_id} in {path}")
+    return 0
+
+
+def cmd_codex_trust(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import set_trust_level
+
+    path = set_trust_level(
+        args.entry_id,
+        args.level,
+        codex_path=args.codex_path,
+    )
+    print(f"✓ set {args.entry_id} trust level to {args.level} in {path}")
+    return 0
+
+
+def cmd_codex_policy_check(args: argparse.Namespace) -> int:
+    from howdex.codex_governance import policy_check_codex
+
+    report = policy_check_codex(args.codex_path)
+    _print_governance_report(report)
+    if report.ok:
+        print("✓ codex policy-check passed")
+        return 0
+    return 1
 
 
 def cmd_receipt_import(args: argparse.Namespace) -> int:
@@ -527,6 +623,65 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("source")
     sp.set_defaults(func=cmd_codex_pull)
+
+    sp = codex_sub.add_parser(
+        "lint",
+        help="lint Codex entries for schema, proof, source, and policy hygiene",
+    )
+    sp.add_argument("codex_path")
+    sp.add_argument("--hmac-key", default=None)
+    sp.set_defaults(func=cmd_codex_lint)
+
+    sp = codex_sub.add_parser(
+        "diff",
+        help="show governance-relevant differences between two Codex entries",
+    )
+    sp.add_argument("left")
+    sp.add_argument("right")
+    sp.set_defaults(func=cmd_codex_diff)
+
+    sp = codex_sub.add_parser(
+        "merge",
+        help="merge two Codex entries when no semantic conflict is detected",
+    )
+    sp.add_argument("--interactive", action="store_true")
+    sp.add_argument("left")
+    sp.add_argument("right")
+    sp.add_argument("--output", required=True)
+    sp.set_defaults(func=cmd_codex_merge)
+
+    sp = codex_sub.add_parser(
+        "verify",
+        help="verify Codex proof and governance metadata",
+    )
+    sp.add_argument("codex_path")
+    sp.add_argument("--hmac-key", default=None)
+    sp.set_defaults(func=cmd_codex_verify)
+
+    sp = codex_sub.add_parser(
+        "deprecate",
+        help="mark a Codex entry deprecated with a reason",
+    )
+    sp.add_argument("entry_id")
+    sp.add_argument("--reason", required=True)
+    sp.add_argument("--codex-path", default="codex")
+    sp.set_defaults(func=cmd_codex_deprecate)
+
+    sp = codex_sub.add_parser(
+        "trust",
+        help="set a conservative trust level for a Codex entry",
+    )
+    sp.add_argument("entry_id")
+    sp.add_argument("--level", required=True, choices=["candidate", "verified", "blocked"])
+    sp.add_argument("--codex-path", default="codex")
+    sp.set_defaults(func=cmd_codex_trust)
+
+    sp = codex_sub.add_parser(
+        "policy-check",
+        help="check Codex entries for policy approval and banned command hazards",
+    )
+    sp.add_argument("codex_path")
+    sp.set_defaults(func=cmd_codex_policy_check)
 
     sp = sub.add_parser("forget", help="delete a memory")
     sp.add_argument("memory_id")

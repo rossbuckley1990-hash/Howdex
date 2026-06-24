@@ -348,6 +348,24 @@ model.
 
 ---
 
+### Govern procedures like code
+
+Howdex includes local Codex governance commands so teams can lint, diff, merge,
+deprecate, trust, verify, and policy-check operational memory before it becomes
+shared agent guidance.
+
+```bash
+howdex codex lint codex
+howdex codex diff left.json right.json
+howdex codex policy-check codex
+```
+
+Verified procedures require inspectable receipt metadata, and signed-verified
+procedures require valid signed attestations. See
+[docs/CODEX_GOVERNANCE.md](docs/CODEX_GOVERNANCE.md).
+
+---
+
 ### Trace why memory was selected
 
 Howdex can emit optional OpenTelemetry spans for procedural-memory decisions:
