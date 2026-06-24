@@ -25,6 +25,7 @@ dist/
 *.sqlite3
 .howdex/
 benchmark_results/
+benchmark-results/
 
 # Local benchmark working dirs
 .howdex-*/

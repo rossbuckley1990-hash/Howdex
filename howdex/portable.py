@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import howdex.telemetry as telemetry
 from howdex.core.feedback import procedure_feedback_confidence
 from howdex.core.receipts import (
     VerificationReceipt,
@@ -147,29 +148,46 @@ def publish_codex(
     path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Publish local learned procedures into a local Codex folder."""
-    codex = init_codex(path)
-    output_dir = codex["procedures"]
-    output_dir.mkdir(parents=True, exist_ok=True)
+    with telemetry.span("howdex.codex.publish") as publish_span:
+        codex = init_codex(path)
+        output_dir = codex["procedures"]
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    exported_files: list[Path] = []
-    for payload in store.all_procedures():
-        procedure = _procedure_from_store(payload)
-        document = codex_entry_document(procedure, store=store)
-        destination = output_dir / _procedure_filename(procedure)
-        _write_json(destination, document)
-        exported_files.append(destination)
+        exported_files: list[Path] = []
+        for payload in store.all_procedures():
+            procedure = _procedure_from_store(payload)
+            document = codex_entry_document(procedure, store=store)
+            destination = output_dir / _procedure_filename(procedure)
+            _write_json(destination, document)
+            exported_files.append(destination)
+            telemetry.emit_event(
+                "howdex.codex.publish.entry",
+                {
+                    "howdex.codex_entry_id": document.get("id"),
+                    "howdex.procedure_id": procedure.id,
+                    "howdex.procedure_status": document.get("status"),
+                    "howdex.source_episode_count": len(
+                        procedure.source_episode_ids
+                    ),
+                },
+            )
 
-    manifest = json.loads(codex["manifest"].read_text(encoding="utf-8"))
-    manifest["procedure_count"] = len(exported_files)
-    manifest["updated_at"] = _iso_timestamp(time.time())
-    _write_json(codex["manifest"], manifest)
+        manifest = json.loads(codex["manifest"].read_text(encoding="utf-8"))
+        manifest["procedure_count"] = len(exported_files)
+        manifest["updated_at"] = _iso_timestamp(time.time())
+        _write_json(codex["manifest"], manifest)
+        telemetry.set_attribute(
+            publish_span,
+            "howdex.selected_count",
+            len(exported_files),
+        )
 
-    return {
-        **codex,
-        "output": output_dir,
-        "exported": len(exported_files),
-        "files": exported_files,
-    }
+        return {
+            **codex,
+            "output": output_dir,
+            "exported": len(exported_files),
+            "files": exported_files,
+        }
 
 
 def pull_codex(store: Store, path: str | Path) -> dict[str, int]:

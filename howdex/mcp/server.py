@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Optional
 
+import howdex.telemetry as telemetry
 from howdex import Howdex, __version__
 from howdex.core.codex_staleness import (
     evaluate_codex_staleness,
@@ -422,17 +423,35 @@ class MCPServer:
         max_procedures = int(args.get("max_procedures") or 3)
         min_relevance = float(args.get("min_relevance_score", 0.05))
         constraints = _string_list(args.get("constraints"))
-        candidates = self._guidance_candidates()
-        budget = GuidanceBudget(
-            max_procedures=max_procedures,
-            max_guidance_chars=max_chars,
-            min_relevance_score=min_relevance,
-            include_verified_only=verified_only,
-            include_candidates=not verified_only,
-            suppress_stale_or_incompatible=True,
-            current_environment=environment,
-        )
-        selection = select_guidance_procedures(objective, candidates, budget)
+        with telemetry.span(
+            "howdex.guidance.retrieve",
+            {
+                "howdex.adapter": "mcp",
+                "howdex.include_source": include_source,
+                "howdex.verified_only": verified_only,
+            },
+        ) as retrieve_span:
+            candidates = self._guidance_candidates()
+            budget = GuidanceBudget(
+                max_procedures=max_procedures,
+                max_guidance_chars=max_chars,
+                min_relevance_score=min_relevance,
+                include_verified_only=verified_only,
+                include_candidates=not verified_only,
+                suppress_stale_or_incompatible=True,
+                current_environment=environment,
+            )
+            selection = select_guidance_procedures(objective, candidates, budget)
+            telemetry.set_attribute(
+                retrieve_span,
+                "howdex.selected_count",
+                len(selection.selected),
+            )
+            telemetry.set_attribute(
+                retrieve_span,
+                "howdex.omitted_count",
+                selection.omitted_count,
+            )
         guidance = render_agent_guidance(
             selection.selected,
             objective=objective,
@@ -482,20 +501,37 @@ class MCPServer:
         environment = args.get("environment")
         max_results = int(args.get("max_results") or 5)
         verified_only = bool(args.get("verified_only", False))
-        budget = GuidanceBudget(
-            max_procedures=max_results,
-            max_guidance_chars=20_000,
-            min_relevance_score=float(args.get("min_relevance_score", 0.05)),
-            include_verified_only=verified_only,
-            include_candidates=not verified_only,
-            suppress_stale_or_incompatible=True,
-            current_environment=environment,
-        )
-        selection = select_guidance_procedures(
-            query,
-            self._load_codex_entries(),
-            budget,
-        )
+        with telemetry.span(
+            "howdex.codex.search",
+            {
+                "howdex.adapter": "mcp",
+                "howdex.verified_only": verified_only,
+            },
+        ) as search_span:
+            budget = GuidanceBudget(
+                max_procedures=max_results,
+                max_guidance_chars=20_000,
+                min_relevance_score=float(args.get("min_relevance_score", 0.05)),
+                include_verified_only=verified_only,
+                include_candidates=not verified_only,
+                suppress_stale_or_incompatible=True,
+                current_environment=environment,
+            )
+            selection = select_guidance_procedures(
+                query,
+                self._load_codex_entries(),
+                budget,
+            )
+            telemetry.set_attribute(
+                search_span,
+                "howdex.selected_count",
+                len(selection.selected),
+            )
+            telemetry.set_attribute(
+                search_span,
+                "howdex.omitted_count",
+                selection.omitted_count,
+            )
         return {
             "matches": [
                 self._codex_match(entry, environment)
@@ -522,11 +558,28 @@ class MCPServer:
     def _codex_publish(self, args: dict[str, Any]) -> dict[str, Any]:
         procedure_id = str(args["procedure_id"]).strip()
         registry_path = Path(str(args["registry_path"])).expanduser()
-        procedure = self.howdex._procedure_by_id(procedure_id)
-        registry = init_codex(registry_path)
-        document = codex_entry_document(procedure, store=self.howdex.store)
-        destination = Path(registry["procedures"]) / f"{document['id']}.json"
-        _write_json(destination, document)
+        with telemetry.span(
+            "howdex.codex.publish",
+            {
+                "howdex.adapter": "mcp",
+                "howdex.procedure_id": procedure_id,
+            },
+        ) as publish_span:
+            procedure = self.howdex._procedure_by_id(procedure_id)
+            registry = init_codex(registry_path)
+            document = codex_entry_document(procedure, store=self.howdex.store)
+            destination = Path(registry["procedures"]) / f"{document['id']}.json"
+            _write_json(destination, document)
+            telemetry.set_attribute(
+                publish_span,
+                "howdex.codex_entry_id",
+                document["id"],
+            )
+            telemetry.set_attribute(
+                publish_span,
+                "howdex.procedure_status",
+                document["status"],
+            )
         return {
             "codex_entry_path": str(destination),
             "status": document["status"],
@@ -538,21 +591,34 @@ class MCPServer:
         }
 
     def _attach_receipt(self, args: dict[str, Any]) -> dict[str, Any]:
-        receipt = self.howdex.verify_procedure(
-            str(args["procedure_id"]),
-            verifier_type="custom",
-            verifier_command=str(args["verifier_command"]),
-            expected_signal=str(args["expected_signal"]),
-            observed_signal=str(args["observed_signal"]),
-            exit_code=int(args["exit_code"]),
-            environment_fingerprint=_mapping(args.get("environment")),
-        )
+        procedure_id = str(args["procedure_id"])
+        with telemetry.span(
+            "howdex.receipt.attach",
+            {
+                "howdex.adapter": "mcp",
+                "howdex.procedure_id": procedure_id,
+            },
+        ) as receipt_span:
+            receipt = self.howdex.verify_procedure(
+                procedure_id,
+                verifier_type="custom",
+                verifier_command=str(args["verifier_command"]),
+                expected_signal=str(args["expected_signal"]),
+                observed_signal=str(args["observed_signal"]),
+                exit_code=int(args["exit_code"]),
+                environment_fingerprint=_mapping(args.get("environment")),
+            )
+            telemetry.set_attribute(
+                receipt_span,
+                "howdex.receipt_status",
+                receipt.status,
+            )
         return {
             "receipt_id": receipt.receipt_id,
             "receipt_status": receipt.status,
-            "procedure_status": self.howdex.procedure_status(str(args["procedure_id"])),
+            "procedure_status": self.howdex.procedure_status(procedure_id),
             "verification_status": self.howdex.procedure_verification_status(
-                str(args["procedure_id"])
+                procedure_id
             ),
         }
 
@@ -844,6 +910,14 @@ def _candidate_id(candidate: Any, index: int) -> str:
 def _policy_warnings(entry: Mapping[str, Any]) -> list[str]:
     policy = entry.get("policy")
     if not isinstance(policy, Mapping):
+        with telemetry.span(
+            "howdex.policy.evaluate",
+            {
+                "howdex.codex_entry_id": entry.get("id") or "",
+                "howdex.policy_status": "unknown",
+            },
+        ):
+            pass
         return []
     warnings: list[str] = []
     if policy.get("requires_human_review"):
@@ -853,6 +927,14 @@ def _policy_warnings(entry: Mapping[str, Any]) -> list[str]:
         warnings.append(f"{entry.get('id')}: source artifacts are {source_policy}")
     for forbidden in _string_list(policy.get("forbidden")):
         warnings.append(f"{entry.get('id')}: forbidden: {forbidden}")
+    with telemetry.span(
+        "howdex.policy.evaluate",
+        {
+            "howdex.codex_entry_id": entry.get("id") or "",
+            "howdex.policy_status": "warning" if warnings else "ok",
+        },
+    ):
+        pass
     return warnings
 
 

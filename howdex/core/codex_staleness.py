@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
+import howdex.telemetry as telemetry
+
 STALENESS_STATUSES = {
     "fresh",
     "warning",
@@ -28,6 +30,29 @@ class StalenessDecision:
 
 
 def evaluate_codex_staleness(
+    entry: Any,
+    current_environment: Mapping[str, Any] | str | None,
+) -> StalenessDecision:
+    """Evaluate a Codex entry and emit an optional staleness trace span."""
+    with telemetry.span(
+        "howdex.staleness.evaluate",
+        {
+            "howdex.codex_entry_id": _entry_id(entry),
+        },
+    ) as staleness_span:
+        decision = _evaluate_codex_staleness_impl(
+            entry,
+            current_environment,
+        )
+        telemetry.set_attribute(
+            staleness_span,
+            "howdex.staleness_status",
+            decision.status,
+        )
+        return decision
+
+
+def _evaluate_codex_staleness_impl(
     entry: Any,
     current_environment: Mapping[str, Any] | str | None,
 ) -> StalenessDecision:
@@ -164,6 +189,14 @@ def compatibility_metadata(entry: Any) -> dict[str, Any]:
 def has_compatibility_metadata(entry: Any) -> bool:
     """Return whether a procedure-like object has Codex compatibility data."""
     return bool(compatibility_metadata(entry))
+
+
+def _entry_id(entry: Any) -> str:
+    for key in ("id", "procedure_id", "task_signature", "title"):
+        value = _get(entry, key)
+        if value:
+            return str(value)
+    return ""
 
 
 def apply_staleness_confidence(confidence: float, decision: StalenessDecision) -> float:

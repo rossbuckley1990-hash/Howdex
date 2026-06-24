@@ -39,6 +39,10 @@ dependencies = [
 hnsw = ["hnswlib>=0.7"]
 st = ["sentence-transformers>=2.2"]
 openai = ["openai>=1.0"]
+otel = [
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+]
 full = ["hnswlib>=0.7", "sentence-transformers>=2.2"]
 dev = [
     "pytest>=7",

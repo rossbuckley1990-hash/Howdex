@@ -136,6 +136,7 @@ class HowdexMemory:
                 include_source=self.include_source,
                 top_k=self.top_k,
                 min_confidence=self.min_confidence,
+                adapter="langchain",
             )
         }
 
