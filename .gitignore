@@ -27,6 +27,11 @@ dist/
 .howdex/dogfood/runs/
 .howdex/dogfood/runs/**/*.log
 *.dogfood.log
+
+# Example script outputs (from examples/first_time_dev.py and examples/quickstart.py)
+first_time_dev_codex/
+quickstart.db
+first_time_dev.db
 benchmark_results/
 benchmark-results/
 
