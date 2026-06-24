@@ -1,15 +1,25 @@
 # Howdex Codex
 
 The Howdex Codex is a public, versioned catalogue of reusable operational
-procedures learned from agent execution traces. Each entry describes what an
-agent observed, what sequence proved useful, which failed paths should be
-avoided, how success must be verified, and which policy constraints govern
-reuse.
+procedures learned from agent execution traces. It is the open catalogue for
+verified agent procedures: portable know-how that can move across models,
+agents, frameworks, and clouds while preserving provenance, policy, staleness,
+and verification boundaries.
+
+Each entry describes what an agent observed, what sequence proved useful,
+which failed paths should be avoided, how success must be verified, and which
+policy constraints govern reuse.
 
 It is machine-readable operational memory for agents that do work.
 
 The Howdex Codex is the open catalogue of operational memory. It is not a
 prompt library. It is not executable authority.
+
+Candidate entries are useful because they preserve hard-won operational memory,
+but they are not trusted proof. Verified entries require inspectable receipts
+from real verifier runs. A future private or enterprise registry can remain
+compatible with the same entry and receipt shapes without changing the trust
+boundary: candidates guide, receipts verify, policy authorizes.
 
 Execution traces are the raw material. Howdex turns them into procedural
 capital: verified guidance, failed-attempt memory, policy context, and Codex
