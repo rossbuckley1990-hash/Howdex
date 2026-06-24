@@ -1,0 +1,71 @@
+{
+  "branch": "feature/awm-head-to-head-benchmark",
+  "changed_files": [],
+  "changed_files_count": 0,
+  "codex_entry_paths": [
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/add-awm-head-to-head-benchmark-harness--ebb0e5c514.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/create-an-external-developer-pilot-pack-for-howdex--74b4387cdc.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/prepare-and-track-real-external-pilot-outreach-for-howdex--9e09783c83.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-trust-calibration-on-actual-howdex-dogfood-procedures--61d8e5811a.json"
+  ],
+  "command_runs": [
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m pytest",
+      "duration_seconds": 9.337,
+      "exit_code": 0,
+      "label": "pytest",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-9a-awm-head-to-head-harness/20260624T194732Z-771-pytest.log",
+      "passed": true,
+      "pytest_summary": "539 passed"
+    },
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m benchmarks.awm_head_to_head.runner --dry-run",
+      "duration_seconds": 0.076,
+      "exit_code": 0,
+      "label": "awm-head-to-head-dry-run",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-9a-awm-head-to-head-harness/20260624T194744Z-162-awm-head-to-head-dry-run.log",
+      "passed": true,
+      "pytest_summary": null
+    }
+  ],
+  "commands_run": 2,
+  "commit_count": 1,
+  "dirty_state_at_start": "unknown",
+  "duration_seconds": 269.177,
+  "episode_id": "2fc024d5-3afe-490b-bb91-04c6660c1db8",
+  "failed_attempts": 0,
+  "git_diff_stat": "unknown",
+  "git_end_sha": "951a937463d335d475393ba0cefa7c02bfccfaca",
+  "git_start_sha": "57e4a9df3b75285ad93e99a9c96ceffe022c6f92",
+  "guidance_chars": 2288,
+  "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-9a-awm-head-to-head-harness.md",
+  "guidance_used": true,
+  "howdex_version": "0.3.0",
+  "latest_test_label": "pytest",
+  "latest_test_passed": true,
+  "latest_test_summary": "539 passed",
+  "learned_procedure_ids": [
+    "b1f1adc7-6b2f-4104-85e2-cff4df346a33",
+    "30381bea-e148-4519-a103-c18f7061e378",
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "objective": "Add AWM head-to-head benchmark harness",
+  "phase": "phase-9a-awm-head-to-head-harness",
+  "procedure_published": true,
+  "python_version": "3.14.6",
+  "receipt_attached": true,
+  "receipt_ids": [
+    "b281b355634ffc9ddf64d943f9be9f6215ac09c01696086c7b6314cde008c4c6",
+    "b281b355634ffc9ddf64d943f9be9f6215ac09c01696086c7b6314cde008c4c6",
+    "b281b355634ffc9ddf64d943f9be9f6215ac09c01696086c7b6314cde008c4c6",
+    "b281b355634ffc9ddf64d943f9be9f6215ac09c01696086c7b6314cde008c4c6"
+  ],
+  "selected_procedure_ids": [
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f",
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "30381bea-e148-4519-a103-c18f7061e378"
+  ],
+  "support_count": 1,
+  "support_scope_statement": "Dogfood procedures learned from this phase are single-episode, single-repo, single-user internal evidence. They are not external adoption, traction, users, market validation, and not proof of broad generalization."
+}
