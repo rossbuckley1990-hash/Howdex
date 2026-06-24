@@ -347,6 +347,26 @@ reasons.
 
 ---
 
+### Auditable abstraction: optional LLM proposals, deterministic trust
+
+Howdex can optionally use an LLM to propose that multiple procedures are
+semantically equivalent, but that proposal never becomes trusted memory by
+itself. The proposal records source procedure IDs, prompt/response hashes,
+model name, proposed parameter mapping, reviewer state, and an audit log.
+
+Accepted proposals create candidate abstractions only. They do not mark
+procedures verified, attach receipts, delete sources, or publish verified Codex
+entries. Verification still requires deterministic evidence and inspectable
+receipts.
+
+This gives teams a controlled path for AWM-style semantic generalization while
+preserving Howdex's trust boundary: optional LLM proposals, deterministic
+storage, deterministic review, and receipt-backed verification.
+
+See [docs/AUDITABLE_ABSTRACTION.md](docs/AUDITABLE_ABSTRACTION.md).
+
+---
+
 ### Use Howdex from any MCP-compatible agent
 
 Howdex includes a local MCP server for Claude Desktop, Cursor, Windsurf,
