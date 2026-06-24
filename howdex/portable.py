@@ -55,20 +55,43 @@ def export_procedures(
     store: Store,
     output: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Export every stored procedure as one versioned JSON document."""
-    output_dir = Path(output) if output is not None else default_procedure_directory()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    """Export every stored procedure as one versioned JSON document.
+
+    If ``output`` ends with ``.json`` it is treated as a single output file
+    path; the document is written there (an error is raised if more than one
+    procedure would be exported, since a single file cannot hold multiple
+    independent documents). Otherwise ``output`` is treated as a directory
+    and one JSON file is written per procedure.
+    """
+    output_path = Path(output) if output is not None else default_procedure_directory()
+    single_file = output_path.suffix == ".json"
 
     exported: list[Path] = []
-    for payload in store.all_procedures():
-        procedure = _procedure_from_store(payload)
-        document = procedure_document(procedure, store=store)
-        destination = output_dir / _procedure_filename(procedure)
-        _write_json(destination, document)
-        exported.append(destination)
+    all_payloads = list(store.all_procedures())
+    if single_file:
+        if len(all_payloads) > 1:
+            raise ValueError(
+                f"output path {output_path!s} is a single file but "
+                f"{len(all_payloads)} procedures would be exported; "
+                "pass a directory path instead"
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        for payload in all_payloads:
+            procedure = _procedure_from_store(payload)
+            document = procedure_document(procedure, store=store)
+            _write_json(output_path, document)
+            exported.append(output_path)
+    else:
+        output_path.mkdir(parents=True, exist_ok=True)
+        for payload in all_payloads:
+            procedure = _procedure_from_store(payload)
+            document = procedure_document(procedure, store=store)
+            destination = output_path / _procedure_filename(procedure)
+            _write_json(destination, document)
+            exported.append(destination)
 
     return {
-        "output": output_dir,
+        "output": output_path,
         "exported": len(exported),
         "files": exported,
     }
@@ -750,6 +773,8 @@ def _codex_verification(
             "verifier_command": verified.verifier_command
             or "inspect attached verification receipt",
             "verifier_type": verified.verifier_type or verified.receipt_type,
+            "receipt_id": verified.receipt_id,
+            "receipts": [verified.to_dict()],
         }
         if require_signed_receipt:
             payload["signature_status"] = "signed_verified"

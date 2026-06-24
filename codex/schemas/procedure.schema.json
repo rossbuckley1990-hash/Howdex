@@ -211,6 +211,15 @@
           "minLength": 1,
           "type": "string"
         },
+        "receipt_id": {
+          "type": "string"
+        },
+        "receipts": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
         "status": {
           "enum": [
             "required",
