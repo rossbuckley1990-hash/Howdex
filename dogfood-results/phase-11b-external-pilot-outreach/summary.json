@@ -3,37 +3,39 @@
   "changed_files": [],
   "changed_files_count": 0,
   "codex_entry_paths": [
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/create-an-external-developer-pilot-pack-for-howdex--74b4387cdc.json",
     "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/prepare-and-track-real-external-pilot-outreach-for-howdex--9e09783c83.json",
     "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-trust-calibration-on-actual-howdex-dogfood-procedures--61d8e5811a.json"
   ],
   "command_runs": [
     {
       "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m pytest",
-      "duration_seconds": 8.677,
+      "duration_seconds": 8.581,
       "exit_code": 0,
       "label": "pytest",
-      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-11b-external-pilot-outreach/20260624T193438Z-194-pytest.log",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-11b-external-pilot-outreach/20260624T194238Z-898-pytest.log",
       "passed": true,
-      "pytest_summary": "523 passed"
+      "pytest_summary": "531 passed"
     }
   ],
   "commands_run": 1,
-  "commit_count": 1,
+  "commit_count": 0,
   "dirty_state_at_start": "unknown",
-  "duration_seconds": 254.447,
-  "episode_id": "76d7a71f-b648-4f0b-9813-0e8909e34bbb",
+  "duration_seconds": 87.996,
+  "episode_id": "57e01c9e-d74c-45de-9add-bb15b2c5b707",
   "failed_attempts": 0,
   "git_diff_stat": "unknown",
-  "git_end_sha": "280b2d110187f92c3e4bf7b66b9cf8c8dc6f1ac9",
-  "git_start_sha": "bb41a46b7043b1f243e2c2ab3989fa00239d0a8b",
-  "guidance_chars": 1771,
+  "git_end_sha": "8af2fd3d9cbfd87caa5c1b4212cef25c4de3e149",
+  "git_start_sha": "8af2fd3d9cbfd87caa5c1b4212cef25c4de3e149",
+  "guidance_chars": 2219,
   "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-11b-external-pilot-outreach.md",
   "guidance_used": true,
   "howdex_version": "0.3.0",
   "latest_test_label": "pytest",
   "latest_test_passed": true,
-  "latest_test_summary": "523 passed",
+  "latest_test_summary": "531 passed",
   "learned_procedure_ids": [
+    "30381bea-e148-4519-a103-c18f7061e378",
     "74478b54-64c6-4859-aec5-34de00d94195",
     "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
   ],
@@ -43,10 +45,13 @@
   "python_version": "3.14.6",
   "receipt_attached": true,
   "receipt_ids": [
-    "a953d74930f7505c1c8aff8ff4d23c980182b87a79b7239d57dbf3f2d16f5aad",
-    "a953d74930f7505c1c8aff8ff4d23c980182b87a79b7239d57dbf3f2d16f5aad"
+    "09d37f86ddcec2520885478c541289ad4695181778218a6058e79c556edd8b34",
+    "09d37f86ddcec2520885478c541289ad4695181778218a6058e79c556edd8b34",
+    "09d37f86ddcec2520885478c541289ad4695181778218a6058e79c556edd8b34"
   ],
   "selected_procedure_ids": [
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "30381bea-e148-4519-a103-c18f7061e378",
     "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
   ],
   "support_count": 1,
