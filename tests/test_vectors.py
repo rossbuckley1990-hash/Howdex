@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from howdex.vectors import VectorIndex, HashingEmbedder
+from howdex.vectors import HashingEmbedder, VectorIndex
 
 
 @pytest.fixture

@@ -18,7 +18,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from howdex.attestation import load_attestation_file, verify_attestation
-from howdex.codex_governance import GovernanceFinding, GovernanceReport, lint_entry
+from howdex.codex_governance import GovernanceFinding, lint_entry
 
 REGISTRY_VERSION = "1"
 INDEX_NAMES = ("by_category", "by_tag", "by_ecosystem", "by_status")

@@ -8,7 +8,6 @@ from pathlib import Path
 
 from howdex import Howdex
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "howdex_dogfood.py"
 

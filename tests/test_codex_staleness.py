@@ -8,7 +8,6 @@ from howdex.core.codex_staleness import (
 )
 from howdex.core.guidance import render_agent_guidance
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -18,9 +18,9 @@ The CRDT property comes from:
 from __future__ import annotations
 
 import json
-import urllib.request
 import urllib.error
-from typing import Any, Optional
+import urllib.request
+from typing import Any
 
 from howdex.core.errors import SyncError
 from howdex.storage import Store

@@ -5,8 +5,8 @@ from __future__ import annotations
 import enum
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
-from typing import Any, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 class MemoryLayer(str, enum.Enum):
@@ -63,20 +63,20 @@ class Memory:
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     # vector embedding (float32, dim depends on embedder)
-    embedding: Optional[list[float]] = None
+    embedding: list[float] | None = None
     # graph edges (semantic layer)
     relations: list[dict[str, str]] = field(default_factory=list)
     # provenance
     source: str = "user"           # user | agent | system | sync
-    agent_id: Optional[str] = None
-    session_id: Optional[str] = None
-    parent_id: Optional[str] = None
+    agent_id: str | None = None
+    session_id: str | None = None
+    parent_id: str | None = None
     # timing
     created_at: float = field(default_factory=time.time)
     accessed_at: float = field(default_factory=time.time)
     access_count: int = 0
     importance: float = 0.5        # 0.0 – 1.0, affects retention
-    ttl: Optional[float] = None    # seconds; None = forever
+    ttl: float | None = None    # seconds; None = forever
     # sync
     vector_clock: int = 0          # CRDT-style logical clock
 
@@ -85,7 +85,7 @@ class Memory:
         self.accessed_at = time.time()
         self.access_count += 1
 
-    def is_expired(self, now: Optional[float] = None) -> bool:
+    def is_expired(self, now: float | None = None) -> bool:
         if self.ttl is None:
             return False
         now = now or time.time()
@@ -98,7 +98,7 @@ class Memory:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Memory":
+    def from_dict(cls, d: dict[str, Any]) -> Memory:
         d = dict(d)
         if isinstance(d.get("layer"), str):
             d["layer"] = MemoryLayer(d["layer"])
@@ -131,14 +131,14 @@ class Episode:
     agent_id: str
     task: str
     steps: list[dict[str, Any]] = field(default_factory=list)
-    outcome: Optional[str] = None       # success | failure | partial
-    error: Optional[str] = None
+    outcome: str | None = None       # success | failure | partial
+    error: str | None = None
     duration_s: float = 0.0
     started_at: float = field(default_factory=time.time)
-    finished_at: Optional[float] = None
+    finished_at: float | None = None
     source: str = "agent"
     provenance: dict[str, Any] = field(default_factory=dict)
-    parent_session_id: Optional[str] = None
+    parent_session_id: str | None = None
     is_segment: bool = False
 
     def add_step(self, action: str, observation: str, **extra: Any) -> None:
@@ -197,7 +197,7 @@ class Episode:
             }
         )
 
-    def close(self, outcome: str, error: Optional[str] = None) -> None:
+    def close(self, outcome: str, error: str | None = None) -> None:
         self.outcome = outcome
         self.error = error
         self.finished_at = time.time()
@@ -266,7 +266,7 @@ class Episode:
         return self.started_at
 
     @property
-    def end_time(self) -> Optional[float]:
+    def end_time(self) -> float | None:
         return self.finished_at
 
     @property
@@ -323,7 +323,7 @@ class Procedure:
     source_episode_ids: list[str] = field(default_factory=list)
     receipts: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
-    last_used_at: Optional[float] = None
+    last_used_at: float | None = None
     use_count: int = 0
 
     @property

@@ -2,7 +2,7 @@
 
 import time
 
-from howdex.core.types import Memory, MemoryLayer, MemoryType, Episode
+from howdex.core.types import Episode, Memory, MemoryLayer, MemoryType
 
 
 def test_memory_defaults():

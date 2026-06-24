@@ -144,7 +144,7 @@ def normalize_steps_for_learning(
         for step, canonical, parameterized in zip(
             resolved,
             canonical_actions,
-            parameterized_actions,
+            parameterized_actions, strict=False,
         )
     ]
 

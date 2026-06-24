@@ -324,7 +324,7 @@ def verify_attestation(
 def attestation_to_receipt(
     attestation: SignedReceiptAttestation | Mapping[str, Any],
     verification: AttestationVerification | None = None,
-) -> "VerificationReceipt":
+) -> VerificationReceipt:
     """Convert one attestation into Howdex's existing receipt representation."""
     from howdex.core.receipts import VerificationReceipt
 
@@ -365,7 +365,7 @@ def attestation_to_receipt(
 
 
 def is_signed_verified_receipt(
-    receipt: "VerificationReceipt" | Mapping[str, Any],
+    receipt: VerificationReceipt | Mapping[str, Any],
 ) -> bool:
     """Return whether a stored receipt represents validated signed evidence."""
     from howdex.core.receipts import VerificationReceipt

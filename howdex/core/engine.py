@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-
 import os
 import time
 from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
+import howdex.telemetry as telemetry
 from howdex.attestation import (
     ATTESTATION_INVALID,
     SignedReceiptAttestation,
@@ -18,41 +18,41 @@ from howdex.attestation import (
     load_attestation_file,
     verify_attestation,
 )
-from howdex.core.types import (
-    Memory,
-    MemoryLayer,
-    MemoryType,
-    HowdexResult,
-    Episode,
-    Procedure,
-)
-from howdex.core.errors import HowdexError, HowdexNotFoundError
-from howdex.core.retrieval import tokenize, keyword_score, graph_neighbors
-from howdex.core.safety import memory_safety_multiplier
-from howdex.core.session import HowdexSession
-from howdex.core.trust import TrustMetadata
 from howdex.core.consolidation import consolidate
-from howdex.core.tool_calls import canonicalize_tool_call, redact_secrets
-from howdex.core.segmentation import (
-    DEFAULT_IDLE_GAP_S,
-    DEFAULT_MAX_SEGMENT_STEPS,
-    segment_episode,
-)
-from howdex.core.semantic import derive_tool_semantics
+from howdex.core.errors import HowdexError, HowdexNotFoundError
 from howdex.core.guidance import (
     ProcedureSuggestion,
     render_agent_guidance,
     render_procedure_guidance,
     suggest_procedures,
 )
+from howdex.core.parallel import resolve_parallel_spans
+from howdex.core.parameterize import redact_parameter_evidence
 from howdex.core.receipts import (
     VerificationReceipt,
     parse_bootproof_attestation,
     procedure_trust_status,
     procedure_verification_status,
 )
-from howdex.core.parameterize import redact_parameter_evidence
-from howdex.core.parallel import resolve_parallel_spans
+from howdex.core.retrieval import graph_neighbors, keyword_score, tokenize
+from howdex.core.safety import memory_safety_multiplier
+from howdex.core.segmentation import (
+    DEFAULT_IDLE_GAP_S,
+    DEFAULT_MAX_SEGMENT_STEPS,
+    segment_episode,
+)
+from howdex.core.semantic import derive_tool_semantics
+from howdex.core.session import HowdexSession
+from howdex.core.tool_calls import canonicalize_tool_call, redact_secrets
+from howdex.core.trust import TrustMetadata
+from howdex.core.types import (
+    Episode,
+    HowdexResult,
+    Memory,
+    MemoryLayer,
+    MemoryType,
+    Procedure,
+)
 from howdex.core.working import (
     DEFAULT_WORKING_MAX_CHARS,
     DEFAULT_WORKING_MAX_ITEMS,
@@ -65,13 +65,78 @@ from howdex.ingest import (
     default_ingestion_pipeline,
 )
 from howdex.storage import Store
-import howdex.telemetry as telemetry
-from howdex.vectors import VectorIndex, Embedder, auto_embedder
-
+from howdex.vectors import Embedder, VectorIndex, auto_embedder
 
 DEFAULT_HOME = Path(os.environ.get("HOWDEX_HOME", Path.home() / ".howdex"))
 DEFAULT_DIM = 384
 _MANDATORY_SECRET_REDACTOR = Secret_Redactor()
+
+# Recognized test-runner command prefixes. For these, exit_code=0 is
+# the canonical success signal — the textual summary line is sometimes
+# suppressed (e.g. `pytest -q`) or localized, so we should not require
+# a substring match on expected_signal.
+_TEST_RUNNER_PATTERNS = (
+    "pytest",
+    "py.test",
+    "python -m pytest",
+    "python3 -m pytest",
+    "jest",
+    "npx jest",
+    "yarn test",
+    "npm test",
+    "npm run test",
+    "cargo test",
+    "go test",
+    "rspec",
+    "bundle exec rspec",
+    "mvn test",
+    "mvn -q test",
+    "gradle test",
+    "./gradlew test",
+    "dotnet test",
+    "dotnet test",
+)
+
+
+def _is_test_runner_command(command: str) -> bool:
+    """Return True if ``command`` invokes a recognized test runner.
+
+    Matching is on the leading tokens of the command (after stripping
+    common shell prefixes like ``source``, ``set``, env-var assignments,
+    and ``bash -c`` wrappers) so that complex pipeline commands like
+    ``source .venv/bin/activate && python -m pytest tests/ -q 2>&1 | tail -3``
+    still match.
+    """
+    if not command:
+        return False
+    # Strip leading shell boilerplate: "source X && ", "set -o pipefail; ",
+    # "VAR=val ", "bash -c '...'", etc. We're looking for the actual
+    # command verb, which is the first token that isn't shell plumbing.
+    text = str(command).strip()
+    # Drop everything before "&&" if a test runner appears after it
+    if "&&" in text:
+        for segment in text.split("&&"):
+            if _is_test_runner_command(segment.strip()):
+                return True
+    # Drop leading env-var assignments like "FOO=bar baz"
+    while "=" in text.split(" ", 1)[0] and not text.startswith("python"):
+        parts = text.split(" ", 1)
+        if len(parts) < 2:
+            break
+        text = parts[1].strip()
+    # Drop "source <path> && " prefix
+    if text.startswith("source "):
+        rest = text.split("&&", 1)
+        if len(rest) == 2:
+            text = rest[1].strip()
+    # Drop "set -o pipefail; " and similar
+    if text.startswith("set "):
+        rest = text.split(";", 1)
+        if len(rest) == 2:
+            text = rest[1].strip()
+    text = text.lstrip("(").strip()
+    # Now check if any test-runner pattern is a prefix
+    return any(text.startswith(p) for p in _TEST_RUNNER_PATTERNS)
 
 
 
@@ -152,11 +217,11 @@ class Howdex:
     def __init__(
         self,
         *,
-        path: Optional[Union[str, Path]] = None,
-        embedder: Union[str, Embedder, None] = None,
-        agent_id: Optional[str] = None,
+        path: str | Path | None = None,
+        embedder: str | Embedder | None = None,
+        agent_id: str | None = None,
         embed_dim: int = DEFAULT_DIM,
-        ingestion_pipeline: Optional[IngestionPipeline] = None,
+        ingestion_pipeline: IngestionPipeline | None = None,
     ):
         self.path = Path(path) if path else DEFAULT_HOME / "howdex.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,7 +245,7 @@ class Howdex:
         self._rebuild_index()
 
         # session bookkeeping
-        self._current_session: Optional[Episode] = None
+        self._current_session: Episode | None = None
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -195,7 +260,7 @@ class Howdex:
         if self._current_session and not self._current_session.finished_at:
             self.end_session(outcome="partial")
 
-    def __enter__(self) -> "Howdex":
+    def __enter__(self) -> Howdex:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -216,18 +281,18 @@ class Howdex:
         self,
         content: str,
         *,
-        layer: Union[str, MemoryLayer] = MemoryLayer.SEMANTIC,
-        type: Union[str, MemoryType] = MemoryType.FACT,
-        metadata: Optional[dict[str, Any]] = None,
+        layer: str | MemoryLayer = MemoryLayer.SEMANTIC,
+        type: str | MemoryType = MemoryType.FACT,
+        metadata: dict[str, Any] | None = None,
         importance: float = 0.5,
-        ttl: Optional[float] = None,
-        relations: Optional[list[dict[str, str]]] = None,
+        ttl: float | None = None,
+        relations: list[dict[str, str]] | None = None,
         source: str = "user",
-        agent_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
         embed: bool = True,
-        confidence: Optional[float] = None,
-        provenance: Optional[dict[str, Any]] = None,
+        confidence: float | None = None,
+        provenance: dict[str, Any] | None = None,
     ) -> Memory:
         """Store a memory.
 
@@ -289,11 +354,11 @@ class Howdex:
 
     def get_working_context(
         self,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         *,
-        max_items: Optional[int] = DEFAULT_WORKING_MAX_ITEMS,
-        max_chars: Optional[int] = DEFAULT_WORKING_MAX_CHARS,
-        token_budget: Optional[int] = None,
+        max_items: int | None = DEFAULT_WORKING_MAX_ITEMS,
+        max_chars: int | None = DEFAULT_WORKING_MAX_CHARS,
+        token_budget: int | None = None,
         include_provenance: bool = True,
     ) -> str:
         """Return deterministic, prompt-ready working memory for one session.
@@ -331,12 +396,12 @@ class Howdex:
         self,
         query: str,
         *,
-        layer: Optional[Union[str, MemoryLayer]] = None,
+        layer: str | MemoryLayer | None = None,
         top_k: int = 5,
         min_score: float = 0.1,
         hybrid: bool = True,
-        agent_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
         include_expired: bool = False,
     ) -> list[HowdexResult]:
         """Retrieve the most relevant memories for ``query``.
@@ -484,12 +549,12 @@ class Howdex:
         self,
         query: str,
         *,
-        layer: Optional[Union[str, MemoryLayer]] = None,
+        layer: str | MemoryLayer | None = None,
         top_k: int = 5,
         min_score: float = 0.1,
         hybrid: bool = True,
-        agent_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
         include_expired: bool = False,
     ) -> list[HowdexResult]:
         """Search memories.
@@ -535,10 +600,10 @@ class Howdex:
     def start_session(
         self,
         task: str,
-        agent_id: Optional[str] = None,
+        agent_id: str | None = None,
         *,
         source: str = "agent",
-        provenance: Optional[dict[str, Any]] = None,
+        provenance: dict[str, Any] | None = None,
     ) -> Episode:
         """Begin an episodic session. All ``remember()`` calls until
         :meth:`end_session` will be tagged with this session id.
@@ -664,9 +729,9 @@ class Howdex:
     def log_tool_call(
         self,
         name: str,
-        arguments: Optional[dict[str, Any]] = None,
+        arguments: dict[str, Any] | None = None,
         observation: str = "",
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         derive_semantics: bool = True,
         sanitize: bool = True,
         **extra: Any,
@@ -710,7 +775,7 @@ class Howdex:
         self,
         canonical,
         *,
-        outcome: Optional[str] = None,
+        outcome: str | None = None,
     ) -> list[Memory]:
         """Persist idempotent semantic entities derived from a typed call."""
         session_id = (
@@ -758,7 +823,7 @@ class Howdex:
     def end_session(
         self,
         outcome: str = "success",
-        error: Optional[str] = None,
+        error: str | None = None,
         *,
         max_segment_steps: int = DEFAULT_MAX_SEGMENT_STEPS,
         idle_gap_s: float = DEFAULT_IDLE_GAP_S,
@@ -859,7 +924,7 @@ class Howdex:
         task_signature: str,
         *,
         min_confidence: float = 0.6,
-    ) -> Optional[Procedure]:
+    ) -> Procedure | None:
         """Retrieve a learned procedure only when it clears confidence guardrails."""
         key = " ".join(task_signature.lower().split())[:200]
         d = self.store.get_procedure(key)
@@ -875,7 +940,7 @@ class Howdex:
         self,
         *,
         min_confidence: float = 0.6,
-        limit: Optional[int] = None,
+        limit: int | None = None,
     ) -> list[Procedure]:
         procedures = [
             Procedure(**_normalise_procedure_payload(d))
@@ -1071,36 +1136,60 @@ class Howdex:
         exit_code: int,
         status: str | None = None,
         verified_at: float | str | None = None,
-        environment_fingerprint: Optional[dict[str, Any]] = None,
-        artifact_hashes: Optional[dict[str, Any]] = None,
-        source_episode_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        environment_fingerprint: dict[str, Any] | None = None,
+        artifact_hashes: dict[str, Any] | None = None,
+        source_episode_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> VerificationReceipt:
         """Create and attach deterministic independent verification evidence.
 
-        When ``status`` is omitted, verification succeeds only when the
-        verifier exits with code zero and the expected signal is present in
-        the observed signal. Callers can explicitly attach ``stale`` or
-        ``unknown`` evidence when no fresh verifier result exists.
+        When ``status`` is omitted, verification succeeds when the verifier
+        exits with code zero AND one of the following holds:
+
+        - the expected signal is present in the observed signal (substring
+          match, case-insensitive); OR
+        - the verifier command is recognized as a standard test runner
+          (pytest, jest, cargo test, go test, rspec, npm test, mvn test,
+          gradle test, dotnet test) and ``exit_code == 0``. For these
+          tools, exit code zero is the canonical success signal and the
+          textual summary line is sometimes suppressed (e.g. ``pytest -q``
+          ends with ``[100%]`` and never prints "passed"), so requiring
+          a substring match would falsely reject real successes.
+
+        Callers can explicitly attach ``stale`` or ``unknown`` evidence
+        when no fresh verifier result exists.
         """
         resolved_status = status
         signal_matches = (
             str(expected_signal).casefold()
             in str(observed_signal).casefold()
         )
+        exit_zero = int(exit_code) == 0
+        # Standard test runners where exit_code=0 is sufficient evidence
+        # of success even if the textual summary line is suppressed.
+        test_runner_success = (
+            exit_zero and _is_test_runner_command(verifier_command)
+        )
         if resolved_status is None:
             resolved_status = (
                 "verified"
-                if int(exit_code) == 0 and signal_matches
+                if (exit_zero and (signal_matches or test_runner_success))
                 else "failed"
             )
         elif (
             str(resolved_status).strip().lower() in {"verified", "pass"}
-            and (int(exit_code) != 0 or not signal_matches)
+            and (
+                not exit_zero
+                or (
+                    not signal_matches
+                    and not test_runner_success
+                )
+            )
         ):
             raise ValueError(
                 "verified procedure receipt requires exit_code=0 and "
-                "the expected signal in observed_signal"
+                "the expected signal in observed_signal (or a recognized "
+                "test runner with exit_code=0)"
             )
         return self.attach_receipt(
             procedure_id,
@@ -1132,8 +1221,8 @@ class Howdex:
     def import_bootproof_attestation(
         self,
         procedure_id: str,
-        path: Union[str, Path] = ".bootproof/attestation.json",
-    ) -> Optional[VerificationReceipt]:
+        path: str | Path = ".bootproof/attestation.json",
+    ) -> VerificationReceipt | None:
         """Attach a BootProof-like attestation when the optional file exists."""
         self._require_procedure_id(procedure_id)
         receipt = parse_bootproof_attestation(path)
@@ -1143,7 +1232,7 @@ class Howdex:
 
     def verify_receipt_file(
         self,
-        path: Union[str, Path],
+        path: str | Path,
         *,
         key_material: str | bytes | None = None,
     ):
@@ -1153,7 +1242,7 @@ class Howdex:
 
     def import_signed_attestation(
         self,
-        path: Union[str, Path],
+        path: str | Path,
         *,
         procedure_id: str | None = None,
         key_material: str | bytes | None = None,
@@ -1231,14 +1320,14 @@ class Howdex:
 
     def export_procedures(
         self,
-        output: Optional[Union[str, Path]] = None,
+        output: str | Path | None = None,
     ) -> dict[str, Any]:
         """Export learned procedures as portable Howdex JSON documents."""
         from howdex.portable import export_procedures
 
         return export_procedures(self.store, output)
 
-    def import_procedures(self, source: Union[str, Path]) -> dict[str, int]:
+    def import_procedures(self, source: str | Path) -> dict[str, int]:
         """Import portable procedure documents without duplicating tasks."""
         from howdex.portable import import_procedures
 
@@ -1246,7 +1335,7 @@ class Howdex:
 
     def init_codex(
         self,
-        path: Optional[Union[str, Path]] = None,
+        path: str | Path | None = None,
     ) -> dict[str, Any]:
         """Create or reopen a local portable Howdex Codex registry."""
         from howdex.portable import init_codex
@@ -1255,7 +1344,7 @@ class Howdex:
 
     def publish_codex(
         self,
-        path: Optional[Union[str, Path]] = None,
+        path: str | Path | None = None,
         *,
         require_signed_receipt: bool = False,
     ) -> dict[str, Any]:
@@ -1268,7 +1357,7 @@ class Howdex:
             require_signed_receipt=require_signed_receipt,
         )
 
-    def pull_codex(self, path: Union[str, Path]) -> dict[str, int]:
+    def pull_codex(self, path: str | Path) -> dict[str, int]:
         """Import procedures from another local Howdex Codex registry."""
         from howdex.portable import pull_codex
 
@@ -1278,7 +1367,7 @@ class Howdex:
     # ------------------------------------------------------------------ #
     # sync
     # ------------------------------------------------------------------ #
-    def sync(self, peer: Optional[str] = None) -> dict[str, int]:
+    def sync(self, peer: str | None = None) -> dict[str, int]:
         """Sync with a peer.
 
         ``peer`` can be:
@@ -1288,7 +1377,7 @@ class Howdex:
             :func:`sync_from_file` (depending on existence)
           * ``None`` — uses the ``HOWDEX_SYNC_PEER`` env var
         """
-        from howdex.sync import sync_with_peer, sync_to_file, sync_from_file
+        from howdex.sync import sync_from_file, sync_to_file, sync_with_peer
         peer = peer or os.environ.get("HOWDEX_SYNC_PEER")
         if not peer:
             raise HowdexError("no peer specified (set peer= or HOWDEX_SYNC_PEER env var)")

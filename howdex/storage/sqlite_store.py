@@ -13,16 +13,17 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
-from howdex.core.types import Memory, MemoryLayer, MemoryType
 from howdex.core.errors import StoreError
 from howdex.core.feedback import (
     procedure_feedback_confidence,
     procedure_success_rate,
 )
+from howdex.core.types import Memory, MemoryLayer, MemoryType
 
 SCHEMA_VERSION = 6
 
@@ -330,7 +331,7 @@ class Store:
                 (mem.id, mem.vector_clock, self.node_id, json.dumps(mem.to_dict()), time.time()),
             )
 
-    def get(self, mem_id: str) -> Optional[Memory]:
+    def get(self, mem_id: str) -> Memory | None:
         row = self._conn().execute(
             "SELECT * FROM memories WHERE id=? AND deleted=0", (mem_id,)
         ).fetchone()
@@ -362,12 +363,12 @@ class Store:
     def query(
         self,
         *,
-        layer: Optional[MemoryLayer] = None,
-        type: Optional[MemoryType] = None,
-        session_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        source: Optional[str] = None,
-        since: Optional[float] = None,
+        layer: MemoryLayer | None = None,
+        type: MemoryType | None = None,
+        session_id: str | None = None,
+        agent_id: str | None = None,
+        source: str | None = None,
+        since: float | None = None,
         limit: int = 1000,
     ) -> list[Memory]:
         sql = "SELECT * FROM memories WHERE deleted=0"
@@ -389,7 +390,7 @@ class Store:
         rows = self._conn().execute(sql, args).fetchall()
         return [_row_to_memory(r) for r in rows]
 
-    def all_with_embeddings(self, layer: Optional[MemoryLayer] = None) -> list[Memory]:
+    def all_with_embeddings(self, layer: MemoryLayer | None = None) -> list[Memory]:
         sql = "SELECT * FROM memories WHERE deleted=0 AND embedding IS NOT NULL"
         args: list[Any] = []
         if layer:
@@ -397,7 +398,7 @@ class Store:
         rows = self._conn().execute(sql, args).fetchall()
         return [_row_to_memory(r) for r in rows]
 
-    def count(self, layer: Optional[MemoryLayer] = None) -> int:
+    def count(self, layer: MemoryLayer | None = None) -> int:
         sql = "SELECT COUNT(*) FROM memories WHERE deleted=0"
         args: list[Any] = []
         if layer:
@@ -430,7 +431,7 @@ class Store:
             )
 
     def query_episodes(
-        self, *, agent_id: Optional[str] = None, outcome: Optional[str] = None,
+        self, *, agent_id: str | None = None, outcome: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         sql = "SELECT * FROM episodes WHERE 1=1"
@@ -505,13 +506,13 @@ class Store:
                 ),
             )
 
-    def get_procedure(self, task_signature: str) -> Optional[dict[str, Any]]:
+    def get_procedure(self, task_signature: str) -> dict[str, Any] | None:
         row = self._conn().execute(
             "SELECT * FROM procedures WHERE task_signature=?", (task_signature,)
         ).fetchone()
         return self._procedure_row(row) if row else None
 
-    def get_procedure_by_id(self, procedure_id: str) -> Optional[dict[str, Any]]:
+    def get_procedure_by_id(self, procedure_id: str) -> dict[str, Any] | None:
         row = self._conn().execute(
             "SELECT * FROM procedures WHERE id=?",
             (procedure_id,),
@@ -575,7 +576,7 @@ class Store:
         procedure_id: str,
         reference_id: str,
         *,
-        now: Optional[float] = None,
+        now: float | None = None,
     ) -> bool:
         """Record one suggestion once without affecting use outcomes."""
         timestamp = time.time() if now is None else float(now)
@@ -607,7 +608,7 @@ class Store:
         procedure_id: str,
         reference_id: str,
         *,
-        now: Optional[float] = None,
+        now: float | None = None,
     ) -> bool:
         """Record an unverified use once."""
         timestamp = time.time() if now is None else float(now)
@@ -650,7 +651,7 @@ class Store:
         episode_id: str,
         outcome: str,
         *,
-        now: Optional[float] = None,
+        now: float | None = None,
     ) -> bool:
         """Record one verified success/failure and update aggregate stats."""
         normalized_outcome = str(outcome or "").strip().lower()
@@ -871,14 +872,14 @@ class Store:
 # ---------------------------------------------------------------------- #
 # helpers
 # ---------------------------------------------------------------------- #
-def _pack_embedding(emb: Optional[list[float]]) -> Optional[bytes]:
+def _pack_embedding(emb: list[float] | None) -> bytes | None:
     if emb is None:
         return None
     import struct
     return struct.pack(f"<{len(emb)}f", *emb)
 
 
-def _unpack_embedding(blob: Optional[bytes]) -> Optional[list[float]]:
+def _unpack_embedding(blob: bytes | None) -> list[float] | None:
     if blob is None:
         return None
     import struct

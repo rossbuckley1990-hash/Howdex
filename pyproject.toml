@@ -70,14 +70,18 @@ addopts = "-ra -q --tb=short"
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
 ignore = ["E501"]  # line length handled by formatter
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
+# NOTE: numpy 2.x ships py.typed stubs that use syntax only valid on Python
+# 3.12+. To run `mypy howdex/` on Python 3.10/3.11, use:
+#   MYPYPATH="" mypy --no-site-packages howdex
+# This skips third-party stubs and only checks Howdex's own code.

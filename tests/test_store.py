@@ -1,13 +1,10 @@
 """Tests for the SQLite store."""
 
-import json
 import sqlite3
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from howdex.core.types import Memory, MemoryLayer, MemoryType
+from howdex.core.types import Memory, MemoryLayer
 from howdex.storage import Store
 
 

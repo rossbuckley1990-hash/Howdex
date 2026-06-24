@@ -11,7 +11,6 @@ Both expose the same :class:`VectorIndex` interface.
 from __future__ import annotations
 
 import threading
-from typing import Optional
 
 import numpy as np
 
@@ -34,7 +33,7 @@ class VectorIndex:
         self._id_to_pos: dict[str, int] = {}
         self._lock = threading.RLock()
         self._backend = "numpy"
-        self._np: Optional[np.ndarray] = None  # (N, dim) float32
+        self._np: np.ndarray | None = None  # (N, dim) float32
         try:
             import hnswlib  # type: ignore
             self._hnsw = hnswlib.Index(space=metric, dim=dim)
@@ -94,7 +93,7 @@ class VectorIndex:
             if self._backend == "hnswlib":
                 labels, distances = self._hnsw.knn_query(query[None, :], k=min(k * 2, len(self._ids)))
                 out: list[tuple[str, float]] = []
-                for lbl, dist in zip(labels[0], distances[0]):
+                for lbl, dist in zip(labels[0], distances[0], strict=False):
                     mem_id = self._ids[lbl] if lbl < len(self._ids) else ""
                     if not mem_id:
                         continue

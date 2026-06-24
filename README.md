@@ -112,8 +112,37 @@ CLI smoke test:
 ```bash
 HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db init
 HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db remember "user loves python"
-HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db search "programming preference"
+HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db search "python preference"
 ```
+
+### First-time developer? Run the full loop in one command
+
+If you're evaluating Howdex for the first time, run:
+
+```bash
+python examples/first_time_dev.py
+```
+
+This walks through the entire value proposition end-to-end with visible
+output: record a trace → learn a procedure → attach a real receipt → pull
+guidance for a fresh related task → publish to a local Codex → lint it.
+Leaves you with a real, inspectable verified Codex entry in
+`./first_time_dev_codex/`.
+
+> **Note on embedders**: The `hash` embedder (default for the CLI smoke
+> test) is keyword-overlap only — it matches on shared tokens, not
+> semantics. That's why the search query above uses `"python preference"`
+> (shares `python` with the stored memory) rather than `"programming
+> preference"` (no shared tokens). For semantic matching (e.g. "user
+> loves python" ↔ "programming preference"), install the optional
+> sentence-transformers backend and use `HOWDEX_EMBEDDER=st`:
+>
+> ```bash
+> python -m pip install -e ".[st]"
+> HOWDEX_EMBEDDER=st howdex --path /tmp/howdex.db init
+> HOWDEX_EMBEDDER=st howdex --path /tmp/howdex.db remember "user loves python"
+> HOWDEX_EMBEDDER=st howdex --path /tmp/howdex.db search "programming preference"
+> ```
 
 ## MCP quickstart
 
@@ -131,7 +160,46 @@ attach receipts.
 Howdex MCP requires no OpenAI dependency, no hosted service, and no cloud
 database. Source artifacts are excluded by default.
 
-See [docs/MCP.md](docs/MCP.md).
+### Wire it into your agent
+
+Ready-to-use config snippets are in [`examples/pilot/`](examples/pilot/):
+
+**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "howdex": {
+      "command": "howdex",
+      "args": ["mcp", "--db", "~/.howdex/howdex.db", "--codex", "/path/to/your/codex"],
+      "env": { "HOWDEX_EMBEDDER": "hash" }
+    }
+  }
+}
+```
+
+**Cursor** — add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "howdex": {
+      "command": "howdex",
+      "args": ["mcp", "--db", "~/.howdex/howdex.db", "--codex", "/path/to/your/codex"],
+      "env": { "HOWDEX_EMBEDDER": "hash" }
+    }
+  }
+}
+```
+
+After adding the config and restarting your agent, you should see `howdex_*`
+tools available (e.g. `howdex_remember_trace`, `howdex_learn`,
+`howdex_guidance`, `howdex_codex_search`). Try asking your agent: *"remember
+this trace as a Howdex session, then learn a procedure from it"*.
+
+See [docs/MCP.md](docs/MCP.md) and [`examples/pilot/`](examples/pilot/) for
+full config examples and adapter code for LangChain, LangGraph, and generic
+agent loops.
 
 ## Codex and receipt quickstart
 

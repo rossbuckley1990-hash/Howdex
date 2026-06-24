@@ -11,11 +11,10 @@ import json
 import sys
 import threading
 import time
-import uuid
 from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import howdex.telemetry as telemetry
 from howdex import Howdex, __version__
@@ -31,7 +30,6 @@ from howdex.core.guidance import (
 )
 from howdex.core.types import MemoryLayer, MemoryType, Procedure
 from howdex.portable import codex_entry_document, init_codex
-
 
 PROTOCOL_VERSION = "2024-11-05"
 MUTATING_TOOLS = {
@@ -230,9 +228,9 @@ class MCPServer:
     def __init__(
         self,
         *,
-        path: Optional[str] = None,
-        embedder: Optional[str] = None,
-        codex_path: Optional[str] = None,
+        path: str | None = None,
+        embedder: str | None = None,
+        codex_path: str | None = None,
         readonly: bool = False,
     ):
         self.howdex = Howdex(path=path, embedder=embedder)
@@ -777,9 +775,9 @@ def _tool_error(payload: dict[str, Any]) -> dict:
 
 def run_stdio(
     *,
-    path: Optional[str] = None,
-    embedder: Optional[str] = None,
-    codex_path: Optional[str] = None,
+    path: str | None = None,
+    embedder: str | None = None,
+    codex_path: str | None = None,
     readonly: bool = False,
 ) -> None:
     """Run the local MCP server over newline-delimited JSON-RPC stdio."""
@@ -808,9 +806,9 @@ def run_http(
     host: str = "127.0.0.1",
     port: int = 7331,
     *,
-    path: Optional[str] = None,
-    embedder: Optional[str] = None,
-    codex_path: Optional[str] = None,
+    path: str | None = None,
+    embedder: str | None = None,
+    codex_path: str | None = None,
     readonly: bool = False,
 ) -> None:
     """Run the same local MCP server over HTTP for local clients."""

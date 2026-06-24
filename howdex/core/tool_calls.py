@@ -1,8 +1,8 @@
 """Deterministic canonicalisation for structured agent tool calls."""
 
 from __future__ import annotations
-import ast
 
+import ast
 import hashlib
 import json
 import re
@@ -102,6 +102,88 @@ _INTENT_VERBS = {
         "build",
         "test",
     },
+    "transform": {
+        # Data-wrangling and ETL verbs that change the shape or type of data
+        # without changing its meaning. These were previously falling to
+        # `unknown` because none of their leading tokens appeared in any
+        # intent bucket, which meant data-wrangling procedures lost ~50% of
+        # their steps to canonicalization and never produced useful guidance.
+        "normalize",
+        "coerce",
+        "convert",
+        "cast",
+        "clean",
+        "strip",
+        "trim",
+        "lowercase",
+        "uppercase",
+        "titlecase",
+        "format",
+        "rename",
+        "reorder",
+        "reshape",
+        "transpose",
+        "merge",
+        "split",
+        "join",
+        "flatten",
+        "explode",
+        "pivot",
+        "melt",
+        "group",
+        "aggregate",
+        "summarize",
+        "summarise",
+        "bucket",
+        "bin",
+        "discretize",
+        "discretise",
+        "encode",
+        "decode",
+        "escape",
+        "unescape",
+        "sanitize",
+        "sanitise",
+        "deduplicate",
+        "dedupe",
+        "backfill",
+        "impute",
+        "interpolate",
+        "extrapolate",
+        "round",
+        "floor",
+        "ceil",
+        "clip",
+        "scale",
+        "standardize",
+        "standardise",
+    },
+    "validate": {
+        # Verbs that check whether data/state matches an expected shape.
+        # Kept separate from `authenticate` (which is about identity) and
+        # from `execute`/`test` (which run side-effecting verifiers).
+        "validate",
+        "verify",
+        "check",
+        "assert",
+        "lint",
+        "audit",
+        "diagnose",
+    },
+    "repair": {
+        # Recovery / fix verbs — common in infra and SRE workflows.
+        "repair",
+        "recover",
+        "restore",
+        "fix",
+        "heal",
+        "restart",
+        "reload",
+        "refresh",
+        "reconcile",
+        "migrate",
+        "backfill",
+    },
     "transfer": {
         "transfer",
         "refund",
@@ -126,8 +208,6 @@ _INTENT_VERBS = {
         "authenticate",
         "login",
         "signin",
-        "verify",
-        "validate",
     },
 }
 

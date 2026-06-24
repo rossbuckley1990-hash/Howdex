@@ -6,9 +6,10 @@ case all tracing operations are deterministic no-ops.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Iterator
+from typing import Any
 
 TRACER_NAME = "howdex"
 MAX_ATTRIBUTE_LENGTH = 512

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 MemorySource = Literal["system", "tool", "agent", "user", "imported"]
 TrustLevel = Literal["verified", "trusted", "neutral", "untrusted"]
 SafetyClass = Literal["general", "operational", "security", "personal", "unknown"]
