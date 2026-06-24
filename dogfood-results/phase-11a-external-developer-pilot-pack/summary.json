@@ -1,0 +1,58 @@
+{
+  "branch": "feature/external-developer-pilot-pack",
+  "changed_files": [],
+  "changed_files_count": 0,
+  "codex_entry_paths": [
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/create-an-external-developer-pilot-pack-for-howdex--74b4387cdc.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/prepare-and-track-real-external-pilot-outreach-for-howdex--9e09783c83.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-trust-calibration-on-actual-howdex-dogfood-procedures--61d8e5811a.json"
+  ],
+  "command_runs": [
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m pytest",
+      "duration_seconds": 8.395,
+      "exit_code": 0,
+      "label": "pytest",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-11a-external-developer-pilot-pack/20260624T194036Z-003-pytest.log",
+      "passed": true,
+      "pytest_summary": "531 passed"
+    }
+  ],
+  "commands_run": 1,
+  "commit_count": 1,
+  "dirty_state_at_start": "unknown",
+  "duration_seconds": 289.765,
+  "episode_id": "bc504539-d271-4476-afaf-ef1cda0abf59",
+  "failed_attempts": 0,
+  "git_diff_stat": "unknown",
+  "git_end_sha": "cb76a4451b266a3388e26b39f8c99f8d1d62ce96",
+  "git_start_sha": "0bf06c90397799a5d94dbeb94b025d50459e08b0",
+  "guidance_chars": 2057,
+  "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-11a-external-developer-pilot-pack.md",
+  "guidance_used": true,
+  "howdex_version": "0.3.0",
+  "latest_test_label": "pytest",
+  "latest_test_passed": true,
+  "latest_test_summary": "531 passed",
+  "learned_procedure_ids": [
+    "30381bea-e148-4519-a103-c18f7061e378",
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "objective": "Create an external developer pilot pack for Howdex",
+  "phase": "phase-11a-external-developer-pilot-pack",
+  "procedure_published": true,
+  "python_version": "3.14.6",
+  "receipt_attached": true,
+  "receipt_ids": [
+    "a453fcc7b088f78cabdf29c41748c7aaf59709fdcd1dce03808d4fccd50166e4",
+    "a453fcc7b088f78cabdf29c41748c7aaf59709fdcd1dce03808d4fccd50166e4",
+    "a453fcc7b088f78cabdf29c41748c7aaf59709fdcd1dce03808d4fccd50166e4"
+  ],
+  "selected_procedure_ids": [
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "support_count": 1,
+  "support_scope_statement": "Dogfood procedures learned from this phase are single-episode, single-repo, single-user internal evidence. They are not external adoption, traction, users, market validation, and not proof of broad generalization."
+}
