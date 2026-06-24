@@ -110,6 +110,12 @@ def failed_attempts(procedure: Any) -> list[str]:
                 for marker in ("success", "successful", "passed")
             ):
                 continue
+            # Avoid false-positives from success summaries that mention
+            # failure counts in the negative, e.g. "parsed 6/6 dates, 0 failed"
+            # or "0 errors" or "no failures". The step actually succeeded;
+            # the word "failed"/"error" appears only as part of a zero-count.
+            if _is_failure_marker_negated(observation):
+                continue
             args = extract_tool_args(step)
             if args.get("cmd"):
                 failed.append(f"run `{args['cmd']}`")
@@ -124,6 +130,36 @@ def failed_attempts(procedure: Any) -> list[str]:
                     )
                 )
     return unique_strings(failed)
+
+
+def _is_failure_marker_negated(observation: str) -> bool:
+    """Return True when failure-marker words appear only as zero/negative counts.
+
+    Examples that should be treated as NOT a failure:
+      "parsed 6/6 dates, 0 failed"
+      "0 errors, 0 warnings"
+      "no failures detected"
+      "exit=0 :: 0 failed, 0 errors"
+
+    Examples that ARE real failures:
+      "ImportError: no module named foo"
+      "1 failed, 5 passed"
+      "fatal: database is locked"
+    """
+    import re
+
+    negation_patterns = [
+        # "0 failed", "0 errors", "0 failures", "0 fatal"
+        r"\b0\s+(failed|failures|errors?|fatal)\b",
+        # "no failed", "no failures", "no errors"
+        r"\bno\s+(failed|failures|errors?|fatal)\b",
+        # "failed=0", "errors=0", "failures=0"
+        r"\b(failed|failures|errors?)\s*=\s*0\b",
+    ]
+    for pattern in negation_patterns:
+        if re.search(pattern, observation):
+            return True
+    return False
 
 
 def raw_examples(procedure: Any) -> list[Any]:
