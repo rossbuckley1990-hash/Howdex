@@ -1,5 +1,10 @@
 # Howdex Codex
 
+Howdex is the open verification layer for agent know-how.
+
+Howdex turns execution traces into portable, receipt-backed procedures that any
+agent can reuse and any enterprise can audit.
+
 The Howdex Codex is a public, versioned catalogue of reusable operational
 procedures learned from agent execution traces. It is the open catalogue for
 verified agent procedures: portable know-how that can move across models,

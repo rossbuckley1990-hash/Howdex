@@ -1,11 +1,19 @@
 # Howdex MCP Server
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 Howdex ships a local MCP server so Claude Desktop, Cursor, Windsurf,
 Codex-style workflows, and other MCP-compatible agents can use operational
 memory without a cloud service or mandatory LLM dependency.
 
 The server runs on your machine, uses local SQLite by default, and exposes
 Howdex procedural memory plus optional local Codex guidance as MCP tools.
+
+MCP is the local adapter surface for verified agent procedures. It does not
+make candidate procedures verified, does not require a hosted Howdex service,
+and does not turn guidance into executable authority.
 
 ## Installation
 
@@ -229,4 +237,3 @@ Call `howdex_codex_publish`:
 
 Unverified procedures publish as `candidate` and include a receipt requirement.
 Only procedures with inspectable verified receipts publish as `verified`.
-

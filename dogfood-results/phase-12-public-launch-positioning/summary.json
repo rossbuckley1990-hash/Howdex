@@ -1,0 +1,71 @@
+{
+  "branch": "docs/path-b-launch-positioning",
+  "changed_files": [],
+  "changed_files_count": 0,
+  "codex_entry_paths": [
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/add-awm-head-to-head-benchmark-harness--ebb0e5c514.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/add-optional-auditable-llm-assisted-abstraction-proposals--4bd9441d97.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/create-an-external-developer-pilot-pack-for-howdex--74b4387cdc.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/prepare-and-track-real-external-pilot-outreach-for-howdex--9e09783c83.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-awm-style-head-to-head-comparison-in-live-local-mode--7609d10549.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-trust-calibration-on-actual-howdex-dogfood-procedures--61d8e5811a.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/update-public-launch-positioning-for-howdex-path-b--6e6c812911.json"
+  ],
+  "command_runs": [
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m pytest",
+      "duration_seconds": 8.43,
+      "exit_code": 0,
+      "label": "pytest",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-12-public-launch-positioning/20260624T200314Z-160-pytest.log",
+      "passed": true,
+      "pytest_summary": "553 passed"
+    }
+  ],
+  "commands_run": 1,
+  "commit_count": 1,
+  "dirty_state_at_start": "unknown",
+  "duration_seconds": 225.525,
+  "episode_id": "a17e3781-4a2e-458e-b99b-fe22e7ef5250",
+  "failed_attempts": 0,
+  "git_diff_stat": "unknown",
+  "git_end_sha": "91afd74487a8950ff924e23481b4e26f666a4820",
+  "git_start_sha": "02aaf479afd343bc93aefe37b2981f825a1a22ad",
+  "guidance_chars": 2243,
+  "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-12-public-launch-positioning.md",
+  "guidance_used": true,
+  "howdex_version": "0.3.0",
+  "latest_test_label": "pytest",
+  "latest_test_passed": true,
+  "latest_test_summary": "553 passed",
+  "learned_procedure_ids": [
+    "b1f1adc7-6b2f-4104-85e2-cff4df346a33",
+    "2255367e-1af9-4486-952b-04d20eeadc03",
+    "30381bea-e148-4519-a103-c18f7061e378",
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "cfa6c318-9114-4723-bf23-873bfa9a0c6e",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f",
+    "058db5c9-fc90-405e-b469-fa24a7abfc0a"
+  ],
+  "objective": "Update public launch positioning for Howdex Path B",
+  "phase": "phase-12-public-launch-positioning",
+  "procedure_published": true,
+  "python_version": "3.14.6",
+  "receipt_attached": true,
+  "receipt_ids": [
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028",
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028",
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028",
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028",
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028",
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028",
+    "e1e262c63d6c6abdd22aae7a1a00a90895dc327965868d81f26b4c1b15c2d028"
+  ],
+  "selected_procedure_ids": [
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "30381bea-e148-4519-a103-c18f7061e378",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "support_count": 1,
+  "support_scope_statement": "Dogfood procedures learned from this phase are single-episode, single-repo, single-user internal evidence. They are not external adoption, traction, users, market validation, and not proof of broad generalization."
+}

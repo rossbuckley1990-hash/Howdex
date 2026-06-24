@@ -1,5 +1,9 @@
 # Dogfooding Howdex
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 Howdex should build Howdex.
 
 The dogfood harness records the execution traces used to implement Howdex
@@ -13,6 +17,10 @@ cloud service.
 Dogfood metrics are internal build evidence only. Dogfood metrics are not
 external adoption, traction, users, revenue, market validation, or proof that a
 procedure generalizes broadly.
+
+Dogfood entries are part of the internal procedural-memory loop. They can
+produce candidate procedures and internal receipts, but they should not be
+presented as external adoption or broad proof of compounding at scale.
 
 ## Why this exists
 

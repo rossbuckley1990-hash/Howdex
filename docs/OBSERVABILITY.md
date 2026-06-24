@@ -1,11 +1,20 @@
 # Howdex Observability
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 Howdex can emit optional OpenTelemetry spans for procedural-memory decisions.
 This helps teams inspect why operational memory was selected, rendered,
 published, rejected, or treated as stale.
 
 OpenTelemetry is optional. Installing Howdex does not require OTel packages;
 without them, tracing is a no-op.
+
+Observability is part of the verification layer: teams should be able to trace
+why a procedure was selected, whether it was candidate or verified, what was
+omitted by budget/relevance filters, and why stale or incompatible memory was
+warned or blocked.
 
 ```bash
 python -m pip install "howdex-ai[otel]"

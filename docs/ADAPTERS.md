@@ -1,5 +1,9 @@
 # Howdex Framework Adapters
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 Howdex adapters let existing agent workflows use procedural memory without
 manual calls to `start_session()`, `log_step()`, `learn()`, and `guidance()` at
 every call site.
@@ -7,6 +11,10 @@ every call site.
 Adapters are optional. Importing them does not require LangGraph, LangChain,
 OpenAI, network access, or a hosted service. Howdex stays local-first and uses
 your local SQLite database.
+
+Adapters do not make Howdex model-bound. They let different frameworks record
+the same trace/procedure/receipt lifecycle while keeping source artifacts
+excluded by default and candidate procedures clearly labelled.
 
 ## OpenAI Agents SDK
 

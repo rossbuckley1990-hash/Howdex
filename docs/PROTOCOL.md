@@ -1,11 +1,20 @@
 # Howdex Protocol
 
+Howdex is the open verification layer for agent know-how.
+
+Howdex turns execution traces into portable, receipt-backed procedures that any
+agent can reuse and any enterprise can audit.
+
 The Howdex protocol defines how agent execution traces become portable,
 receipt-backed procedures and how those procedures are reused safely.
 
 The protocol is local-first and registry-neutral. It can be exposed through
 Python APIs, CLI commands, MCP tools, adapters, or a future compatible
 registry, but the trust boundaries stay the same.
+
+The protocol is not a hosted-registry claim and not a production-safe autonomy
+claim. Procedures remain guidance until current policy authorizes action and a
+current verifier produces receipt-backed evidence.
 
 ## Operation: remember_trace
 
