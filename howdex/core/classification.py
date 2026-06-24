@@ -16,6 +16,9 @@ INTENTS = frozenset(
         "write",
         "delete",
         "execute",
+        "transform",
+        "validate",
+        "repair",
         "transfer",
         "notify",
         "approve",
@@ -49,6 +52,8 @@ _MUTATING_INTENTS = {
     "create",
     "update",
     "write",
+    "transform",
+    "repair",
     "notify",
     "approve",
     "reject",
@@ -201,7 +206,7 @@ def infer_side_effect_class(
         or signal_names & _SECURITY_ARGUMENTS
     ):
         return "security_sensitive", "security_intent_or_signal"
-    if normalized_intent in {"read", "search", "list"}:
+    if normalized_intent in {"read", "search", "list", "validate"}:
         return "read_only", "read_intent"
 
     scope = str(hints.get("scope") or "").strip().lower()
