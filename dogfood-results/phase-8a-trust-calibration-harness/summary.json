@@ -1,0 +1,43 @@
+{
+  "branch": "feature/procedure-trust-calibration",
+  "changed_files": [],
+  "changed_files_count": 0,
+  "codex_entry_paths": [],
+  "command_runs": [
+    {
+      "command": "HOWDEX_CALIBRATION_DRY_RUN=1 PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python procedure_trust_calibration_test.py",
+      "duration_seconds": 0.025,
+      "exit_code": 0,
+      "label": "trust-calibration-dry-run",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-8a-trust-calibration-harness/20260624T192203Z-226-trust-calibration-dry-run.log",
+      "passed": true,
+      "pytest_summary": null
+    }
+  ],
+  "commands_run": 1,
+  "commit_count": 1,
+  "dirty_state_at_start": "unknown",
+  "duration_seconds": 593.568,
+  "episode_id": "99656954-d4b2-4c9c-ada5-2e2fd8194f8e",
+  "failed_attempts": 0,
+  "git_diff_stat": "unknown",
+  "git_end_sha": "40a400892a448d0e1783cc22b934e2a1fd006b20",
+  "git_start_sha": "a76dfbf6253e8e0750a6c48eb6bc2db073c4c568",
+  "guidance_chars": 1546,
+  "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-8a-trust-calibration-harness.md",
+  "guidance_used": true,
+  "howdex_version": "0.3.0",
+  "latest_test_label": "trust-calibration-dry-run",
+  "latest_test_passed": true,
+  "latest_test_summary": null,
+  "learned_procedure_ids": [],
+  "objective": "Add procedure trust calibration benchmark harness",
+  "phase": "phase-8a-trust-calibration-harness",
+  "procedure_published": false,
+  "python_version": "3.14.6",
+  "receipt_attached": false,
+  "receipt_ids": [],
+  "selected_procedure_ids": [],
+  "support_count": 0,
+  "support_scope_statement": "Dogfood procedures learned from this phase are single-episode, single-repo, single-user internal evidence. They are not external adoption, traction, users, market validation, and not proof of broad generalization."
+}
