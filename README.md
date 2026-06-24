@@ -324,6 +324,22 @@ model.
 
 ---
 
+### Trace why memory was selected
+
+Howdex can emit optional OpenTelemetry spans for procedural-memory decisions:
+retrieval, selection, rendering, procedure injection, Codex search/publish,
+receipt attachment, policy checks, and staleness evaluation.
+
+```bash
+python -m pip install "howdex-ai[otel]"
+```
+
+Without OpenTelemetry installed, tracing is a no-op and Howdex imports normally.
+Telemetry uses IDs, statuses, counts, and scores; it does not emit raw source
+artifacts by default. See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
+
+---
+
 ### Failed-Attempt Separation
 
 Howdex does not just store the final answer.

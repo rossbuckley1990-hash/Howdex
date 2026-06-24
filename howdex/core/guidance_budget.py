@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import howdex.telemetry as telemetry
 from howdex.core.codex_staleness import (
     StalenessDecision,
     apply_staleness_confidence,
@@ -178,7 +179,7 @@ def select_guidance_procedures(
         seen_category_signatures.add(category_signature)
         used_chars = projected_chars
 
-    return GuidanceProcedureSelection(
+    selection = GuidanceProcedureSelection(
         selected=selected,
         included=included,
         excluded=excluded,
@@ -186,6 +187,20 @@ def select_guidance_procedures(
         context_budget_used=min(used_chars, max_chars) if max_chars else used_chars,
         max_guidance_chars=max_chars,
     )
+    with telemetry.span(
+        "howdex.guidance.select",
+        {
+            "howdex.selected_count": len(selection.selected),
+            "howdex.omitted_count": selection.omitted_count,
+            "howdex.guidance_chars": selection.context_budget_used,
+            "howdex.verified_only": resolved_budget.include_verified_only,
+            "howdex.relevance_score": included[0].relevance_score
+            if included
+            else 0.0,
+        },
+    ):
+        pass
+    return selection
 
 
 def _coerce_budget(budget: GuidanceBudget | Mapping[str, Any] | None) -> GuidanceBudget:

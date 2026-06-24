@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import howdex.telemetry as telemetry
 from howdex.core.guidance import render_agent_guidance
 
 
@@ -49,16 +50,30 @@ def adapter_guidance(
     include_source: bool = False,
     top_k: int = 3,
     min_confidence: float = 0.0,
+    adapter: str | None = None,
 ) -> str:
     """Render deterministic Howdex guidance for framework adapters."""
     objective_text = " ".join(str(objective or "").split())
     if not objective_text:
         objective_text = "current agent task"
-    suggestions = memory.suggest_procedure(
-        objective_text,
-        top_k=top_k,
-        min_confidence=min_confidence,
-    )
+    with telemetry.span(
+        "howdex.guidance.retrieve",
+        {
+            "howdex.adapter": adapter or "adapter",
+            "howdex.include_source": include_source,
+            "howdex.verified_only": verified_only,
+        },
+    ) as retrieve_span:
+        suggestions = memory.suggest_procedure(
+            objective_text,
+            top_k=top_k,
+            min_confidence=min_confidence,
+        )
+        telemetry.set_attribute(
+            retrieve_span,
+            "howdex.selected_count",
+            len(suggestions),
+        )
     if verified_only:
         suggestions = [
             suggestion

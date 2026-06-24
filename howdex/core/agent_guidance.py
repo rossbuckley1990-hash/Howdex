@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import howdex.telemetry as telemetry
 from howdex.core.codex_staleness import (
     StalenessDecision,
     apply_staleness_confidence,
@@ -327,11 +328,26 @@ def render_agent_guidance(
             "",
         ]
     )
-    return truncate_with_marker(
+    rendered = truncate_with_marker(
         "\n".join(lines),
         max_chars,
         marker="\n[Howdex guidance truncated]\n",
     )
+    with telemetry.span(
+        "howdex.guidance.render",
+        {
+            "howdex.selected_count": len(relevant_items),
+            "howdex.guidance_chars": len(rendered),
+            "howdex.include_source": include_source,
+        },
+    ):
+        for procedure in active_items:
+            with telemetry.span(
+                "howdex.procedure.inject",
+                _procedure_trace_attributes(procedure),
+            ):
+                pass
+    return rendered
 
 
 def _trust_instruction(status: str) -> str:
@@ -385,3 +401,27 @@ def _staleness_decisions(
             current_environment,
         )
     return decisions
+
+
+def _procedure_trace_attributes(procedure: Any) -> dict[str, Any]:
+    source_episode_ids = as_list(get_value(procedure, "source_episode_ids"))
+    status = get_value(procedure, "procedure_status") or get_value(
+        procedure,
+        "status",
+    )
+    if not status:
+        try:
+            status = procedure_trust_status(procedure)
+        except Exception:
+            status = "unknown"
+    return {
+        "howdex.procedure_id": (
+            get_value(procedure, "procedure_id")
+            or get_value(procedure, "id")
+            or get_value(procedure, "task_signature")
+            or ""
+        ),
+        "howdex.procedure_status": status,
+        "howdex.relevance_score": get_value(procedure, "score") or 0.0,
+        "howdex.source_episode_count": len(source_episode_ids),
+    }

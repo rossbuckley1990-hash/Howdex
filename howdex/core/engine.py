@@ -58,6 +58,7 @@ from howdex.ingest import (
     default_ingestion_pipeline,
 )
 from howdex.storage import Store
+import howdex.telemetry as telemetry
 from howdex.vectors import VectorIndex, Embedder, auto_embedder
 
 
@@ -937,11 +938,23 @@ class Howdex:
         max_chars: int = 6_000,
     ) -> str:
         """Retrieve relevant procedures and render agent-ready guidance."""
-        suggestions = self.suggest_procedure(
-            objective if query is None else query,
-            top_k=top_k,
-            min_confidence=min_confidence,
-        )
+        with telemetry.span(
+            "howdex.guidance.retrieve",
+            {
+                "howdex.include_source": include_source,
+                "howdex.verified_only": False,
+            },
+        ) as retrieve_span:
+            suggestions = self.suggest_procedure(
+                objective if query is None else query,
+                top_k=top_k,
+                min_confidence=min_confidence,
+            )
+            telemetry.set_attribute(
+                retrieve_span,
+                "howdex.selected_count",
+                len(suggestions),
+            )
         return render_agent_guidance(
             suggestions,
             objective=objective,
@@ -1023,11 +1036,21 @@ class Howdex:
             procedure_id=procedure_id,
             task_signature=procedure.task_signature,
         )
-        self.store.attach_receipt(
-            procedure_id,
-            str(normalized.receipt_id),
-            normalized.to_dict(),
-        )
+        with telemetry.span(
+            "howdex.receipt.attach",
+            {
+                "howdex.procedure_id": procedure_id,
+                "howdex.receipt_status": normalized.status,
+                "howdex.source_episode_count": 1
+                if normalized.source_episode_id
+                else 0,
+            },
+        ):
+            self.store.attach_receipt(
+                procedure_id,
+                str(normalized.receipt_id),
+                normalized.to_dict(),
+            )
         return normalized
 
     def verify_procedure(
