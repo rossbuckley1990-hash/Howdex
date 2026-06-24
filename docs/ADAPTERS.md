@@ -8,6 +8,75 @@ Adapters are optional. Importing them does not require LangGraph, LangChain,
 OpenAI, network access, or a hosted service. Howdex stays local-first and uses
 your local SQLite database.
 
+## OpenAI Agents SDK
+
+The OpenAI Agents adapter keeps Howdex vendor-neutral. It does not import
+`openai` or the Agents SDK at module import time, and the core lifecycle works
+with plain Python callables.
+
+```python
+from howdex import Howdex
+from howdex.adapters.openai_agents import HowdexOpenAIAgentsAdapter
+
+memory = Howdex(path="~/.howdex/howdex.db", embedder="hashing")
+howdex = HowdexOpenAIAgentsAdapter(
+    memory,
+    verified_only=True,
+    include_source=False,
+    max_chars=4000,
+)
+
+instructions = howdex.instructions(
+    "Recover Docker Compose health endpoint",
+    constraints=["Stay inside the sandbox", "Verify with /health"],
+    environment={"docker": "local"},
+)
+```
+
+Pass `instructions` into your agent instructions/system prompt, then wrap tool
+calls with the task lifecycle:
+
+```python
+session_id = howdex.start_task(
+    "Recover Docker Compose health endpoint",
+    metadata={"runtime": "openai-agents"},
+)
+
+try:
+    observation = run_tool("bash", {"cmd": "cat runtime.env"})
+    howdex.record_tool_call(
+        "bash",
+        {"cmd": "cat runtime.env"},
+        observation,
+        status="success",
+    )
+finally:
+    learned = howdex.end_task(outcome="success", learn=True)
+```
+
+For runtimes that accept ordinary Python functions, use `as_tools()`:
+
+```python
+tools = howdex.as_tools()
+
+tools["howdex_guidance"]("Recover Docker Compose health endpoint")
+tools["howdex_remember"]("Verifier requires HTTP 200 from /health.")
+tools["howdex_learn"](min_samples=1)
+```
+
+If you want Agents SDK `function_tool` objects, call `tools()` only in the live
+runtime where the optional SDK is installed:
+
+```python
+sdk_tools = howdex.tools()
+```
+
+`include_source=False` is the default and should remain off unless the current
+workflow is explicitly allowed to receive source artifacts. Use
+`verified_only=True` when you want Codex-backed guidance restricted to
+procedures with inspectable verification receipts; Howdex will not label
+candidate procedures as verified without receipts.
+
 ## LangGraph
 
 ```python
@@ -104,6 +173,7 @@ works.
 Source artifacts are off by default:
 
 ```python
+HowdexOpenAIAgentsAdapter(memory, include_source=False)
 HowdexLangGraphAdapter(memory, include_source=False)
 HowdexMemory(memory, include_source=False)
 ```
@@ -116,6 +186,7 @@ to receive source artifacts.
 To restrict guidance to independently verified procedures:
 
 ```python
+HowdexOpenAIAgentsAdapter(memory, verified_only=True)
 HowdexLangGraphAdapter(memory, verified_only=True)
 HowdexMemory(memory, verified_only=True)
 ```
@@ -123,4 +194,3 @@ HowdexMemory(memory, verified_only=True)
 Candidate procedures are still stored and learnable, but they are filtered from
 adapter guidance when `verified_only=True`. Howdex never promotes a candidate
 procedure to verified without an inspectable receipt.
-
