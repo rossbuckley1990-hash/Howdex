@@ -750,6 +750,8 @@ def _codex_verification(
             "verifier_command": verified.verifier_command
             or "inspect attached verification receipt",
             "verifier_type": verified.verifier_type or verified.receipt_type,
+            "receipt_id": verified.receipt_id,
+            "receipts": [verified.to_dict()],
         }
         if require_signed_receipt:
             payload["signature_status"] = "signed_verified"

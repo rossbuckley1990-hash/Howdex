@@ -392,12 +392,15 @@ def test_codex_publish_verified_only_with_verified_receipt(tmp_path):
     entry = json.loads(published["files"][0].read_text(encoding="utf-8"))
     _assert_public_codex_entry(entry)
     assert entry["status"] == "verified"
-    assert entry["verification"] == {
-        "expected_signal": "passed",
-        "status": "verified",
-        "verifier_command": "pytest -q",
-        "verifier_type": "test",
-    }
+    verification = entry["verification"]
+    assert verification["expected_signal"] == "passed"
+    assert verification["status"] == "verified"
+    assert verification["verifier_command"] == "pytest -q"
+    assert verification["verifier_type"] == "test"
+    # The publish_codex -> codex lint round-trip fix requires verified
+    # entries to carry receipt material so codex lint accepts them.
+    assert verification["receipt_id"]
+    assert isinstance(verification["receipts"], list) and verification["receipts"]
 
 
 def test_codex_pull_imports_another_local_codex_idempotently(tmp_path):
