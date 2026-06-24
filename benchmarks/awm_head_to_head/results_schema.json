@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Howdex AWM head-to-head result",
+  "type": "object",
+  "required": [
+    "benchmark",
+    "mode",
+    "claim",
+    "conditions"
+  ],
+  "properties": {
+    "benchmark": {
+      "const": "awm_head_to_head"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "claim": {
+      "type": "string"
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "condition",
+          "task",
+          "trials",
+          "successes",
+          "success_rate",
+          "avg_attempts",
+          "extraction_cost",
+          "guidance_chars",
+          "source_leakage",
+          "auditability_score",
+          "verification_coverage",
+          "calibration_coverage",
+          "portability_score",
+          "base_prompt_sha256",
+          "memory_strategy",
+          "verdict",
+          "notes"
+        ],
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "trials": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "successes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "success_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "avg_attempts": {
+            "type": "number",
+            "minimum": 0
+          },
+          "extraction_cost": {
+            "type": "number",
+            "minimum": 0
+          },
+          "guidance_chars": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_leakage": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "auditability_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "verification_coverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "calibration_coverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "portability_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "base_prompt_sha256": {
+            "type": "string"
+          },
+          "memory_strategy": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
