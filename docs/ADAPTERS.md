@@ -77,6 +77,62 @@ workflow is explicitly allowed to receive source artifacts. Use
 procedures with inspectable verification receipts; Howdex will not label
 candidate procedures as verified without receipts.
 
+## Framework-neutral integration
+
+Use `howdex_task`, `howdex_tool`, or `HowdexMiddleware` when you have a plain
+Python agent loop and do not want any framework dependency.
+
+```python
+from howdex import Howdex
+from howdex.adapters.generic import howdex_task, howdex_tool
+
+memory = Howdex(path="~/.howdex/howdex.db", embedder="hashing")
+
+@howdex_tool(memory, name="bash")
+def bash(cmd): ...
+
+@howdex_task(memory, objective="Recover Docker health", learn=True)
+def agent_loop():
+    return bash("curl -sS -i http://127.0.0.1:52617/health")
+```
+
+Decorator usage:
+
+```python
+from pathlib import Path
+
+@howdex_tool(memory, name="filesystem.read_file")
+def read_file(path):
+    return Path(path).read_text()
+
+@howdex_task(memory, objective=lambda path: f"Inspect {path}", learn=True)
+def inspect_config(path):
+    return read_file(path)
+```
+
+Middleware usage:
+
+```python
+from howdex.adapters.generic import HowdexMiddleware
+
+howdex = HowdexMiddleware(memory, include_source=False, verified_only=True)
+guidance = howdex.before_task(
+    "Recover Docker Compose health endpoint",
+    constraints=["Stay inside the sandbox"],
+    environment={"docker": "local"},
+)
+try:
+    observation = run_tool("bash", {"cmd": "cat runtime.env"})
+    howdex.after_tool("bash", {"cmd": "cat runtime.env"}, observation, "success")
+    learned = howdex.after_task("success", learn=True)
+except Exception as exc:
+    howdex.after_task("failure", error=str(exc), learn=True)
+    raise
+```
+
+Nested decorated tasks are isolated: the child task gets its own Howdex session,
+then the parent session is restored before the parent continues.
+
 ## CrewAI
 
 Use `HowdexCrewAIAdapter` around Crew kickoff and task callbacks. The adapter
@@ -274,8 +330,8 @@ works.
 - Use `Howdex(path="~/.howdex/howdex.db")` or another local SQLite path.
 - Use `embedder="hashing"` for deterministic offline operation.
 - No adapter makes network calls.
-- No adapter requires OpenAI, CrewAI, AutoGen, LangGraph, or LangChain at
-  import time.
+- No adapter requires OpenAI, CrewAI, AutoGen, LangGraph, LangChain, or any
+  other framework at import time.
 
 ## Source artifacts
 
@@ -285,6 +341,7 @@ Source artifacts are off by default:
 HowdexOpenAIAgentsAdapter(memory, include_source=False)
 HowdexCrewAIAdapter(memory, include_source=False)
 HowdexAutoGenAdapter(memory, include_source=False)
+HowdexMiddleware(memory, include_source=False)
 HowdexLangGraphAdapter(memory, include_source=False)
 HowdexMemory(memory, include_source=False)
 ```
@@ -300,6 +357,7 @@ To restrict guidance to independently verified procedures:
 HowdexOpenAIAgentsAdapter(memory, verified_only=True)
 HowdexCrewAIAdapter(memory, verified_only=True)
 HowdexAutoGenAdapter(memory, verified_only=True)
+HowdexMiddleware(memory, verified_only=True)
 HowdexLangGraphAdapter(memory, verified_only=True)
 HowdexMemory(memory, verified_only=True)
 ```
