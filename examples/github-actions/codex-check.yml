@@ -1,0 +1,44 @@
+name: Howdex Codex check
+
+on:
+  pull_request:
+    paths:
+      - "codex/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "codex/**"
+
+jobs:
+  codex-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Howdex
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Check Howdex Codex entries
+        id: howdex-codex
+        uses: ./.github/actions/howdex-codex-check
+        with:
+          codex_path: codex
+          verified_only: "false"
+          require_receipts: "false"
+          require_signed_receipts: "false"
+          fail_on_stale: "true"
+          fail_on_high_risk: "false"
+
+      - name: Print Codex summary
+        run: |
+          echo '${{ steps.howdex-codex.outputs.summary_markdown }}'

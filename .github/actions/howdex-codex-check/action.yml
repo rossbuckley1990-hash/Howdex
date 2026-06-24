@@ -1,0 +1,278 @@
+name: Howdex Codex Check
+description: Lint, verify, and policy-check Howdex Codex procedure entries.
+
+inputs:
+  codex_path:
+    description: Path to a Codex root, entries directory, or single entry JSON file.
+    required: false
+    default: codex
+  verified_only:
+    description: Fail unless every entry has status=verified.
+    required: false
+    default: "false"
+  require_receipts:
+    description: Fail unless every entry has receipt or attestation metadata.
+    required: false
+    default: "false"
+  require_signed_receipts:
+    description: Fail unless every entry has signed receipt attestation metadata.
+    required: false
+    default: "false"
+  fail_on_stale:
+    description: Fail when entries are stale, deprecated, or incompatible.
+    required: false
+    default: "false"
+  fail_on_high_risk:
+    description: Fail when entries are high or critical risk.
+    required: false
+    default: "false"
+  banned_commands_file:
+    description: Optional newline-delimited banned command pattern file.
+    required: false
+    default: ""
+  hmac_key:
+    description: Optional HMAC key for validating hmac-sha256 signed attestations.
+    required: false
+    default: ""
+
+outputs:
+  summary_markdown:
+    description: Markdown summary of the Codex check.
+    value: ${{ steps.summary.outputs.summary_markdown }}
+  entries_count:
+    description: Total Codex entries checked.
+    value: ${{ steps.summary.outputs.entries_count }}
+  candidate_count:
+    description: Entries with status=candidate or status=experimental.
+    value: ${{ steps.summary.outputs.candidate_count }}
+  verified_count:
+    description: Entries with status=verified.
+    value: ${{ steps.summary.outputs.verified_count }}
+  stale_count:
+    description: Entries considered stale, deprecated, or incompatible.
+    value: ${{ steps.summary.outputs.stale_count }}
+  blocked_count:
+    description: Entries with status=blocked.
+    value: ${{ steps.summary.outputs.blocked_count }}
+  failed_rules:
+    description: Comma-separated failed rule names.
+    value: ${{ steps.summary.outputs.failed_rules }}
+
+runs:
+  using: composite
+  steps:
+    - id: governance
+      name: Run Howdex Codex governance commands
+      shell: bash
+      env:
+        CODEX_PATH: ${{ inputs.codex_path }}
+        HMAC_KEY: ${{ inputs.hmac_key }}
+      run: |
+        set +e
+        workdir="${RUNNER_TEMP:-/tmp}/howdex-codex-check"
+        mkdir -p "$workdir"
+
+        hmac_args=()
+        if [ -n "$HMAC_KEY" ]; then
+          hmac_args=(--hmac-key "$HMAC_KEY")
+        fi
+
+        howdex codex lint "$CODEX_PATH" "${hmac_args[@]}" >"$workdir/lint.log" 2>&1
+        echo $? >"$workdir/lint.rc"
+
+        howdex codex policy-check "$CODEX_PATH" >"$workdir/policy.log" 2>&1
+        echo $? >"$workdir/policy.rc"
+
+        howdex codex verify "$CODEX_PATH" "${hmac_args[@]}" >"$workdir/verify.log" 2>&1
+        echo $? >"$workdir/verify.rc"
+
+        cat "$workdir/lint.log"
+        cat "$workdir/policy.log"
+        cat "$workdir/verify.log"
+
+    - id: summary
+      name: Summarize Codex check
+      shell: bash
+      env:
+        CODEX_PATH: ${{ inputs.codex_path }}
+        VERIFIED_ONLY: ${{ inputs.verified_only }}
+        REQUIRE_RECEIPTS: ${{ inputs.require_receipts }}
+        REQUIRE_SIGNED_RECEIPTS: ${{ inputs.require_signed_receipts }}
+        FAIL_ON_STALE: ${{ inputs.fail_on_stale }}
+        FAIL_ON_HIGH_RISK: ${{ inputs.fail_on_high_risk }}
+        BANNED_COMMANDS_FILE: ${{ inputs.banned_commands_file }}
+      run: |
+        python <<'PY'
+        import json
+        import os
+        import re
+        import sys
+        from pathlib import Path
+
+        codex_path = Path(os.environ["CODEX_PATH"])
+        workdir = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "howdex-codex-check"
+
+        def truthy(name):
+            return os.environ.get(name, "").strip().casefold() in {"1", "true", "yes", "on"}
+
+        def entry_paths(path):
+            if path.is_file():
+                return [path]
+            for child in ("entries", "procedures"):
+                if (path / child).is_dir():
+                    return sorted((path / child).glob("*.json"))
+            if path.is_dir():
+                return sorted(path.glob("*.json"))
+            return []
+
+        paths = entry_paths(codex_path)
+        entries = []
+        for path in paths:
+            with path.open(encoding="utf-8") as fh:
+                payload = json.load(fh)
+            if isinstance(payload, dict):
+                entries.append((path, payload))
+
+        def verification(entry):
+            value = entry.get("verification")
+            return value if isinstance(value, dict) else {}
+
+        def has_receipt(entry):
+            v = verification(entry)
+            return bool(
+                entry.get("receipts")
+                or entry.get("attestations")
+                or v.get("receipts")
+                or v.get("attestations")
+                or v.get("receipt_id")
+            )
+
+        def has_signed_receipt(entry):
+            v = verification(entry)
+            candidates = []
+            for value in (entry.get("attestations"), v.get("attestations")):
+                if isinstance(value, dict):
+                    candidates.append(value)
+                elif isinstance(value, list):
+                    candidates.extend(item for item in value if isinstance(item, dict))
+            if v.get("signature_status") == "signed_verified":
+                return True
+            return any(item.get("signature") and item.get("payload_hash") for item in candidates)
+
+        def is_stale(entry):
+            v = verification(entry)
+            compatibility = entry.get("compatibility")
+            if not isinstance(compatibility, dict):
+                compatibility = {}
+            return bool(
+                entry.get("status") in {"stale", "deprecated"}
+                or v.get("status") in {"stale", "failed"}
+                or compatibility.get("known_incompatible_versions")
+                or compatibility.get("deprecation_signals")
+            )
+
+        def strings(value):
+            if isinstance(value, str):
+                yield value
+            elif isinstance(value, dict):
+                for nested in value.values():
+                    yield from strings(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    yield from strings(nested)
+
+        statuses = [str(entry.get("status") or "") for _, entry in entries]
+        candidate_count = sum(status in {"candidate", "experimental"} for status in statuses)
+        verified_count = sum(status == "verified" for status in statuses)
+        stale_count = sum(is_stale(entry) for _, entry in entries)
+        blocked_count = sum(status == "blocked" for status in statuses)
+
+        failed_rules = []
+        for name in ("lint", "policy", "verify"):
+            rc_path = workdir / f"{name}.rc"
+            rc = int(rc_path.read_text(encoding="utf-8").strip()) if rc_path.exists() else 1
+            if rc != 0:
+                failed_rules.append(f"{name}_failed")
+
+        if truthy("VERIFIED_ONLY"):
+            failed_rules.extend(
+                f"not_verified:{entry.get('id', path.name)}"
+                for path, entry in entries
+                if entry.get("status") != "verified"
+            )
+        if truthy("REQUIRE_RECEIPTS"):
+            failed_rules.extend(
+                f"missing_receipt:{entry.get('id', path.name)}"
+                for path, entry in entries
+                if not has_receipt(entry)
+            )
+        if truthy("REQUIRE_SIGNED_RECEIPTS"):
+            failed_rules.extend(
+                f"missing_signed_receipt:{entry.get('id', path.name)}"
+                for path, entry in entries
+                if not has_signed_receipt(entry)
+            )
+        if truthy("FAIL_ON_STALE") and stale_count:
+            failed_rules.append("stale_entries_present")
+        if truthy("FAIL_ON_HIGH_RISK"):
+            failed_rules.extend(
+                f"high_risk:{entry.get('id', path.name)}"
+                for path, entry in entries
+                if entry.get("risk_level") in {"high", "critical"}
+            )
+
+        banned_file = os.environ.get("BANNED_COMMANDS_FILE", "").strip()
+        if banned_file:
+            patterns = [
+                line.strip()
+                for line in Path(banned_file).read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            ]
+            for path, entry in entries:
+                text = "\n".join(strings(entry)).casefold()
+                for pattern in patterns:
+                    if re.search(pattern.casefold(), text):
+                        failed_rules.append(f"banned_command:{entry.get('id', path.name)}")
+                        break
+
+        summary = "\n".join([
+            "## Howdex Codex check",
+            "",
+            f"- Codex path: `{codex_path}`",
+            f"- Entries: {len(entries)}",
+            f"- Candidate/experimental: {candidate_count}",
+            f"- Verified: {verified_count}",
+            f"- Stale/deprecated/incompatible: {stale_count}",
+            f"- Blocked: {blocked_count}",
+            f"- Failed rules: {', '.join(failed_rules) if failed_rules else 'none'}",
+            "",
+            "Commands run:",
+            "",
+            "```bash",
+            "howdex codex lint <codex_path>",
+            "howdex codex policy-check <codex_path>",
+            "howdex codex verify <codex_path>",
+            "```",
+        ])
+
+        github_output = os.environ.get("GITHUB_OUTPUT")
+        if github_output:
+            with open(github_output, "a", encoding="utf-8") as fh:
+                fh.write("summary_markdown<<HOWDEX_SUMMARY\n")
+                fh.write(summary + "\n")
+                fh.write("HOWDEX_SUMMARY\n")
+                fh.write(f"entries_count={len(entries)}\n")
+                fh.write(f"candidate_count={candidate_count}\n")
+                fh.write(f"verified_count={verified_count}\n")
+                fh.write(f"stale_count={stale_count}\n")
+                fh.write(f"blocked_count={blocked_count}\n")
+                fh.write(f"failed_rules={','.join(failed_rules)}\n")
+
+        github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if github_step_summary:
+            with open(github_step_summary, "a", encoding="utf-8") as fh:
+                fh.write(summary + "\n")
+
+        print(summary)
+        sys.exit(1 if failed_rules else 0)
+        PY
