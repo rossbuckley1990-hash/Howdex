@@ -47,6 +47,7 @@ from howdex.core.types import (
     Procedure,
 )
 from howdex.ingest import IngestionPipeline, IngestionRecord
+from howdex.core.agent_guidance import render_system_prompt_snippet
 
 __version__ = "0.3.0"
 __author__ = "Howdex Collective"
@@ -76,6 +77,7 @@ __all__ = [
     "ParallelSpanResolver",
     "IngestionRecord",
     "IngestionPipeline",
+    "render_system_prompt_snippet",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",

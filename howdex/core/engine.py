@@ -71,6 +71,36 @@ DEFAULT_HOME = Path(os.environ.get("HOWDEX_HOME", Path.home() / ".howdex"))
 DEFAULT_DIM = 384
 _MANDATORY_SECRET_REDACTOR = Secret_Redactor()
 
+# Markers used by the session-integrity check (Observer Effect mitigation).
+# When a step's observation contains a failure marker and end_session("success")
+# is later called without an attached receipt, Howdex emits an
+# "unverified_success" integrity warning so hallucinated successes are visible.
+_FAILURE_MARKERS = (
+    "error",
+    "failed",
+    "failure",
+    "traceback",
+    "exception",
+    "fatal",
+    "not found",
+    "no such file",
+    "no module named",
+    "permission denied",
+    "timed out",
+    "segmentation fault",
+)
+_SUCCESS_MARKERS = (
+    "success",
+    "successful",
+    "succeeded",
+    "passed",
+    "ok",
+    "done",
+    "complete",
+    "exit=0",
+    "exit code 0",
+)
+
 # Recognized test-runner command prefixes. For these, exit_code=0 is
 # the canonical success signal — the textual summary line is sometimes
 # suppressed (e.g. `pytest -q`) or localized, so we should not require
@@ -222,6 +252,7 @@ class Howdex:
         agent_id: str | None = None,
         embed_dim: int = DEFAULT_DIM,
         ingestion_pipeline: IngestionPipeline | None = None,
+        require_receipt_for_success: bool = False,
     ):
         self.path = Path(path) if path else DEFAULT_HOME / "howdex.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,6 +260,7 @@ class Howdex:
         self.ingestion_pipeline = (
             ingestion_pipeline or default_ingestion_pipeline()
         )
+        self.require_receipt_for_success = require_receipt_for_success
 
         # embedder
         if isinstance(embedder, Embedder):
@@ -246,6 +278,11 @@ class Howdex:
 
         # session bookkeeping
         self._current_session: Episode | None = None
+        # Integrity warnings for the current session (Observer Effect mitigation).
+        # Reset on each start_session(). Surfaced via integrity_warnings().
+        self._session_integrity_warnings: list[dict[str, Any]] = []
+        # require_receipt_for_success is already set above from the constructor
+        # parameter; no need to re-initialize here.
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -610,6 +647,8 @@ class Howdex:
         """
         if self._current_session and not self._current_session.finished_at:
             self.end_session(outcome="partial")
+        # Reset integrity warnings for the new session.
+        self._session_integrity_warnings = []
         import uuid
         self._current_session = Episode(
             session_id=str(uuid.uuid4()),
@@ -619,6 +658,72 @@ class Howdex:
             provenance=dict(provenance or {}),
         )
         return self._current_session
+
+    # ------------------------------------------------------------------ #
+    # session integrity (Observer Effect mitigation)
+    # ------------------------------------------------------------------ #
+    def _record_integrity_warning(
+        self,
+        code: str,
+        message: str,
+    ) -> None:
+        """Record a non-fatal integrity warning for the current session."""
+        self._session_integrity_warnings.append(
+            {"code": code, "message": message}
+        )
+
+    def _session_has_verified_receipt(self, session_id: str) -> bool:
+        """Return True if any procedure linked to this session has a verified receipt.
+
+        Used by the session-integrity check to distinguish a genuine success
+        (the agent ran a verifier and attached a receipt) from a hallucinated
+        one (the agent claimed success with no proof).
+        """
+        try:
+            # Look up procedures whose source episodes include this session.
+            # We check all procedures and look for one whose receipts include
+            # a verified receipt whose source_episode_id matches.
+            for proc_payload in self.store.all_procedures():
+                proc = _normalise_procedure_payload(proc_payload)
+                if proc is None:
+                    continue
+                source_episodes = (
+                    proc.get("source_episode_ids") or []
+                )
+                if session_id not in source_episodes:
+                    continue
+                receipts = proc.get("receipts") or []
+                for receipt in receipts:
+                    if isinstance(receipt, dict):
+                        status = str(receipt.get("status", "")).lower()
+                        if status == "verified":
+                            return True
+            return False
+        except Exception:
+            # If we can't determine receipt status, err on the side of
+            # not flagging (don't spam warnings on storage errors).
+            return True
+
+    def integrity_warnings(self) -> list[dict[str, Any]]:
+        """Return integrity warnings recorded for the current/last session.
+
+        Warnings are preserved across ``end_session`` so callers can inspect
+        them after the session closes. Each warning is a dict with
+        ``code`` and ``message`` keys. Codes include:
+
+        - ``malformed_arguments`` — ``log_tool_call`` got non-dict arguments
+        - ``empty_tool_name`` — ``log_tool_call`` got empty/non-string name
+        - ``step_observed_failure`` — a step's observation contained a
+          failure marker (``error``, ``failed``, ``traceback``, ...)
+        - ``unverified_success`` — ``end_session("success")`` was called
+          but no verification receipt was attached and at least one step
+          observed a failure. This is the canonical "hallucinated success"
+          signal — the agent claimed success but Howdex has no proof.
+        - ``missing_receipt_strict`` — ``end_session("success", require_receipt=True)``
+          was called without a receipt; the session was downgraded to
+          "unverified" instead of "success".
+        """
+        return list(self._session_integrity_warnings)
 
     def log_step(
         self,
@@ -736,8 +841,44 @@ class Howdex:
         sanitize: bool = True,
         **extra: Any,
     ) -> None:
-        """Record a canonical, structured tool step in the current session."""
+        """Record a canonical, structured tool step in the current session.
+
+        Telemetry validation:
+        - Emits a warning (visible via ``integrity_warnings()``) when
+          ``arguments`` is not a dict (or None). Sloppy orchestrators that
+          pass a string or list will not crash Howdex, but the warning
+          surfaces the problem so it can be fixed at the source.
+        - Emits a warning when ``observation`` contains common failure
+          markers (``error``, ``failed``, ``traceback``) — this is not
+          itself a problem, but ``end_session("success")`` later will
+          cross-reference these warnings to catch hallucinated successes.
+        """
+        # Telemetry validation (Observer Effect mitigation)
+        if arguments is not None and not isinstance(arguments, dict):
+            self._record_integrity_warning(
+                "malformed_arguments",
+                f"log_tool_call({name!r}) received arguments of type "
+                f"{type(arguments).__name__}, expected dict or None; "
+                f"coercing to empty dict",
+            )
+            arguments = {}
+        if not isinstance(name, str) or not name.strip():
+            self._record_integrity_warning(
+                "empty_tool_name",
+                f"log_tool_call received empty/non-string name: {name!r}",
+            )
+            name = "unknown_action"
         canonical = canonicalize_tool_call(name, arguments, metadata)
+        # Track failure-marker observations for session-integrity check
+        obs_lower = str(observation or "").lower()
+        if any(marker in obs_lower for marker in _FAILURE_MARKERS) and not any(
+            marker in obs_lower for marker in _SUCCESS_MARKERS
+        ):
+            self._record_integrity_warning(
+                "step_observed_failure",
+                f"tool_call({name!r}) observation contains failure marker; "
+                f"end_session('success') will be flagged if no receipt is attached",
+            )
         safe_metadata = redact_secrets(metadata or {})[0]
         fields = dict(extra)
         fields.update(
@@ -828,11 +969,58 @@ class Howdex:
         max_segment_steps: int = DEFAULT_MAX_SEGMENT_STEPS,
         idle_gap_s: float = DEFAULT_IDLE_GAP_S,
         sanitize: bool = True,
+        require_receipt: bool | None = None,
     ) -> Episode:
-        """Close the current session and persist it as an episodic memory."""
+        """Close the current session and persist it as an episodic memory.
+
+        Session integrity check (Observer Effect mitigation):
+        - If ``outcome == "success"`` and at least one step's observation
+          contained a failure marker (``error``, ``failed``, ``traceback``,
+          ...) and no verification receipt has been attached to a procedure
+          learned from this session, an ``unverified_success`` integrity
+          warning is recorded. This surfaces "hallucinated success" — the
+          agent claimed success but Howdex has no proof.
+        - If ``require_receipt`` is True (or ``self.require_receipt_for_success``
+          is True) and the above condition holds, the session outcome is
+          downgraded from ``"success"`` to ``"unverified"`` and a
+          ``missing_receipt_strict`` warning is recorded. The session is
+          still persisted; the downgrade prevents ``learn()`` from
+          consolidating an unverified trace into a procedure.
+        """
         if not self._current_session:
             raise HowdexError("no active session")
         ep = self._current_session
+
+        # Session integrity check (Verifier Requirement mitigation)
+        if outcome == "success":
+            strict = (
+                require_receipt
+                if require_receipt is not None
+                else self.require_receipt_for_success
+            )
+            saw_failure = any(
+                w["code"] == "step_observed_failure"
+                for w in self._session_integrity_warnings
+            )
+            if saw_failure:
+                # Check whether any procedure learned from this session
+                # has a verified receipt attached.
+                has_receipt = self._session_has_verified_receipt(ep.session_id)
+                if not has_receipt:
+                    self._record_integrity_warning(
+                        "unverified_success",
+                        f"end_session('success') called but session {ep.session_id[:8]} "
+                        f"had failure-marker observations and no verified receipt; "
+                        f"the agent may have hallucinated success",
+                    )
+                    if strict:
+                        self._record_integrity_warning(
+                            "missing_receipt_strict",
+                            "require_receipt=True: downgrading outcome from "
+                            "'success' to 'unverified'",
+                        )
+                        outcome = "unverified"
+
         working_memories = self.store.query(
             layer=MemoryLayer.WORKING,
             session_id=ep.session_id,
@@ -1008,13 +1196,39 @@ class Howdex:
         include_failed_attempts: bool = True,
         include_verification: bool = True,
         max_chars: int = 6_000,
+        max_procedures: int | None = None,
+        min_relevance_score: float = 0.0,
+        verified_only: bool = False,
     ) -> str:
-        """Retrieve relevant procedures and render agent-ready guidance."""
+        """Retrieve relevant procedures and render agent-ready guidance.
+
+        Context window management:
+        - ``max_chars`` is a hard cap — the rendered guidance will never
+          exceed this many characters (truncated with a marker if needed).
+        - ``max_procedures`` (default: ``top_k``) limits the number of
+          procedures injected. When the budget is tight, fewer procedures
+          are included rather than truncating mid-procedure.
+        - ``min_relevance_score`` filters out low-relevance procedures
+          before selection. Default 0.0 (include all retrieved); raise to
+          0.05–0.2 for stricter filtering on large Codex sets.
+        - ``verified_only`` skips candidate (unverified) procedures —
+          useful for production agents that should only act on proven
+          procedures.
+
+        Adaptive filtering: when ``max_chars`` is small (≤ 2000), Howdex
+        automatically prefers verified procedures and raises the effective
+        ``min_relevance_score`` to 0.15 to avoid wasting the budget on
+        weak matches. This prevents context collapse on smaller models
+        (e.g. gpt-4o-mini).
+
+        See :meth:`guidance_budget_report` for an inspectable breakdown of
+        how the budget was allocated.
+        """
         with telemetry.span(
             "howdex.guidance.retrieve",
             {
                 "howdex.include_source": include_source,
-                "howdex.verified_only": False,
+                "howdex.verified_only": verified_only,
             },
         ) as retrieve_span:
             suggestions = self.suggest_procedure(
@@ -1027,6 +1241,23 @@ class Howdex:
                 "howdex.selected_count",
                 len(suggestions),
             )
+        # Build a retrieval budget for adaptive filtering.
+        from howdex.core.guidance_budget import GuidanceBudget
+        # When max_chars is small, automatically tighten the budget to
+        # avoid wasting the small context window on weak matches.
+        if max_chars <= 2000:
+            effective_min_relevance = max(min_relevance_score, 0.15)
+            effective_verified_only = True
+        else:
+            effective_min_relevance = min_relevance_score
+            effective_verified_only = verified_only
+        budget = GuidanceBudget(
+            max_procedures=max_procedures if max_procedures is not None else top_k,
+            max_guidance_chars=max_chars,
+            min_relevance_score=effective_min_relevance,
+            include_verified_only=effective_verified_only,
+            current_environment=current_environment,
+        )
         return render_agent_guidance(
             suggestions,
             objective=objective,
@@ -1037,7 +1268,126 @@ class Howdex:
             include_failed_attempts=include_failed_attempts,
             include_verification=include_verification,
             max_chars=max_chars,
+            retrieval_budget=budget,
         )
+
+    def guidance_budget_report(
+        self,
+        objective: str,
+        *,
+        max_chars: int = 6_000,
+        max_procedures: int | None = None,
+        min_relevance_score: float = 0.05,
+        verified_only: bool = False,
+    ) -> dict[str, Any]:
+        """Return an inspectable breakdown of how the guidance budget is allocated.
+
+        Use this to monitor context-window pressure before injecting
+        guidance into a smaller model. Returns a dict with:
+
+        - ``total_candidates`` — how many procedures matched the query
+        - ``selected_count`` — how many were selected after budgeting
+        - ``omitted_count`` — how many were dropped
+        - ``estimated_chars`` — estimated rendered size
+        - ``max_chars`` — the budget cap
+        - ``context_pressure`` — ``"low"`` / ``"medium"`` / ``"high"``
+        - ``omitted`` — list of dicts with procedure_id, reason, relevance_score
+        """
+        from howdex.core.guidance_budget import (
+            GuidanceBudget,
+            select_guidance_procedures,
+        )
+        suggestions = self.suggest_procedure(objective, top_k=20)
+        budget = GuidanceBudget(
+            max_procedures=max_procedures if max_procedures is not None else 3,
+            max_guidance_chars=max_chars,
+            min_relevance_score=min_relevance_score,
+            include_verified_only=verified_only,
+        )
+        selection = select_guidance_procedures(objective, suggestions, budget)
+        estimated = sum(getattr(d, "estimated_chars", 0) for d in selection.selected)
+        pressure = "low"
+        if estimated > max_chars * 0.7:
+            pressure = "medium"
+        if estimated > max_chars * 0.9:
+            pressure = "high"
+        return {
+            "total_candidates": len(suggestions),
+            "selected_count": len(selection.selected),
+            "omitted_count": selection.omitted_count,
+            "estimated_chars": estimated,
+            "max_chars": max_chars,
+            "context_pressure": pressure,
+            "omitted": [
+                {
+                    "procedure_id": d.procedure_id,
+                    "title": d.title,
+                    "reason": d.reason,
+                    "relevance_score": d.relevance_score,
+                    "status": d.status,
+                    "staleness_status": d.staleness_status,
+                }
+                for d in (selection.excluded or [])
+            ],
+        }
+
+    def detect_canonicalization_drift(
+        self,
+        *,
+        min_confidence: float = 0.5,
+    ) -> list[dict[str, Any]]:
+        """Detect procedures whose steps have low canonical confidence.
+
+        This surfaces the brittleness risk described in the architectural
+        review: when an agent changes how it formats JSON arguments between
+        runs, the canonicalizer may fail to recognize semantic equivalence,
+        producing steps with low ``canonical_confidence``. Such procedures
+        are candidates for an LLM-assisted abstraction proposal
+        (``propose_abstraction()``) to bridge the format gap.
+
+        Returns a list of dicts, one per at-risk procedure, each with:
+        - ``procedure_id`` — the procedure's id
+        - ``task_signature`` — what the procedure does
+        - ``at_risk_steps`` — count of steps with confidence < min_confidence
+        - ``total_steps`` — total steps in the procedure
+        - ``min_confidence`` — the lowest confidence across all steps
+        - ``suggestion`` — a human-readable recommendation
+
+        Call ``propose_abstraction([procedure, ...])`` on the returned
+        procedures to generate an auditable equivalence proposal.
+        """
+        at_risk: list[dict[str, Any]] = []
+        for proc_payload in self.store.all_procedures():
+            proc = _normalise_procedure_payload(proc_payload)
+            if proc is None:
+                continue
+            steps = proc.get("steps") or []
+            if not steps:
+                continue
+            at_risk_count = 0
+            min_conf = 1.0
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                conf = float(step.get("canonical_confidence", 1.0) or 1.0)
+                min_conf = min(min_conf, conf)
+                if conf < min_confidence:
+                    at_risk_count += 1
+            if at_risk_count > 0:
+                at_risk.append({
+                    "procedure_id": str(proc.get("id", "")),
+                    "task_signature": str(proc.get("task_signature", "")),
+                    "at_risk_steps": at_risk_count,
+                    "total_steps": len(steps),
+                    "min_confidence": round(min_conf, 3),
+                    "suggestion": (
+                        f"{at_risk_count}/{len(steps)} steps have canonical "
+                        f"confidence < {min_confidence}. Consider calling "
+                        f"propose_abstraction() to bridge format divergence."
+                    ),
+                })
+        at_risk.sort(key=lambda d: d["min_confidence"])
+        return at_risk
 
     def mark_procedure_suggested(
         self,

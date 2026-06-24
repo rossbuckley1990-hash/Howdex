@@ -509,6 +509,38 @@ def cmd_vacuum(args: argparse.Namespace) -> int:
         mem.close()
 
 
+def cmd_drift(args: argparse.Namespace) -> int:
+    """Detect procedures with low canonical confidence (brittleness check)."""
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        at_risk = mem.detect_canonicalization_drift(
+            min_confidence=args.min_confidence,
+        )
+        if not at_risk:
+            print(f"✓ no procedures with canonical confidence < {args.min_confidence}")
+            return 0
+        print(f"⚠ {len(at_risk)} procedure(s) with low canonical confidence:")
+        for entry in at_risk:
+            print(f"  {entry['task_signature']} (id={entry['procedure_id'][:8]})")
+            print(f"    at_risk_steps: {entry['at_risk_steps']}/{entry['total_steps']}")
+            print(f"    min_confidence: {entry['min_confidence']}")
+            print(f"    suggestion: {entry['suggestion']}")
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_system_prompt(args: argparse.Namespace) -> int:
+    """Print a system-prompt snippet that tells an LLM to honor Howdex guidance."""
+    from howdex.core.agent_guidance import render_system_prompt_snippet
+    snippet = render_system_prompt_snippet(
+        strict=args.strict,
+        max_guidance_chars=args.max_chars,
+    )
+    print(snippet)
+    return 0
+
+
 def cmd_mcp(args: argparse.Namespace) -> int:
     """Start the MCP server over stdio."""
     from howdex.mcp.server import run_stdio
@@ -546,6 +578,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--embedder", default=None,
                    help="embedding backend: st | openai | hashing (default: auto)")
     p.add_argument("--agent-id", default=None)
+    p.add_argument(
+        "--require-receipt",
+        action="store_true",
+        help="Strict mode: end_session('success') without a verified receipt "
+             "is downgraded to 'unverified'. Prevents hallucinated successes "
+             "from being consolidated into procedures.",
+    )
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -817,6 +856,36 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_forget)
 
     sub.add_parser("vacuum", help="GC expired memories + tombstones").set_defaults(func=cmd_vacuum)
+
+    # Architectural-hardening subcommands
+    sp = sub.add_parser(
+        "drift",
+        help="detect procedures with low canonical confidence (brittleness check)",
+    )
+    sp.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.5,
+        help="flag steps with canonical_confidence below this threshold",
+    )
+    sp.set_defaults(func=cmd_drift)
+
+    sp = sub.add_parser(
+        "system-prompt",
+        help="print a system-prompt snippet that tells an LLM to honor Howdex guidance",
+    )
+    sp.add_argument(
+        "--strict",
+        action="store_true",
+        help="emit the strict variant (forbids claiming success without a verifier)",
+    )
+    sp.add_argument(
+        "--max-chars",
+        type=int,
+        default=6000,
+        help="the guidance char budget to advertise to the LLM",
+    )
+    sp.set_defaults(func=cmd_system_prompt)
 
     sp = sub.add_parser("export", help="export all memories to JSON")
     sp.add_argument("output")

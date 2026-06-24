@@ -201,6 +201,119 @@ See [docs/MCP.md](docs/MCP.md) and [`examples/pilot/`](examples/pilot/) for
 full config examples and adapter code for LangChain, LangGraph, and generic
 agent loops.
 
+## Production hardening (architectural review fixes)
+
+Howdex ships with five hardening features that address the friction points
+a senior engineer will scrutinize when evaluating Howdex for core
+infrastructure. All are opt-in; defaults preserve existing behavior.
+
+### 1. Telemetry validation (Observer Effect mitigation)
+
+`log_tool_call()` now validates its inputs and records integrity warnings
+(visible via `memory.integrity_warnings()`) when:
+
+- `arguments` is not a dict (sloppy orchestrators that pass a string or
+  list will not crash Howdex, but the warning surfaces the problem).
+- `name` is empty or non-string.
+- `observation` contains a failure marker (`error`, `failed`,
+  `traceback`, `no module named`, ...) — this is not itself a problem,
+  but `end_session` cross-references these warnings to catch
+  hallucinated successes (see #4 below).
+
+```python
+mem.start_session("fix_bug")
+mem.log_tool_call("execute_command", "ls -la", "ok")  # malformed args
+warnings = mem.integrity_warnings()
+# [{"code": "malformed_arguments", "message": "log_tool_call('execute_command')..."}]
+```
+
+### 2. Context window management
+
+`guidance()` now supports `max_procedures`, `min_relevance_score`, and
+`verified_only` parameters for precise budget control. When `max_chars`
+is small (≤ 2000), Howdex automatically tightens filtering to avoid
+context collapse on smaller models (e.g. gpt-4o-mini):
+
+```python
+# Tight budget for a small model
+guidance = mem.guidance(
+    "Fix the bug",
+    max_chars=1500,
+    max_procedures=2,
+    min_relevance_score=0.15,
+    verified_only=True,
+)
+
+# Inspect the budget allocation before injecting
+report = mem.guidance_budget_report("Fix the bug", max_chars=1500)
+print(report["context_pressure"])  # "low" | "medium" | "high"
+print(report["omitted"])  # which procedures were dropped and why
+```
+
+### 3. Canonicalization drift detection
+
+When an agent changes how it formats JSON arguments between runs, the
+canonicalizer may produce steps with low `canonical_confidence`. Use
+`detect_canonicalization_drift()` to surface at-risk procedures, then
+call `propose_abstraction()` to bridge the format gap with an auditable
+LLM-assisted proposal:
+
+```python
+at_risk = mem.detect_canonicalization_drift(min_confidence=0.5)
+for entry in at_risk:
+    print(f"{entry['task_signature']}: {entry['at_risk_steps']}/{entry['total_steps']} steps at risk")
+    print(f"  {entry['suggestion']}")
+# Then: proposal = propose_abstraction([proc1, proc2], llm_provider=...)
+```
+
+CLI: `howdex drift --min-confidence 0.5`
+
+### 4. Verifier requirement (strict mode)
+
+Howdex is only as good as the verifier you provide. If your agent
+hallucinates a fix and calls `end_session("success")` without an
+objective check, Howdex would normally memorize the hallucination.
+Strict mode prevents this:
+
+```python
+# Per-session strict mode
+mem.start_session("fix_bug")
+mem.log_tool_call("execute_command", {"cmd": "make build"}, "Error: build failed")
+ep = mem.end_session("success", require_receipt=True)
+# ep.outcome == "unverified" (downgraded from "success")
+# learn() will NOT consolidate this into a procedure
+
+# Global strict mode via constructor
+mem = Howdex(path="...", embedder="hashing", require_receipt_for_success=True)
+```
+
+Even without strict mode, an `unverified_success` integrity warning is
+recorded whenever `end_session("success")` is called after a
+failure-marker observation and no verified receipt is attached.
+
+CLI: `howdex --require-receipt learn` (applies to all operations in this
+CLI invocation).
+
+### 5. System prompt snippet (prompt engineering)
+
+Howdex provides the Markdown guidance, but your LLM will ignore it
+unless the system prompt instructs it to pay attention. Use
+`render_system_prompt_snippet()` to generate a ready-to-paste snippet:
+
+```python
+from howdex import render_system_prompt_snippet
+
+system_prompt = base_prompt + "\n\n" + render_system_prompt_snippet(strict=True)
+# Then inject Howdex guidance into the user message
+```
+
+CLI: `howdex system-prompt --strict` (prints the snippet to stdout).
+
+The snippet tells the LLM to: look for the `# HOWDEX OPERATIONAL MEMORY`
+section, treat it as prior operational memory (not source code), avoid
+repeating failed attempts, prefer verified procedures, and run a real
+verifier before claiming success.
+
 ## Codex and receipt quickstart
 
 The Howdex Codex is a machine-readable catalogue of operational memory. It is

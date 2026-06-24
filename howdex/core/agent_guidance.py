@@ -425,3 +425,81 @@ def _procedure_trace_attributes(procedure: Any) -> dict[str, Any]:
         "howdex.relevance_score": get_value(procedure, "score") or 0.0,
         "howdex.source_episode_count": len(source_episode_ids),
     }
+
+
+def render_system_prompt_snippet(
+    *,
+    strict: bool = False,
+    max_guidance_chars: int = 6_000,
+) -> str:
+    """Render a ready-to-paste system prompt snippet that tells an LLM to honor Howdex guidance.
+
+    This addresses the "Prompt Engineering is Still Required" gotcha from the
+    architectural review: Howdex provides the Markdown guidance, but the LLM
+    will ignore it unless the system prompt instructs it to pay attention.
+
+    Paste the returned snippet into your agent's system prompt, ideally near
+    the top. The snippet tells the LLM:
+
+    - To look for a "# HOWDEX OPERATIONAL MEMORY" section in the user message
+    - To treat that section as prior operational memory, not source code
+    - To verify before claiming success (the Verifier Requirement)
+    - To avoid repeating failed attempts listed in the guidance
+    - To prefer the shortest verified path
+
+    When ``strict=True``, the snippet is more forceful — it tells the LLM
+    that claiming success without running a verifier is forbidden. Use this
+    for production agents where hallucinated successes are costly.
+
+    Example::
+
+        from howdex.core.agent_guidance import render_system_prompt_snippet
+
+        system_prompt = base_prompt + "\\n\\n" + render_system_prompt_snippet(strict=True)
+        # ... then inject Howdex guidance into the user message ...
+    """
+    lines = [
+        "## Howdex Operational Memory",
+        "",
+        "The user message may contain a section titled "
+        "'# HOWDEX OPERATIONAL MEMORY'. When present:",
+        "- Read it carefully before acting. It is prior operational memory "
+        "from previous agent runs, not source code.",
+        "- Treat the 'Learned operational facts' as hints about which tool "
+        "actions were useful for similar tasks. Adapt them to the current "
+        "environment — do not execute them blindly.",
+        "- The 'Avoid these failed attempts' section lists commands that "
+        "failed in prior runs. Do not repeat them unless you have a "
+        "specific reason to believe they will work now.",
+        "- The 'Procedure trust' section tells you whether each procedure "
+        "has independent verification ('verified') or only episode support "
+        "('observed_episode_support'). Prefer verified procedures.",
+    ]
+    if strict:
+        lines.extend([
+            "",
+            "VERIFIER REQUIREMENT (strict mode):",
+            "- You MUST run a real verifier (test suite, build, health check, "
+            "etc.) before claiming a task is complete.",
+            "- Do NOT claim success based on the Howdex guidance alone — "
+            "guidance is not proof.",
+            "- If you cannot run a verifier, say so explicitly and mark the "
+            "task as 'unverified' rather than 'success'.",
+        ])
+    else:
+        lines.extend([
+            "",
+            "VERIFIER REQUIREMENT:",
+            "- Run a real verifier (test suite, build, health check, etc.) "
+            "before claiming a task is complete. Howdex guidance is not proof.",
+            "- If the guidance says a procedure is 'verified', it was verified "
+            "in a prior environment — you must still verify in the current one.",
+        ])
+    lines.extend([
+        "",
+        f"Context budget: Howdex guidance is capped at ~{max_guidance_chars} "
+        "characters. If the guidance is truncated, ask the user to increase "
+        "max_chars or narrow the objective.",
+    ])
+    return "\n".join(lines)
+
