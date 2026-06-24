@@ -24,6 +24,9 @@ dist/
 *.sqlite
 *.sqlite3
 .howdex/
+.howdex/dogfood/runs/
+.howdex/dogfood/runs/**/*.log
+*.dogfood.log
 benchmark_results/
 benchmark-results/
 
