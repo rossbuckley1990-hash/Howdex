@@ -278,40 +278,58 @@ class MCPServer:
         name = params.get("name")
         args = params.get("arguments", {}) or {}
 
-        if self.readonly and name in MUTATING_TOOLS:
-            return _ok(
-                req_id,
-                _tool_error(
-                    {
-                        "error": "readonly",
-                        "message": f"{name} is disabled because the MCP server is read-only.",
-                    }
-                ),
-            )
+        with telemetry.span(
+            "howdex.mcp.tool_call",
+            {
+                "howdex.adapter": "mcp",
+                "howdex.mcp_tool_name": str(name or ""),
+            },
+        ) as tool_span:
+            if self.readonly and name in MUTATING_TOOLS:
+                telemetry.set_attribute(
+                    tool_span,
+                    "howdex.policy_status",
+                    "readonly_rejected",
+                )
+                return _ok(
+                    req_id,
+                    _tool_error(
+                        {
+                            "error": "readonly",
+                            "message": f"{name} is disabled because the MCP server is read-only.",
+                        }
+                    ),
+                )
 
-        with self._lock:
-            if name == "howdex_remember_trace":
-                return _ok(req_id, _tool_json(self._remember_trace(args)))
-            if name == "howdex_learn":
-                return _ok(req_id, _tool_json(self._learn(args)))
-            if name == "howdex_guidance":
-                return _ok(req_id, _tool_json(self._guidance(args)))
-            if name == "howdex_codex_search":
-                return _ok(req_id, _tool_json(self._codex_search(args)))
-            if name == "howdex_codex_publish":
-                return _ok(req_id, _tool_json(self._codex_publish(args)))
-            if name == "howdex_attach_receipt":
-                return _ok(req_id, _tool_json(self._attach_receipt(args)))
-            if name == "howdex_remember":
-                return _ok(req_id, _tool_json(self._remember(args)))
-            if name == "howdex_search":
-                return _ok(req_id, _tool_json(self._search(args)))
-            if name == "howdex_forget":
-                self.howdex.forget(str(args["memory_id"]))
-                return _ok(req_id, _tool_json({"forgot": str(args["memory_id"])}))
-            if name == "howdex_stats":
-                return _ok(req_id, _tool_json(self.howdex.stats()))
-            return _err(req_id, -32601, f"unknown tool: {name}")
+            with self._lock:
+                telemetry.set_attribute(tool_span, "howdex.policy_status", "allowed")
+                if name == "howdex_remember_trace":
+                    return _ok(req_id, _tool_json(self._remember_trace(args)))
+                if name == "howdex_learn":
+                    return _ok(req_id, _tool_json(self._learn(args)))
+                if name == "howdex_guidance":
+                    return _ok(req_id, _tool_json(self._guidance(args)))
+                if name == "howdex_codex_search":
+                    return _ok(req_id, _tool_json(self._codex_search(args)))
+                if name == "howdex_codex_publish":
+                    return _ok(req_id, _tool_json(self._codex_publish(args)))
+                if name == "howdex_attach_receipt":
+                    return _ok(req_id, _tool_json(self._attach_receipt(args)))
+                if name == "howdex_remember":
+                    return _ok(req_id, _tool_json(self._remember(args)))
+                if name == "howdex_search":
+                    return _ok(req_id, _tool_json(self._search(args)))
+                if name == "howdex_forget":
+                    self.howdex.forget(str(args["memory_id"]))
+                    return _ok(req_id, _tool_json({"forgot": str(args["memory_id"])}))
+                if name == "howdex_stats":
+                    return _ok(req_id, _tool_json(self.howdex.stats()))
+                telemetry.set_attribute(
+                    tool_span,
+                    "howdex.policy_status",
+                    "unknown_tool",
+                )
+                return _err(req_id, -32601, f"unknown tool: {name}")
 
     def _remember_trace(self, args: dict[str, Any]) -> dict[str, Any]:
         task = str(args["task"]).strip()

@@ -102,6 +102,13 @@ def test_noop_tracer_does_not_fail(monkeypatch: pytest.MonkeyPatch):
         telemetry.emit_event("howdex.test.event", {"howdex.selected_count": 0})
 
 
+def test_emit_event_without_opentelemetry_does_not_fail(monkeypatch: pytest.MonkeyPatch):
+    import howdex.telemetry as telemetry
+
+    monkeypatch.setattr(telemetry, "_TRACER_OVERRIDE", None)
+    telemetry.emit_event("howdex.test.event", {"howdex.omitted_count": 0})
+
+
 def test_span_redacts_source_like_attributes(fake_tracer: FakeTracer):
     import howdex.telemetry as telemetry
 
@@ -217,6 +224,10 @@ def test_mcp_guidance_includes_adapter_attributes(
     assert result["structuredContent"]["guidance"].startswith(
         "# HOWDEX OPERATIONAL MEMORY"
     )
+    tool_span = _first_span(fake_tracer, "howdex.mcp.tool_call")
+    assert tool_span.attributes["howdex.adapter"] == "mcp"
+    assert tool_span.attributes["howdex.mcp_tool_name"] == "howdex_guidance"
+    assert tool_span.attributes["howdex.policy_status"] == "allowed"
     retrieve_spans = [
         span
         for span in fake_tracer.spans
