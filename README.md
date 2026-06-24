@@ -186,7 +186,7 @@ See [docs/STANDARD.md](docs/STANDARD.md),
 ## Evidence summary
 
 The committed Docker A/B n20 log at
-`benchmark_results/docker_hard_ab_n20_20260623_172737.txt` records one verified
+`evidence/docker_n20/docker_hard_ab_n20_20260623_172737.txt` records one verified
 Docker recovery procedure transferring to fresh agents under identical A/B
 framing.
 
@@ -272,6 +272,7 @@ See [docs/DOGFOODING.md](docs/DOGFOODING.md).
 - [Trust calibration](docs/TRUST_CALIBRATION.md)
 - [Dogfooding](docs/DOGFOODING.md)
 - [Pilot guide](docs/PILOT.md)
+- [Repository structure](docs/REPO_STRUCTURE.md)
 
 ## License
 

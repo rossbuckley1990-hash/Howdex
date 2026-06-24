@@ -247,6 +247,8 @@ def test_trace_derived_guidance_is_deterministic():
 def test_no_synthesis_benchmark_keeps_strict_native_path():
     source_path = (
         Path(__file__).resolve().parents[1]
+        / "benchmarks"
+        / "polyglot"
         / "polyglot_macgyver_nosynth_test.py"
     )
     source = source_path.read_text(encoding="utf-8")

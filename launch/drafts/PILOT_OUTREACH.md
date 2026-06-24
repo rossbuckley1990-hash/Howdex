@@ -15,7 +15,7 @@ exists.
 - Edit the draft to match the community's tone and rules.
 - Avoid duplicate posting, brigading, or cross-post spam.
 - Post from a real maintainer account.
-- Record the posted link in `launch/PILOT_TRACKING.md`.
+- Record the posted link in `launch/tracking/PILOT_TRACKING.md`.
 - Track any real external issue, PR, procedure submission, or verified receipt
   only after it exists.
 
@@ -77,7 +77,7 @@ acceptable venues without checking.
 
 ## How to record links after posting
 
-After Ross manually posts somewhere, update `launch/PILOT_TRACKING.md` with:
+After Ross manually posts somewhere, update `launch/tracking/PILOT_TRACKING.md` with:
 
 - date;
 - channel;

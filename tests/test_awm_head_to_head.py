@@ -126,9 +126,9 @@ def test_readme_explains_harness_not_victory_claim():
 
 
 def test_result_doc_records_required_caveat_and_repro_command():
-    result_doc = (ROOT / "docs" / "AWM_HEAD_TO_HEAD_RESULTS.md").read_text(
-        encoding="utf-8"
-    )
+    result_doc = (
+        ROOT / "evidence" / "awm_head_to_head" / "AWM_HEAD_TO_HEAD_RESULTS.md"
+    ).read_text(encoding="utf-8")
 
     assert (
         'PATH="$PWD/.venv/bin:$PATH" python -m benchmarks.awm_head_to_head.runner '

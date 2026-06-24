@@ -8,7 +8,7 @@ source or changing the base task framing.
 ## Headline Docker recovery A/B n20
 
 Source of truth: committed log
-`benchmark_results/docker_hard_ab_n20_20260623_172737.txt`.
+`evidence/docker_n20/docker_hard_ab_n20_20260623_172737.txt`.
 
 Reproduction command:
 
@@ -166,7 +166,7 @@ Not proof that no-synthesis abstraction is solved.
 Result doc:
 
 ```text
-docs/AWM_HEAD_TO_HEAD_RESULTS.md
+evidence/awm_head_to_head/AWM_HEAD_TO_HEAD_RESULTS.md
 ```
 
 The current AWM-style result is a dry-run harness output. It compares vanilla,
@@ -184,7 +184,7 @@ This is a local AWM-style approximation unless explicitly stated otherwise. It i
 Result doc:
 
 ```text
-docs/TRUST_CALIBRATION_RESULTS.md
+evidence/trust_calibration/TRUST_CALIBRATION_RESULTS.md
 ```
 
 The current dogfood trust-calibration result is internal evidence only and

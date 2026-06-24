@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Dogfood Howdex by recording Howdex roadmap work as procedural memory.
+"""Dogfood Howdex by recording Howdex development work as procedural memory.
 
 The CLI is local-only. It stages an active build phase in
 ``.howdex/dogfood/current.json``, captures command logs under
-``.howdex/dogfood/runs/``, writes sanitized evidence to ``dogfood-results/``,
-and replays the trace into Howdex on phase end.
+``.howdex/dogfood/runs/``, writes local sanitized runtime evidence to
+``dogfood-results/``, and replays the trace into Howdex on phase end.
+Committed sanitized evidence belongs under ``evidence/dogfood/results/``.
 """
 
 from __future__ import annotations

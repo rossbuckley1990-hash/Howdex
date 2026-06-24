@@ -10,8 +10,9 @@ import pytest
 
 @pytest.fixture
 def benchmark_module():
-    sys.modules.pop("docker_compounding_curve_test", None)
-    return importlib.import_module("docker_compounding_curve_test")
+    module_name = "benchmarks.docker_recovery.docker_compounding_curve_test"
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)
 
 
 def test_support_levels_parse_correctly(benchmark_module):

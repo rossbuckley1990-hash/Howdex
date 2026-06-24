@@ -5,17 +5,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCH = ROOT / "launch"
+LAUNCH_DRAFTS = LAUNCH / "drafts"
+LAUNCH_TRACKING = LAUNCH / "tracking"
 OUTREACH_DOCS = [
-    LAUNCH / "PILOT_OUTREACH.md",
-    LAUNCH / "SHOW_HN_DRAFT.md",
-    LAUNCH / "REDDIT_DRAFT.md",
-    LAUNCH / "AWESOME_LIST_SUBMISSION.md",
-    LAUNCH / "PILOT_TRACKING.md",
+    LAUNCH_DRAFTS / "PILOT_OUTREACH.md",
+    LAUNCH_DRAFTS / "SHOW_HN_DRAFT.md",
+    LAUNCH_DRAFTS / "REDDIT_DRAFT.md",
+    LAUNCH_DRAFTS / "AWESOME_LIST_SUBMISSION.md",
+    LAUNCH_TRACKING / "PILOT_TRACKING.md",
 ]
 DRAFTS = [
-    LAUNCH / "SHOW_HN_DRAFT.md",
-    LAUNCH / "REDDIT_DRAFT.md",
-    LAUNCH / "AWESOME_LIST_SUBMISSION.md",
+    LAUNCH_DRAFTS / "SHOW_HN_DRAFT.md",
+    LAUNCH_DRAFTS / "REDDIT_DRAFT.md",
+    LAUNCH_DRAFTS / "AWESOME_LIST_SUBMISSION.md",
 ]
 
 
@@ -82,7 +84,7 @@ def test_drafts_do_not_claim_live_cross_model_proof_unless_result_exists():
 
 
 def test_tracking_file_starts_with_zero_external_users():
-    tracking = _text(LAUNCH / "PILOT_TRACKING.md")
+    tracking = _text(LAUNCH_TRACKING / "PILOT_TRACKING.md")
 
     assert "external_pilot_users_confirmed: 0" in tracking
     assert "external_procedure_submissions: 0" in tracking
@@ -91,7 +93,7 @@ def test_tracking_file_starts_with_zero_external_users():
 
 
 def test_outreach_pack_contains_posting_rules_and_forbidden_claims():
-    outreach = _lower(LAUNCH / "PILOT_OUTREACH.md")
+    outreach = _lower(LAUNCH_DRAFTS / "PILOT_OUTREACH.md")
 
     assert "read and follow each community's rules" in outreach
     assert "do not spam" in outreach
@@ -101,8 +103,8 @@ def test_outreach_pack_contains_posting_rules_and_forbidden_claims():
 
 
 def test_drafts_ask_for_pilots_without_claiming_pilots_exist():
-    show_hn = _lower(LAUNCH / "SHOW_HN_DRAFT.md")
-    reddit = _lower(LAUNCH / "REDDIT_DRAFT.md")
+    show_hn = _lower(LAUNCH_DRAFTS / "SHOW_HN_DRAFT.md")
+    reddit = _lower(LAUNCH_DRAFTS / "REDDIT_DRAFT.md")
 
     assert "looking for pilot users" in show_hn
     assert "looking for technical feedback" in reddit

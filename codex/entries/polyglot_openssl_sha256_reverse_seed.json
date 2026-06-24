@@ -37,8 +37,8 @@
       "The no-synthesis benchmark tests native learned procedure guidance without benchmark-side fact synthesis."
     ],
     "learned_from": [
-      "polyglot_macgyver_test.py",
-      "polyglot_macgyver_nosynth_test.py"
+      "benchmarks/polyglot/polyglot_macgyver_test.py",
+      "benchmarks/polyglot/polyglot_macgyver_nosynth_test.py"
     ],
     "limitations": [
       "The procedure assumes the benchmark's AES-256-CBC, PBKDF2, and password-derivation contract.",
@@ -50,7 +50,7 @@
   "source": {
     "kind": "benchmark-derived",
     "name": "Polyglot OpenSSL recovery benchmarks",
-    "reference": "polyglot_macgyver_nosynth_test.py"
+    "reference": "benchmarks/polyglot/polyglot_macgyver_nosynth_test.py"
   },
   "status": "experimental",
   "tags": [

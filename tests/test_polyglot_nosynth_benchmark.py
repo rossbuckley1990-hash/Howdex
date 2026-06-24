@@ -14,8 +14,9 @@ import pytest
 @pytest.fixture
 def benchmark_module(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    sys.modules.pop("polyglot_macgyver_nosynth_test", None)
-    return importlib.import_module("polyglot_macgyver_nosynth_test")
+    module_name = "benchmarks.polyglot.polyglot_macgyver_nosynth_test"
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)
 
 
 def test_native_guidance_receives_retrieved_procedures_only(
@@ -92,6 +93,8 @@ def test_real_native_guidance_excludes_source(benchmark_module):
 def test_new_benchmark_contains_no_fact_synthesis_or_source_extraction():
     source_path = (
         Path(__file__).resolve().parents[1]
+        / "benchmarks"
+        / "polyglot"
         / "polyglot_macgyver_nosynth_test.py"
     )
     source = source_path.read_text(encoding="utf-8")
@@ -157,6 +160,8 @@ def test_source_paste_detection_is_strict(
 def test_verdict_thresholds_are_honest():
     source_path = (
         Path(__file__).resolve().parents[1]
+        / "benchmarks"
+        / "polyglot"
         / "polyglot_macgyver_nosynth_test.py"
     )
     source = source_path.read_text(encoding="utf-8")

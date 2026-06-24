@@ -10,8 +10,9 @@ import pytest
 
 @pytest.fixture
 def benchmark_module():
-    sys.modules.pop("real_docker_recovery_ab_test", None)
-    return importlib.import_module("real_docker_recovery_ab_test")
+    module_name = "benchmarks.docker_recovery.real_docker_recovery_ab_test"
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)
 
 
 def test_build_base_docker_task_prompt_is_deterministic(benchmark_module):
