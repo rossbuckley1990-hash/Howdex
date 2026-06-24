@@ -1,0 +1,81 @@
+name: Procedure submission
+description: Submit a sanitized Howdex procedure or Codex entry for review.
+title: "[Procedure submission]: "
+labels:
+  - procedure
+  - codex
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit operational memory, not secrets. Do not include private source
+        code, credentials, customer data, or raw confidential logs.
+  - type: input
+    id: procedure_title
+    attributes:
+      label: Procedure title
+      placeholder: "Recover Docker Compose health check after config mismatch"
+    validations:
+      required: true
+  - type: input
+    id: task_family
+    attributes:
+      label: Task family
+      placeholder: "docker-health-recovery, package-missing-dependency, test-repair"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Runtime, OS, framework, package manager, relevant versions.
+    validations:
+      required: true
+  - type: textarea
+    id: verification_evidence
+    attributes:
+      label: Verification evidence
+      description: Sanitized verifier command shape and observed success signal.
+    validations:
+      required: true
+  - type: textarea
+    id: receipt_attestation
+    attributes:
+      label: Receipt/attestation
+      description: Paste sanitized receipt metadata or link to a safe artifact.
+    validations:
+      required: false
+  - type: dropdown
+    id: risk_level
+    attributes:
+      label: Risk level
+      options:
+        - low
+        - medium
+        - high
+        - unknown
+    validations:
+      required: true
+  - type: textarea
+    id: policy_constraints
+    attributes:
+      label: Policy constraints
+      description: Required approvals, forbidden actions, environment limits.
+    validations:
+      required: true
+  - type: dropdown
+    id: source_artifacts
+    attributes:
+      label: Are source artifacts included?
+      options:
+        - "no"
+        - "yes, sanitized and intentional"
+    validations:
+      required: true
+  - type: checkboxes
+    id: no_secrets
+    attributes:
+      label: Secret-safety confirmation
+      options:
+        - label: I confirm this submission includes no secrets, credentials, private keys, customer data, or confidential source.
+          required: true
