@@ -56,7 +56,7 @@ def test_readme_launch_positioning_does_not_overclaim():
         for phrase in forbidden:
             assert phrase not in readme
 
-    tracking = _read("launch/PILOT_TRACKING.md").casefold()
+    tracking = _read("launch/tracking/PILOT_TRACKING.md").casefold()
     no_external_pilots = "external_pilot_users_confirmed: 0" in tracking
     if no_external_pilots:
         external_user_claims = [

@@ -33,4 +33,4 @@ adapters for common agent runtimes.
 - Keep the description short and factual.
 - Do not cite benchmark numbers unless the list allows longer descriptions.
 - Do not claim acceptance before the PR is merged.
-- Record the PR or listing link in `launch/PILOT_TRACKING.md`.
+- Record the PR or listing link in `launch/tracking/PILOT_TRACKING.md`.

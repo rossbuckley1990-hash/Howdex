@@ -12,8 +12,9 @@ import pytest
 @pytest.fixture
 def benchmark_module(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    sys.modules.pop("real_macgyver_ab_test", None)
-    return importlib.import_module("real_macgyver_ab_test")
+    module_name = "benchmarks.macgyver.real_macgyver_ab_test"
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)
 
 
 def test_treatment_guidance_uses_native_agent_renderer(

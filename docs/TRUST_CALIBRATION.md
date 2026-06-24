@@ -77,12 +77,15 @@ HOWDEX_CALIBRATION_SOURCE=dogfood python procedure_trust_calibration_test.py
 Dogfood mode reads existing local dogfood evidence:
 
 ```text
+evidence/dogfood/results/*/summary.json
 dogfood-results/*/summary.json
 .howdex/dogfood/codex/procedures/*.json
 ```
 
-It does not mutate dogfood state, dogfood databases, Codex entries, receipts,
-or raw logs.
+Committed sanitized dogfood evidence lives under
+`evidence/dogfood/results/`. The legacy `dogfood-results/` path remains
+supported for local runtime output. The harness does not mutate dogfood state,
+dogfood databases, Codex entries, receipts, or raw logs.
 
 If there are too few dogfood samples, the harness reports:
 

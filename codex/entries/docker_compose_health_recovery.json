@@ -38,7 +38,7 @@
       "The benchmark command gate restricts execution to isolated Compose recovery operations."
     ],
     "learned_from": [
-      "real_docker_recovery_ab_test.py"
+      "benchmarks/docker_recovery/real_docker_recovery_ab_test.py"
     ],
     "limitations": [
       "The benchmark skips when Docker, Compose, or the pinned local image is unavailable.",
@@ -50,7 +50,7 @@
   "source": {
     "kind": "benchmark-derived",
     "name": "Real Docker recovery A/B benchmark",
-    "reference": "real_docker_recovery_ab_test.py"
+    "reference": "benchmarks/docker_recovery/real_docker_recovery_ab_test.py"
   },
   "status": "candidate",
   "tags": [

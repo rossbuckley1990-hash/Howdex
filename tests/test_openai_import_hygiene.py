@@ -44,7 +44,10 @@ def test_lazy_openai_client_reports_clear_runtime_error_without_dependency(
 
 def test_benchmark_files_do_not_hard_import_openai_client():
     root = Path(__file__).resolve().parents[1]
-    for path in root.glob("*_test.py"):
+    benchmark_paths = list(root.glob("*_test.py"))
+    benchmark_paths.extend((root / "benchmarks").glob("**/*_test.py"))
+
+    for path in benchmark_paths:
         text = path.read_text(encoding="utf-8")
         assert "from openai import OpenAI" not in text, path
         assert "client = OpenAI()" not in text, path

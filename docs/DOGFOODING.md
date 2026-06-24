@@ -107,7 +107,8 @@ Failed commands automatically increment `failed_attempts`.
 
 Raw dogfood logs are local operational artifacts and should not be committed by
 default. The committed evidence path is the sanitized summary under
-`dogfood-results/`.
+`dogfood-results/`. Committed sanitized evidence should live under
+`evidence/dogfood/results/`.
 
 ## End a phase automatically
 
@@ -124,8 +125,8 @@ Auto-end performs the dogfood closeout:
 - records `git_end_sha`;
 - records git diff stat and changed files;
 - records commit count since `git_start_sha` when available;
-- writes `dogfood-results/<phase>/summary.json`;
-- appends one row to `dogfood-results/metrics.csv`;
+- writes `dogfood-results/<phase>/summary.json` for local runtime output;
+- appends one row to `dogfood-results/metrics.csv` for local runtime output;
 - clears `.howdex/dogfood/current.json`.
 
 The support count in dogfood metrics is intentionally conservative:
@@ -174,12 +175,13 @@ should remain local unless intentionally reviewed and committed.
 The intended sanitized evidence path is:
 
 ```text
-dogfood-results/<phase>/summary.json
-dogfood-results/metrics.csv
+evidence/dogfood/results/<phase>/summary.json
+evidence/dogfood/results/metrics.csv
 ```
 
-Summaries are redacted and do not include raw stdout, stderr, source artifacts,
-or secret-looking values by default.
+The dogfood harness may still write local runtime output to `dogfood-results/`
+for backwards compatibility. Summaries are redacted and do not include raw
+stdout, stderr, source artifacts, or secret-looking values by default.
 
 ## Receipts and Codex entries
 
