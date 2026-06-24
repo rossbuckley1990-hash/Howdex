@@ -123,3 +123,20 @@ def test_readme_explains_harness_not_victory_claim():
     assert "This is a harness, not a victory claim" in readme
     assert "Do not claim that Howdex beats AWM" in readme
     assert "local AWM-style workflow-memory approximation" in readme
+
+
+def test_result_doc_records_required_caveat_and_repro_command():
+    result_doc = (ROOT / "docs" / "AWM_HEAD_TO_HEAD_RESULTS.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        'PATH="$PWD/.venv/bin:$PATH" python -m benchmarks.awm_head_to_head.runner '
+        "--dry-run --trials 5"
+    ) in result_doc
+    assert (
+        "This is a local AWM-style approximation unless explicitly stated otherwise. "
+        "It is not a claim that Howdex has beaten the AWM paper or public "
+        "WebArena/Mind2Web baselines."
+    ) in result_doc
+    assert "not a real AWM implementation" in result_doc
