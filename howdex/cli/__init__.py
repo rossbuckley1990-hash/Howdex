@@ -267,7 +267,12 @@ def cmd_vacuum(args: argparse.Namespace) -> int:
 def cmd_mcp(args: argparse.Namespace) -> int:
     """Start the MCP server over stdio."""
     from howdex.mcp.server import run_stdio
-    run_stdio(path=args.path, embedder=args.embedder)
+    run_stdio(
+        path=args.db or args.path,
+        embedder=args.embedder,
+        codex_path=args.codex,
+        readonly=args.readonly,
+    )
     return 0
 
 
@@ -420,7 +425,23 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("output")
     sp.set_defaults(func=cmd_export)
 
-    sub.add_parser("mcp", help="start MCP server (stdio)").set_defaults(func=cmd_mcp)
+    sp = sub.add_parser("mcp", help="start MCP server (stdio)")
+    sp.add_argument(
+        "--db",
+        default=None,
+        help="database path (default: $HOWDEX_HOME/howdex.db or ~/.howdex/howdex.db)",
+    )
+    sp.add_argument(
+        "--codex",
+        default=None,
+        help="local Codex directory or JSON entry file to expose for guidance/search",
+    )
+    sp.add_argument(
+        "--readonly",
+        action="store_true",
+        help="disable mutating MCP tools",
+    )
+    sp.set_defaults(func=cmd_mcp)
 
     return p
 

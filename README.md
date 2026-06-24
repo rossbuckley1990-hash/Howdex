@@ -304,6 +304,26 @@ reasons.
 
 ---
 
+### Use Howdex from any MCP-compatible agent
+
+Howdex includes a local MCP server for Claude Desktop, Cursor, Windsurf,
+Codex-style workflows, and other MCP-compatible agents:
+
+```bash
+howdex mcp --db ~/.howdex/howdex.db --codex ./codex
+```
+
+The server exposes tools to remember traces, learn procedures, request bounded
+guidance, search local Codex entries, publish candidate/verified Codex entries,
+and attach verification receipts. It requires no OpenAI dependency, no hosted
+service, and no cloud database. Source artifacts are excluded from guidance by
+default.
+
+See [docs/MCP.md](docs/MCP.md) for configuration examples and the security
+model.
+
+---
+
 ### Failed-Attempt Separation
 
 Howdex does not just store the final answer.
