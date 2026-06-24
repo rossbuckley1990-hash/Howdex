@@ -11,6 +11,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional, Union
 
+from howdex.attestation import (
+    ATTESTATION_INVALID,
+    SignedReceiptAttestation,
+    attestation_to_receipt,
+    load_attestation_file,
+    verify_attestation,
+)
 from howdex.core.types import (
     Memory,
     MemoryLayer,
@@ -1134,6 +1141,62 @@ class Howdex:
             self.attach_receipt(procedure_id, receipt)
         return receipt
 
+    def verify_receipt_file(
+        self,
+        path: Union[str, Path],
+        *,
+        key_material: str | bytes | None = None,
+    ):
+        """Verify a Howdex or BootProof-like signed attestation file."""
+        attestation = load_attestation_file(path)
+        return verify_attestation(attestation, key_material=key_material)
+
+    def import_signed_attestation(
+        self,
+        path: Union[str, Path],
+        *,
+        procedure_id: str | None = None,
+        key_material: str | bytes | None = None,
+    ) -> VerificationReceipt:
+        """Import signed or unsigned attestation evidence as a receipt.
+
+        Signed attestations are marked as signed verified only when the
+        payload hash and signature validate against supplied key material.
+        Unsigned evidence remains attachable as observed evidence, but it is
+        labelled separately in receipt metadata and never counts as a signed
+        attestation.
+        """
+        attestation = load_attestation_file(path)
+        target_procedure_id = procedure_id or attestation.procedure_id
+        if not target_procedure_id:
+            raise ValueError("attestation import requires procedure_id")
+        if (
+            procedure_id
+            and attestation.procedure_id
+            and attestation.procedure_id != procedure_id
+        ):
+            raise ValueError(
+                "attestation procedure_id does not match "
+                f"{procedure_id!r}"
+            )
+        if attestation.procedure_id != target_procedure_id:
+            attestation = SignedReceiptAttestation(
+                **{
+                    **attestation.to_dict(),
+                    "procedure_id": target_procedure_id,
+                }
+            )
+        verification = verify_attestation(attestation, key_material=key_material)
+        if verification.status == ATTESTATION_INVALID:
+            raise ValueError(
+                "signed attestation did not validate: "
+                + "; ".join(verification.reasons)
+            )
+        return self.attach_receipt(
+            target_procedure_id,
+            attestation_to_receipt(attestation, verification),
+        )
+
     def procedure_verification_status(self, procedure_id: str) -> str:
         """Return the receipt-backed verification state for one procedure."""
         return procedure_verification_status(self.list_receipts(procedure_id))
@@ -1193,11 +1256,17 @@ class Howdex:
     def publish_codex(
         self,
         path: Optional[Union[str, Path]] = None,
+        *,
+        require_signed_receipt: bool = False,
     ) -> dict[str, Any]:
         """Publish learned procedures into a local Howdex Codex registry."""
         from howdex.portable import publish_codex
 
-        return publish_codex(self.store, path)
+        return publish_codex(
+            self.store,
+            path,
+            require_signed_receipt=require_signed_receipt,
+        )
 
     def pull_codex(self, path: Union[str, Path]) -> dict[str, int]:
         """Import procedures from another local Howdex Codex registry."""
