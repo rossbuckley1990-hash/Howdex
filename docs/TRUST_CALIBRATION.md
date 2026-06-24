@@ -1,5 +1,9 @@
 # Procedure trust calibration
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 Procedure trust calibration asks a blunt question:
 
 > Do Howdex confidence and verification states predict real held-out success?
@@ -7,6 +11,10 @@ Procedure trust calibration asks a blunt question:
 Howdex becomes trust infrastructure only if its trust signals are predictive.
 High-confidence or verified procedures should succeed more often than
 candidate, stale, or failed-verification procedures.
+
+Calibration is how Howdex checks whether its verification states and confidence
+signals are predictive. Dry-run calibration validates machinery only; dogfood
+calibration is internal evidence only until enough held-out real samples exist.
 
 ## Why calibration matters
 

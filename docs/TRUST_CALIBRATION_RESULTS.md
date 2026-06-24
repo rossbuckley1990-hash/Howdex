@@ -1,5 +1,9 @@
 # Trust Calibration Results
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 This page records trust calibration results for Howdex procedures.
 
 ## Dogfood calibration run
@@ -34,6 +38,9 @@ Observed summary:
 ## Caveat
 
 This is internal dogfood evidence only. It is not external adoption, not a public benchmark, and not proof of broad generalization.
+
+It also does not prove live cross-model transfer, production-safe autonomous
+execution, or compounding over many independent teams.
 
 The dogfood data currently comes from Howdex building Howdex, so it is single-repo, single-user, and early-stage. It is useful for validating the calibration machinery and tracking whether confidence/status begins to correlate with later outcomes, but it should not be presented as external validation.
 

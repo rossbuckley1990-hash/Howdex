@@ -1,5 +1,10 @@
 # Howdex Procedure Standard
 
+Howdex is the open verification layer for agent know-how.
+
+Howdex turns execution traces into portable, receipt-backed procedures that any
+agent can reuse and any enterprise can audit.
+
 Howdex formalises a portable, receipt-backed primitive for agent know-how:
 the verified agent procedure.
 
@@ -9,6 +14,10 @@ inspected, rendered, reverified, and reused elsewhere without pretending that
 memory is authority.
 
 No proof, no verified procedure.
+
+Procedures are guidance, not executable authority. Candidate procedures,
+dogfood procedures, and LLM abstraction proposals are not verified procedures
+unless inspectable receipts prove a task-relevant verifier passed.
 
 ## What a Howdex Procedure is
 

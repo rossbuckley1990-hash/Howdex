@@ -1,5 +1,9 @@
 # AWM head-to-head result note
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 This document records the current reproducible output from the local
 AWM-style head-to-head harness.
 

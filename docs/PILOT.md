@@ -1,5 +1,9 @@
 # Howdex developer pilot
 
+Howdex is the open verification layer for agent know-how. It turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
 This pilot pack helps external developers try Howdex with real agents and
 report what happens. It does not claim that external pilot users already exist.
 
@@ -9,6 +13,10 @@ attach verifier receipts before publishing Codex entries.
 
 Procedures are guidance, not executable authority. Do not use this pilot to
 claim production-safe autonomous execution.
+
+The pilot is for collecting real feedback and evidence. Do not claim external
+users, external procedure submissions, or external verified receipts until they
+are tracked in the launch/pilot evidence files.
 
 ## 15-minute local setup
 

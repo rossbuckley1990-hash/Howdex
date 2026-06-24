@@ -2,11 +2,15 @@
 
 ## Own your AI learning loop.
 
-**Howdex is procedural memory for AI agents.**
+**Howdex is the open verification layer for agent know-how.**
 
-Howdex helps teams own their AI learning loop. It turns execution traces into
-verified reusable procedures that remain inside the customer's perimeter and
-work across models, agents, frameworks, and clouds.
+Howdex turns execution traces into portable, receipt-backed procedures that any
+agent can reuse and any enterprise can audit.
+
+Howdex is built around verified agent procedures: operational know-how learned
+from real runs, rendered as guidance, governed by policy/staleness metadata,
+and promoted from candidate to verified only when inspectable receipts prove a
+task-relevant verifier passed.
 
 Execution traces are the raw material. Howdex turns them into procedural
 capital: verified guidance, failed-attempt memory, policy context, and Codex
@@ -14,10 +18,30 @@ entries.
 
 > One expensive discovery. Many cheap executions.
 
+Howdex is an open standard for agent know-how: local-first, vendor-neutral,
+and audit-friendly. It is designed to work across models, agents, frameworks,
+and clouds while keeping the learning loop inside the customer's perimeter.
+
 If your learning loop only works inside one model stack or cloud, you do not
 fully own it.
 
 Howdex is not chat history. It is not prompt stuffing. It is not a vector database full of notes. It is a memory system for **how work was actually done**.
+
+### Proof and quickstarts
+
+- Docker n20 benchmark proof: one verified Docker recovery procedure
+  transferred to fresh agents under identical A/B framing.
+- Reproduce it: `make bench-docker-n20`.
+- MCP quickstart: `howdex mcp --db ~/.howdex/howdex.db --codex ./codex`.
+- Codex quickstart: `howdex codex lint codex` and
+  `howdex codex policy-check codex`.
+- Governance/CI quickstart: use `.github/actions/howdex-codex-check` or run
+  `howdex codex lint`, `howdex codex policy-check`, and
+  `howdex codex verify` in CI.
+- Observability quickstart: `python -m pip install "howdex-ai[otel]"` to trace
+  why memory was selected, rendered, published, or rejected.
+- Dogfood note: Howdex is being built through its own procedural-memory loop;
+  dogfood metrics are internal build evidence, not adoption or traction.
 
 ---
 
@@ -61,6 +85,64 @@ They repeatedly:
 Howdex gives agents durable procedural memory.
 
 It watches episodes, records tool calls, separates failures from successful paths, extracts reusable structure, masks environment-specific values, preserves evidence, and renders the learned procedure back as agent-usable guidance.
+
+---
+
+## Why not just memory?
+
+Memory stores experience. Howdex procedures carry the parts needed to reuse
+experience safely: proof, provenance, policy, portability, receipts, failed
+attempts, parameter bindings, confidence, and staleness metadata.
+
+A transcript can say what happened. A Howdex procedure says what reusable
+know-how was extracted, where it came from, what must be avoided, what verifier
+must pass, and whether the procedure is candidate, verified, stale, or failed.
+
+---
+
+## Why not a cloud agent platform?
+
+Cloud agent platforms can be useful, but the learning loop often stays inside
+one vendor's model, tools, storage, or orchestration layer. Howdex is
+local-first and portable: it can run over local SQLite, expose MCP tools,
+publish Codex entries, and integrate with multiple agent frameworks without
+making the procedure format cloud-bound.
+
+The point is not to own every model call. The point is to own the procedural
+capital created by those calls.
+
+---
+
+## What makes a procedure verified?
+
+A procedure is verified only when evidence survives review:
+
+- an inspectable verifier such as a test, build, health check, or domain
+  verifier;
+- a receipt recording expected signal, observed signal, exit code, timestamp,
+  environment fingerprint, and artifact hashes where safe;
+- optional signed attestation when stronger tamper resistance is required;
+- current environment compatibility and staleness review;
+- policy status that allows reuse under the current constraints.
+
+Candidate procedures and LLM abstraction proposals are useful memory, but they
+are not verified. Procedures are guidance, not executable authority.
+
+---
+
+## Dogfooding Howdex
+
+Howdex is being built through its own procedural-memory loop. Remaining roadmap
+phases can record execution traces, command logs, test receipts, learned
+procedures, candidate Codex entries, sanitized dogfood summaries, and guidance
+for the next related phase.
+
+Dogfood metrics are internal evidence only. They support the compounding story
+by making Howdex's own build loop inspectable, but they are not external users,
+traction, adoption, market validation, or proof of broad multi-team
+generalization.
+
+See [docs/DOGFOODING.md](docs/DOGFOODING.md).
 
 ---
 
@@ -220,12 +302,19 @@ The Docker n20 result is intentionally narrow. It does not claim:
 - production-safe autonomous execution;
 - universal memory across every task family;
 - that every Codex entry is verified;
+- live cross-model transfer;
+- that local AWM-style dry-run results beat the AWM paper or public
+  WebArena/Mind2Web baselines;
+- that LLM abstraction proposals are verified;
 - that no-synthesis transfer is solved;
 - that compounding has been proven across many accumulated traces.
 
 It proves a specific operational transfer: one verified Docker recovery
 procedure helped fresh agents recover a fresh broken local runtime under the
 logged benchmark conditions.
+
+External pilot users should not be claimed unless they are tracked in the
+pilot evidence files.
 
 ---
 
