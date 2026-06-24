@@ -314,6 +314,114 @@ section, treat it as prior operational memory (not source code), avoid
 repeating failed attempts, prefer verified procedures, and run a real
 verifier before claiming success.
 
+## Day-2 operational hardening
+
+Three features that address the brutal Day-2 operational risks a production
+deployment will face. All are opt-in.
+
+### BootProof — deterministic verifier gate (GIGO mitigation)
+
+The #1 Day-2 risk: "If your LLM hallucinates a success and you blindly
+pass that to Howdex, Howdex will mathematically crystallize a
+hallucination into a permanent procedure." BootProof blocks this:
+
+```python
+from howdex import Howdex, BootProof
+
+mem = Howdex(path="...", embedder="hashing")
+gate = BootProof(mem)
+
+# After the agent run, verify with a DETERMINISTIC verifier (not an LLM)
+gate.verify_with_exit_code(
+    procedure_id=proc.id,
+    verifier_command="pytest tests/",
+    exit_code=0,
+)
+gate.verify_with_http_status(
+    procedure_id=proc.id,
+    verifier_command="curl -sf http://localhost:8080/health",
+    status_code=200,
+)
+gate.verify_with_test_runner(
+    procedure_id=proc.id,
+    verifier_command="pytest tests/",
+    exit_code=0,
+    observed_signal="651 passed",
+)
+
+# learn() through the gate REFUSES unverified sessions
+procs = gate.learn(min_samples=1)
+# Sessions without a deterministic receipt are blocked, not consolidated.
+# gate.rejected_sessions lists what was blocked and why.
+```
+
+BootProof only accepts receipts from recognized deterministic verifier
+types (`exit_code`, `http_status`, `test_runner`, `bash`, `build`,
+`healthcheck`, `file_exists`, `sql_query`). An LLM "I think it worked"
+verdict is NOT in this set and will be rejected.
+
+### Trust calibration + needle-in-haystack risk (context window sizing)
+
+The #2 Day-2 risk: "If HNSW retrieves 10 overlapping procedures, injecting
+all of them will cause context collapse for smaller models like Llama-3."
+
+```python
+# Inspect the trust distribution across all procedures
+curve = mem.trust_calibration_curve()
+print(curve["verified_ratio"])           # 0.0–1.0
+print(curve["recommended_top_k"])        # 1 if ratio<0.3, 2 if<0.6, else 3
+print(curve["recommended_verified_only"]) # True if ratio<0.3
+
+# Assess context-collapse risk for a specific objective
+risk = mem.needle_in_haystack_risk("fix the bug", max_chars=6000)
+print(risk["risk_level"])     # "low" | "medium" | "high"
+print(risk["overlapping_count"]) # how many procedures share >50% of steps
+print(risk["recommendation"]) # human-readable mitigation
+```
+
+Use these together: if `verified_ratio < 0.3`, set `verified_only=True`
+and `top_k=1` in `guidance()` to avoid injecting unproven noise. If
+`needle_in_haystack_risk` returns "high", lower `top_k` and raise
+`min_relevance_score`.
+
+### Zero-boilerplate instrumentation (integration tax mitigation)
+
+The #3 Day-2 risk: "Howdex requires you to structure your agent as a
+rigorous CI/CD pipeline with explicit telemetry. Developers migrating
+from LangChain will complain about the boilerplate."
+
+Three zero-boilerplate helpers eliminate this:
+
+```python
+from howdex import Howdex, instrument, session_scope
+
+mem = Howdex(path="...", embedder="hashing")
+
+# 1. @instrument decorator — auto-logs any function as a tool call
+@instrument(mem)
+def search_code(query: str, glob: str = "*.py") -> str:
+    return subprocess.run(["rg", query, "--glob", glob], ...).stdout
+
+@instrument(mem, name="run_tests")
+def pytest_runner(target: str) -> str:
+    return subprocess.run(["pytest", target], ...).stdout
+
+# 2. session_scope context manager — auto-starts/ends sessions
+with session_scope(mem, "fix_bug") as m:
+    result = search_code("def load_config")
+    # ... do work ...
+# session auto-ended: success on clean exit, failure on exception
+
+# 3. auto_instrument_langchain — one-line LangChain adapter
+from howdex.instrument import auto_instrument_langchain
+auto_instrument_langchain(mem, [tool1, tool2, tool3])
+# Now every tool.run() call is logged — no agent code changes needed
+```
+
+The decorator handles exceptions (logs them as failure observations and
+re-raises), is safe outside a session (no-op), and uses the function
+signature to build the arguments dict automatically.
+
 ## Codex and receipt quickstart
 
 The Howdex Codex is a machine-readable catalogue of operational memory. It is

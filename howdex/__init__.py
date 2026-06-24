@@ -48,6 +48,8 @@ from howdex.core.types import (
 )
 from howdex.ingest import IngestionPipeline, IngestionRecord
 from howdex.core.agent_guidance import render_system_prompt_snippet
+from howdex.bootproof import BootProof, require_exit_code
+from howdex.instrument import instrument, session_scope, auto_instrument_langchain
 
 __version__ = "0.3.0"
 __author__ = "Howdex Collective"
@@ -78,6 +80,11 @@ __all__ = [
     "IngestionRecord",
     "IngestionPipeline",
     "render_system_prompt_snippet",
+    "BootProof",
+    "require_exit_code",
+    "instrument",
+    "session_scope",
+    "auto_instrument_langchain",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",
