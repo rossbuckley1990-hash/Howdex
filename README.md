@@ -21,6 +21,30 @@ Howdex is not chat history. It is not prompt stuffing. It is not a vector databa
 
 ---
 
+## Verified agent procedures
+
+Howdex is the open verification layer for agent know-how: it turns execution
+traces into portable, receipt-backed procedures that any agent can reuse and
+any enterprise can audit.
+
+A Howdex procedure is learned from execution traces, rendered as operational
+guidance, governed by policy and staleness metadata, and promoted from
+candidate to verified only when inspectable receipts prove a task-relevant
+verifier succeeded.
+
+This makes Howdex more than an agent memory library. It is infrastructure for
+verified agent procedures: reusable know-how that can travel across models,
+frameworks, and clouds while keeping proof, provenance, and policy visible.
+
+Procedures are guidance, not executable authority. They help agents avoid
+starting cold, but they do not bypass sandboxing, approvals, current
+environment checks, or verification.
+
+See [docs/STANDARD.md](docs/STANDARD.md) and
+[docs/PROTOCOL.md](docs/PROTOCOL.md).
+
+---
+
 ## Why Howdex Exists
 
 Modern AI agents can reason, call tools, write files, run commands, and interact with systems. But most still behave as if every task is the first time they have ever seen the world.
