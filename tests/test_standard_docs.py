@@ -24,13 +24,14 @@ def test_readme_mentions_verified_agent_procedures():
     assert "open verification layer for agent know-how" in readme
     assert (
         "howdex turns execution traces into portable, receipt-backed procedures "
-        "that any agent can reuse and any enterprise can audit"
+        "that agents can reuse and enterprises can audit"
     ) in normalized
     assert "procedures are guidance, not executable authority" in readme
 
 
 def test_readme_launch_positioning_does_not_overclaim():
     readme = _read("README.md").casefold()
+    normalized = " ".join(readme.split())
 
     positive_autonomy_claims = [
         "provides production-safe autonomy",
@@ -68,6 +69,31 @@ def test_readme_launch_positioning_does_not_overclaim():
         for phrase in external_user_claims:
             assert phrase not in readme
 
+    assert "remaining roadmap phases" not in readme
+    assert "roadmap phases" not in readme
+    assert "roadmap" not in readme
+    assert "dry-run awm-style harness results are live performance" in normalized
+
+
+def test_readme_does_not_claim_live_awm_or_public_baseline_win():
+    readme = _read("README.md").casefold()
+    live_awm_result_files = list(ROOT.glob("**/*awm*live*result*"))
+    if not live_awm_result_files:
+        forbidden = [
+            "live awm result",
+            "live awm benchmark pass",
+            "howdex beat awm",
+            "howdex beats awm",
+            "beat webarena",
+            "beats webarena",
+            "beat mind2web",
+            "beats mind2web",
+        ]
+        for phrase in forbidden:
+            assert phrase not in readme
+    assert "that howdex has beaten the awm paper" in readme
+    assert "local awm-style" not in readme or "dry-run" in readme
+
 
 def test_readme_dogfood_wording_is_internal_evidence_only():
     readme = _read("README.md")
@@ -81,9 +107,7 @@ def test_readme_dogfood_wording_is_internal_evidence_only():
 
     assert "internal evidence only" in section
     assert "not external users" in section
-    assert "traction" in section
-    assert "adoption" in section
-    assert "market validation" in section
+    assert "not external users, adoption, traction, market validation" in section
 
     forbidden = [
         "dogfood proves adoption",
@@ -91,6 +115,9 @@ def test_readme_dogfood_wording_is_internal_evidence_only():
         "dogfood proves users",
         "dogfood proves market validation",
         "external users from dogfood",
+        "dogfood users",
+        "dogfood adoption",
+        "dogfood traction",
     ]
     for phrase in forbidden:
         assert phrase not in section

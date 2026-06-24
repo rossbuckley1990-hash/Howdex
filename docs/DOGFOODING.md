@@ -6,10 +6,10 @@ any enterprise can audit.
 
 Howdex should build Howdex.
 
-The dogfood harness records the execution traces used to implement Howdex
-roadmap phases, learns a procedure from each phase, publishes a local candidate
-Codex entry, optionally attaches verifier evidence, and writes sanitized metric
-summaries automatically. Ross should not manually maintain a CSV.
+The dogfood harness can run Howdex development work through a procedural-memory
+loop: record traces, capture command logs, attach receipts, learn procedures,
+publish candidate Codex entries, and write sanitized internal summaries
+automatically.
 
 This is local-only. It does not require OpenAI, Docker, a hosted registry, or a
 cloud service.
@@ -27,7 +27,7 @@ presented as external adoption or broad proof of compounding at scale.
 Howdex is verified agent procedure infrastructure. The strongest way to improve
 that infrastructure is to use it as part of its own build loop:
 
-1. capture a roadmap phase execution trace;
+1. capture a development task execution trace;
 2. capture command logs and test outcomes;
 3. learn a reusable procedure from the trace;
 4. publish a candidate Codex entry;
