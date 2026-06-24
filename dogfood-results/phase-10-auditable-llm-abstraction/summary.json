@@ -1,0 +1,77 @@
+{
+  "branch": "feature/auditable-llm-abstraction",
+  "changed_files": [],
+  "changed_files_count": 0,
+  "codex_entry_paths": [
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/add-awm-head-to-head-benchmark-harness--ebb0e5c514.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/add-optional-auditable-llm-assisted-abstraction-proposals--4bd9441d97.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/create-an-external-developer-pilot-pack-for-howdex--74b4387cdc.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/prepare-and-track-real-external-pilot-outreach-for-howdex--9e09783c83.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-awm-style-head-to-head-comparison-in-live-local-mode--7609d10549.json",
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-trust-calibration-on-actual-howdex-dogfood-procedures--61d8e5811a.json"
+  ],
+  "command_runs": [
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m pytest",
+      "duration_seconds": 8.361,
+      "exit_code": 0,
+      "label": "pytest",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-10-auditable-llm-abstraction/20260624T195858Z-429-pytest.log",
+      "passed": true,
+      "pytest_summary": "551 passed"
+    },
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -",
+      "duration_seconds": 0.064,
+      "exit_code": 0,
+      "label": "auditable-abstraction-dry-run",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-10-auditable-llm-abstraction/20260624T195913Z-464-auditable-abstraction-dry-run.log",
+      "passed": true,
+      "pytest_summary": null
+    }
+  ],
+  "commands_run": 2,
+  "commit_count": 2,
+  "dirty_state_at_start": "dirty",
+  "duration_seconds": 404.753,
+  "episode_id": "5e7707d9-f3d6-42c4-8071-caceb152aba7",
+  "failed_attempts": 0,
+  "git_diff_stat": "unknown",
+  "git_end_sha": "6c94037ed79f1d166a46d51deeb70b1ed46b73db",
+  "git_start_sha": "509a5edb557b525d1aa5e50ae2c7c7e26bd5eefd",
+  "guidance_chars": 2254,
+  "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-10-auditable-llm-abstraction.md",
+  "guidance_used": true,
+  "howdex_version": "0.3.0",
+  "latest_test_label": "pytest",
+  "latest_test_passed": true,
+  "latest_test_summary": "551 passed",
+  "learned_procedure_ids": [
+    "b1f1adc7-6b2f-4104-85e2-cff4df346a33",
+    "2255367e-1af9-4486-952b-04d20eeadc03",
+    "30381bea-e148-4519-a103-c18f7061e378",
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "cfa6c318-9114-4723-bf23-873bfa9a0c6e",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "objective": "Add optional auditable LLM-assisted abstraction proposals",
+  "phase": "phase-10-auditable-llm-abstraction",
+  "procedure_published": true,
+  "python_version": "3.14.6",
+  "receipt_attached": true,
+  "receipt_ids": [
+    "5d1ba7fbf09b7381a4f447c06b4b633559ed34b6c64cb523f8e81941cbb8dc96",
+    "5d1ba7fbf09b7381a4f447c06b4b633559ed34b6c64cb523f8e81941cbb8dc96",
+    "5d1ba7fbf09b7381a4f447c06b4b633559ed34b6c64cb523f8e81941cbb8dc96",
+    "5d1ba7fbf09b7381a4f447c06b4b633559ed34b6c64cb523f8e81941cbb8dc96",
+    "5d1ba7fbf09b7381a4f447c06b4b633559ed34b6c64cb523f8e81941cbb8dc96",
+    "5d1ba7fbf09b7381a4f447c06b4b633559ed34b6c64cb523f8e81941cbb8dc96"
+  ],
+  "selected_procedure_ids": [
+    "74478b54-64c6-4859-aec5-34de00d94195",
+    "b1f1adc7-6b2f-4104-85e2-cff4df346a33",
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "support_count": 1,
+  "support_scope_statement": "Dogfood procedures learned from this phase are single-episode, single-repo, single-user internal evidence. They are not external adoption, traction, users, market validation, and not proof of broad generalization."
+}

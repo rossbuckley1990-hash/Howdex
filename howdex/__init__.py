@@ -19,6 +19,14 @@ from howdex.attestation import (
     create_signed_attestation,
     verify_attestation,
 )
+from howdex.abstraction import (
+    AbstractionProposal,
+    accept_abstraction,
+    export_abstraction_audit_log,
+    list_abstraction_proposals,
+    propose_abstraction,
+    reject_abstraction,
+)
 from howdex.core.engine import Howdex
 from howdex.core.errors import (
     ConsolidationError,
@@ -57,6 +65,12 @@ __all__ = [
     "AttestationVerification",
     "create_signed_attestation",
     "verify_attestation",
+    "AbstractionProposal",
+    "propose_abstraction",
+    "accept_abstraction",
+    "reject_abstraction",
+    "list_abstraction_proposals",
+    "export_abstraction_audit_log",
     "ParameterizedAction",
     "ParameterizedStep",
     "ParallelSpanResolver",
