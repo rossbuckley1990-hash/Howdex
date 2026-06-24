@@ -218,7 +218,10 @@ def cmd_codex_init(args: argparse.Namespace) -> int:
 def cmd_codex_publish(args: argparse.Namespace) -> int:
     mem = Howdex(path=args.path, embedder=args.embedder)
     try:
-        result = mem.publish_codex(args.codex_path)
+        result = mem.publish_codex(
+            args.codex_path,
+            require_signed_receipt=args.require_signed_receipt,
+        )
         print(
             f"✓ published {result['exported']} procedure(s) "
             f"to {result['procedures']}"
@@ -238,6 +241,73 @@ def cmd_codex_pull(args: argparse.Namespace) -> int:
             f"{result['imported']} imported, "
             f"{result['updated']} updated, "
             f"{result['unchanged']} unchanged"
+        )
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_receipt_import(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        receipt = mem.import_signed_attestation(
+            args.source,
+            procedure_id=args.procedure_id,
+            key_material=args.hmac_key,
+        )
+        signed = receipt.metadata.get("attestation_status") == "signed_verified"
+        label = "signed verified" if signed else receipt.metadata.get("attestation_status", receipt.status)
+        print(f"✓ imported receipt {receipt.receipt_id} ({label})")
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_receipt_verify(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        result = mem.verify_receipt_file(args.source, key_material=args.hmac_key)
+        print(
+            json.dumps(
+                {
+                    "status": result.status,
+                    "evidence_valid": result.evidence_valid,
+                    "payload_hash_valid": result.payload_hash_valid,
+                    "signature_valid": result.signature_valid,
+                    "reasons": result.reasons,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0 if result.status in {"signed_verified", "evidence_observed"} else 1
+    finally:
+        mem.close()
+
+
+def cmd_procedure_status(args: argparse.Namespace) -> int:
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        status = mem.procedure_status(args.procedure_id)
+        verification_status = mem.procedure_verification_status(args.procedure_id)
+        receipts = mem.list_receipts(args.procedure_id)
+        signed_receipts = [
+            receipt
+            for receipt in receipts
+            if receipt.metadata.get("attestation_status") == "signed_verified"
+        ]
+        print(
+            json.dumps(
+                {
+                    "procedure_id": args.procedure_id,
+                    "status": status,
+                    "verification_status": verification_status,
+                    "receipt_count": len(receipts),
+                    "signed_verified_receipt_count": len(signed_receipts),
+                },
+                indent=2,
+                sort_keys=True,
+            )
         )
         return 0
     finally:
@@ -381,6 +451,44 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.set_defaults(func=cmd_procedure_import)
 
+    sp = procedure_sub.add_parser(
+        "status",
+        help="show receipt-backed status for one procedure",
+    )
+    sp.add_argument("procedure_id")
+    sp.set_defaults(func=cmd_procedure_status)
+
+    receipt_parser = sub.add_parser(
+        "receipt",
+        help="import or verify procedure receipt attestations",
+    )
+    receipt_sub = receipt_parser.add_subparsers(dest="receipt_cmd", required=True)
+
+    sp = receipt_sub.add_parser(
+        "import",
+        help="import a signed or unsigned attestation JSON file",
+    )
+    sp.add_argument("source")
+    sp.add_argument("--procedure-id", default=None)
+    sp.add_argument(
+        "--hmac-key",
+        default=None,
+        help="HMAC key material used to verify hmac-sha256 attestations",
+    )
+    sp.set_defaults(func=cmd_receipt_import)
+
+    sp = receipt_sub.add_parser(
+        "verify",
+        help="verify a signed or unsigned attestation JSON file",
+    )
+    sp.add_argument("source")
+    sp.add_argument(
+        "--hmac-key",
+        default=None,
+        help="HMAC key material used to verify hmac-sha256 attestations",
+    )
+    sp.set_defaults(func=cmd_receipt_verify)
+
     codex_parser = sub.add_parser(
         "codex",
         help="manage the local portable procedure registry",
@@ -405,6 +513,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         help="Codex directory (default: .howdex/codex)",
+    )
+    sp.add_argument(
+        "--require-signed-receipt",
+        action="store_true",
+        help="publish only procedures with a signed verified receipt",
     )
     sp.set_defaults(func=cmd_codex_publish)
 

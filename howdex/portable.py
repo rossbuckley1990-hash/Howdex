@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import howdex.telemetry as telemetry
+from howdex.attestation import is_signed_verified_receipt
 from howdex.core.feedback import procedure_feedback_confidence
 from howdex.core.receipts import (
     VerificationReceipt,
@@ -146,6 +147,8 @@ def init_codex(path: str | Path | None = None) -> dict[str, Any]:
 def publish_codex(
     store: Store,
     path: str | Path | None = None,
+    *,
+    require_signed_receipt: bool = False,
 ) -> dict[str, Any]:
     """Publish local learned procedures into a local Codex folder."""
     with telemetry.span("howdex.codex.publish") as publish_span:
@@ -153,10 +156,29 @@ def publish_codex(
         output_dir = codex["procedures"]
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        procedures = [
+            _procedure_from_store(payload)
+            for payload in store.all_procedures()
+        ]
+        if require_signed_receipt:
+            missing = [
+                procedure.id
+                for procedure in procedures
+                if not _signed_verified_receipts(procedure)
+            ]
+            if missing:
+                raise ValueError(
+                    "codex publish requires a signed verified receipt for "
+                    f"procedure {missing[0]}"
+                )
+
         exported_files: list[Path] = []
-        for payload in store.all_procedures():
-            procedure = _procedure_from_store(payload)
-            document = codex_entry_document(procedure, store=store)
+        for procedure in procedures:
+            document = codex_entry_document(
+                procedure,
+                store=store,
+                require_signed_receipt=require_signed_receipt,
+            )
             destination = output_dir / _procedure_filename(procedure)
             _write_json(destination, document)
             exported_files.append(destination)
@@ -258,9 +280,17 @@ def procedure_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
     }
 
 
-def codex_entry_document(procedure: Procedure, *, store: Store) -> dict[str, Any]:
+def codex_entry_document(
+    procedure: Procedure,
+    *,
+    store: Store,
+    require_signed_receipt: bool = False,
+) -> dict[str, Any]:
     """Build a public Howdex Codex entry for one learned procedure."""
-    verification = _codex_verification(procedure)
+    verification = _codex_verification(
+        procedure,
+        require_signed_receipt=require_signed_receipt,
+    )
     return {
         "avoid": _codex_avoid(procedure),
         "category": "learned_procedure",
@@ -295,7 +325,10 @@ def codex_entry_document(procedure: Procedure, *, store: Store) -> dict[str, Any
             "name": "Howdex local procedure memory",
             "reference": procedure.id,
         },
-        "status": resolve_codex_status(procedure),
+        "status": resolve_codex_status(
+            procedure,
+            require_signed_receipt=require_signed_receipt,
+        ),
         "tags": _codex_tags(procedure),
         "title": _codex_title(procedure),
         "verification": verification,
@@ -303,8 +336,16 @@ def codex_entry_document(procedure: Procedure, *, store: Store) -> dict[str, Any
     }
 
 
-def resolve_codex_status(procedure: Procedure) -> str:
+def resolve_codex_status(
+    procedure: Procedure,
+    *,
+    require_signed_receipt: bool = False,
+) -> str:
     """Return the public Codex status without overclaiming verification."""
+    if require_signed_receipt:
+        if _signed_verified_receipts(procedure):
+            return "verified"
+        return "candidate"
     if _verified_receipts(procedure):
         return "verified"
     return "candidate"
@@ -691,10 +732,18 @@ def _codex_avoid(procedure: Procedure) -> list[str]:
     return avoid
 
 
-def _codex_verification(procedure: Procedure) -> dict[str, str]:
-    verified = _first_receipt(_verified_receipts(procedure))
+def _codex_verification(
+    procedure: Procedure,
+    *,
+    require_signed_receipt: bool = False,
+) -> dict[str, str]:
+    verified = _first_receipt(
+        _signed_verified_receipts(procedure)
+        if require_signed_receipt
+        else _verified_receipts(procedure)
+    )
     if verified is not None:
-        return {
+        payload = {
             "expected_signal": verified.expected_signal
             or "Independent verifier produced the expected success signal.",
             "status": "verified",
@@ -702,6 +751,9 @@ def _codex_verification(procedure: Procedure) -> dict[str, str]:
             or "inspect attached verification receipt",
             "verifier_type": verified.verifier_type or verified.receipt_type,
         }
+        if require_signed_receipt:
+            payload["signature_status"] = "signed_verified"
+        return payload
 
     receipt_status = procedure_verification_status(procedure.receipts)
     failed = _first_receipt(_receipts_with_status(procedure, "failed"))
@@ -780,6 +832,14 @@ def _verified_receipts(procedure: Procedure) -> list[VerificationReceipt]:
             and bool(receipt.observed_signal)
             and receipt.exit_code == 0
         )
+    ]
+
+
+def _signed_verified_receipts(procedure: Procedure) -> list[VerificationReceipt]:
+    return [
+        receipt
+        for receipt in _verified_receipts(procedure)
+        if is_signed_verified_receipt(receipt)
     ]
 
 

@@ -13,6 +13,12 @@ repeated successful traces into reusable procedures.
 Visit https://github.com/rossbuckley1990-hash/Howdex for full docs.
 """
 
+from howdex.attestation import (
+    AttestationVerification,
+    SignedReceiptAttestation,
+    create_signed_attestation,
+    verify_attestation,
+)
 from howdex.core.engine import Howdex
 from howdex.core.errors import (
     ConsolidationError,
@@ -47,6 +53,10 @@ __all__ = [
     "Episode",
     "Procedure",
     "VerificationReceipt",
+    "SignedReceiptAttestation",
+    "AttestationVerification",
+    "create_signed_attestation",
+    "verify_attestation",
     "ParameterizedAction",
     "ParameterizedStep",
     "ParallelSpanResolver",
