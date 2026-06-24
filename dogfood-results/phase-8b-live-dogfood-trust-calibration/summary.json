@@ -1,0 +1,60 @@
+{
+  "branch": "results/dogfood-trust-calibration",
+  "changed_files": [
+    "docs/TRUST_CALIBRATION_RESULTS.md"
+  ],
+  "changed_files_count": 1,
+  "codex_entry_paths": [
+    "/Users/ross/engram_work/.howdex/dogfood/codex/procedures/run-trust-calibration-on-actual-howdex-dogfood-procedures--61d8e5811a.json"
+  ],
+  "command_runs": [
+    {
+      "command": "HOWDEX_CALIBRATION_SOURCE=dogfood PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python procedure_trust_calibration_test.py --output benchmark-results/trust-calibration/dogfood-calibration.json",
+      "duration_seconds": 0.028,
+      "exit_code": 0,
+      "label": "dogfood-trust-calibration",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-8b-live-dogfood-trust-calibration/20260624T192344Z-461-dogfood-trust-calibration.log",
+      "passed": true,
+      "pytest_summary": null
+    },
+    {
+      "command": "PATH=/Users/ross/engram_work/.venv/bin:/Users/ross/go/bin:/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/ross/.rbenv/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/ross/.local/bin python -m pytest",
+      "duration_seconds": 8.138,
+      "exit_code": 0,
+      "label": "pytest",
+      "log_path": "/Users/ross/engram_work/.howdex/dogfood/runs/phase-8b-live-dogfood-trust-calibration/20260624T192348Z-686-pytest.log",
+      "passed": true,
+      "pytest_summary": "516 passed"
+    }
+  ],
+  "commands_run": 2,
+  "commit_count": 0,
+  "dirty_state_at_start": "unknown",
+  "duration_seconds": 228.072,
+  "episode_id": "4733c6c9-b852-4182-8172-bbb7534b799b",
+  "failed_attempts": 0,
+  "git_diff_stat": "unknown",
+  "git_end_sha": "c27d873e7c161283609b34cfc49a22116f5aafe7",
+  "git_start_sha": "c27d873e7c161283609b34cfc49a22116f5aafe7",
+  "guidance_chars": 1515,
+  "guidance_path": "/Users/ross/engram_work/.howdex/dogfood/guidance/phase-8b-live-dogfood-trust-calibration.md",
+  "guidance_used": true,
+  "howdex_version": "0.3.0",
+  "latest_test_label": "pytest",
+  "latest_test_passed": true,
+  "latest_test_summary": "516 passed",
+  "learned_procedure_ids": [
+    "7b7c0855-a1ca-4288-816e-9aca3c79f72f"
+  ],
+  "objective": "Run trust calibration on actual Howdex dogfood procedures",
+  "phase": "phase-8b-live-dogfood-trust-calibration",
+  "procedure_published": true,
+  "python_version": "3.14.6",
+  "receipt_attached": true,
+  "receipt_ids": [
+    "c38e6e1d784e370e3c39be41f086c7989aaf10742ad19c0154eb957a25de32a1"
+  ],
+  "selected_procedure_ids": [],
+  "support_count": 1,
+  "support_scope_statement": "Dogfood procedures learned from this phase are single-episode, single-repo, single-user internal evidence. They are not external adoption, traction, users, market validation, and not proof of broad generalization."
+}
