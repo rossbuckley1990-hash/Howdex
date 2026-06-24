@@ -229,6 +229,25 @@ logged benchmark conditions.
 
 ---
 
+## Trust calibration: measuring whether procedure confidence predicts reality
+
+Howdex includes a procedure trust calibration harness:
+
+```bash
+HOWDEX_CALIBRATION_DRY_RUN=1 python procedure_trust_calibration_test.py
+```
+
+The harness measures whether confidence bins and verification states line up
+with observed success. Dry-run mode validates the metric machinery only. Dogfood
+mode can read existing `dogfood-results/` summaries as internal evidence, but it
+must report `INSUFFICIENT DATA` until enough real held-out dogfood samples
+exist. Dogfood calibration is not external adoption, traction, users, or market
+validation.
+
+See [docs/TRUST_CALIBRATION.md](docs/TRUST_CALIBRATION.md).
+
+---
+
 ## Reproduce the result
 
 Run the headline Docker A/B benchmark with:
