@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "howdex": {
+      "command": "howdex",
+      "args": [
+        "mcp",
+        "--db",
+        "~/.howdex/howdex.db",
+        "--codex",
+        "./codex"
+      ],
+      "env": {
+        "HOWDEX_EMBEDDER": "hash"
+      }
+    }
+  }
+}

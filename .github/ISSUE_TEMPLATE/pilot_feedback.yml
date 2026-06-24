@@ -1,0 +1,99 @@
+name: Pilot feedback
+description: Report results from trying Howdex with a real agent workflow.
+title: "[Pilot feedback]: "
+labels:
+  - pilot
+  - feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Howdex. Please do not include secrets, private source
+        code, customer data, or raw logs with sensitive content.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Howdex version, local/remote setup.
+      placeholder: "macOS, Python 3.12, howdex-ai version, local SQLite"
+    validations:
+      required: true
+  - type: input
+    id: agent_model
+    attributes:
+      label: Agent/model
+      placeholder: "Claude Desktop, Cursor, custom agent, model name if shareable"
+    validations:
+      required: true
+  - type: dropdown
+    id: integration_path
+    attributes:
+      label: Integration path
+      options:
+        - MCP
+        - LangGraph adapter
+        - LangChain adapter
+        - OpenAI Agents adapter
+        - CrewAI adapter
+        - AutoGen adapter
+        - Generic Python adapter
+        - CLI only
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: task_attempted
+    attributes:
+      label: Task attempted
+      description: What did the agent try to do?
+    validations:
+      required: true
+  - type: dropdown
+    id: guidance_used
+    attributes:
+      label: Was Howdex guidance used?
+      options:
+        - "yes"
+        - "no"
+        - "partially"
+        - "not sure"
+    validations:
+      required: true
+  - type: dropdown
+    id: procedure_learned
+    attributes:
+      label: Was a procedure learned?
+      options:
+        - "yes"
+        - "no"
+        - "not sure"
+    validations:
+      required: true
+  - type: dropdown
+    id: receipt_attached
+    attributes:
+      label: Was a receipt attached?
+      options:
+        - "yes"
+        - "no"
+        - "not applicable"
+        - "not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: failed_or_confused
+    attributes:
+      label: What failed or confused you?
+      description: Include sanitized errors or summaries only.
+    validations:
+      required: false
+  - type: dropdown
+    id: quote_permission
+    attributes:
+      label: Permission to quote anonymized feedback?
+      options:
+        - "yes, anonymized is okay"
+        - "no"
+        - "ask me first"
+    validations:
+      required: true
