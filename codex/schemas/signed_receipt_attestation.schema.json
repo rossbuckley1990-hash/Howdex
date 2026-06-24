@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "attestation_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "environment_fingerprint": {
+      "type": "object"
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "expected_signal": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "observed_signal": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "payload_hash": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "procedure_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "receipt_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "signature": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "signer_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "signed_verified",
+        "evidence_observed",
+        "failed",
+        "invalid",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "verifier_command": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "attestation_id",
+    "receipt_id",
+    "procedure_id",
+    "verifier_command",
+    "expected_signal",
+    "observed_signal",
+    "exit_code",
+    "environment_fingerprint",
+    "artifact_hashes",
+    "created_at",
+    "signer_id",
+    "signature_algorithm",
+    "signature",
+    "payload_hash",
+    "status"
+  ],
+  "title": "Howdex Signed Receipt Attestation",
+  "type": "object"
+}
