@@ -59,6 +59,138 @@ This does not yet prove compounding over many accumulated traces. It also does
 not claim production-safe autonomous execution, universal task memory, or that
 all Codex entries are verified.
 
+It also does not prove live cross-model transfer, does not compare against the
+AWM paper or public WebArena/Mind2Web baselines, and does not show that
+dry-run harness results predict live performance.
+
+## Additional local benchmark evidence
+
+These benchmarks are useful engineering evidence, but they have narrower claim
+boundaries than the headline Docker n20 result.
+
+### Real MacGyver filesystem artifact replay
+
+File:
+
+```text
+real_macgyver_test.py
+```
+
+What it tests:
+
+- real temporary filesystem;
+- generated `custom_parser.py`;
+- real data files;
+- subprocess execution;
+- deletion of the teacher's parser before the student run;
+- student re-creation from Howdex memory.
+
+Claim boundary:
+
+```text
+Artifact replay regression test. Not yet a no-memory capability-lift test.
+```
+
+Run:
+
+```bash
+python3 real_macgyver_test.py
+```
+
+### Real MacGyver A/B hard-tool benchmark
+
+File:
+
+```text
+real_macgyver_ab_test.py
+```
+
+Representative local result previously recorded:
+
+| Metric | Control | Treatment |
+|---|---:|---:|
+| trials | 5 | 5 |
+| successes | 2 | 5 |
+| success rate | 0.40 | 1.00 |
+| avg attempts | 7.20 | 2.60 |
+| Howdex memory used | 0/5 | 5/5 |
+| source pasted | 0/5 | 0/5 |
+
+Run:
+
+```bash
+HOWDEX_AB_TRIALS=5 HOWDEX_AB_MAX_TURNS=20 python3 real_macgyver_ab_test.py
+```
+
+Claim boundary:
+
+```text
+Local A/B benchmark evidence for one hard filesystem/tool-reuse task family.
+Not a production-safety claim.
+```
+
+### Polyglot MacGyver crypto transfer benchmark
+
+File:
+
+```text
+polyglot_macgyver_test.py
+```
+
+Representative local result previously recorded:
+
+| Metric | Control | Treatment |
+|---|---:|---:|
+| trials | 5 | 5 |
+| successes | 0 | 5 |
+| success rate | 0.00 | 1.00 |
+| avg attempts | 11.00 | 3.60 |
+| Howdex memory used | 0/5 | 5/5 |
+| source pasted | 0/5 | 0/5 |
+
+Run:
+
+```bash
+HOWDEX_POLY_TRIALS=5 HOWDEX_POLY_MAX_TURNS=12 python3 polyglot_macgyver_test.py
+```
+
+Claim boundary:
+
+```text
+Language-agnostic operational transfer using synthesized Howdex memory facts.
+Not proof that no-synthesis abstraction is solved.
+```
+
+### AWM-style head-to-head harness
+
+Result doc:
+
+```text
+docs/AWM_HEAD_TO_HEAD_RESULTS.md
+```
+
+The current AWM-style result is a dry-run harness output. It compares vanilla,
+a local AWM-style workflow-memory approximation, and Howdex's deterministic
+procedure guidance path.
+
+Required caveat:
+
+```text
+This is a local AWM-style approximation unless explicitly stated otherwise. It is not a claim that Howdex has beaten the AWM paper or public WebArena/Mind2Web baselines.
+```
+
+### Trust calibration
+
+Result doc:
+
+```text
+docs/TRUST_CALIBRATION_RESULTS.md
+```
+
+The current dogfood trust-calibration result is internal evidence only and
+reported `INSUFFICIENT DATA`. It validates the harness path, not external
+calibration.
+
 ## Prerequisites
 
 - Docker must be running.
