@@ -245,25 +245,30 @@ def test_registry_search_no_match_returns_empty(tmp_path):
 # --------------------------------------------------------------------------- #
 # CLI integration
 # --------------------------------------------------------------------------- #
+def _run_cli(args, env=None):
+    """Run the howdex CLI in-process via subprocess (no hardcoded cwd)."""
+    import subprocess
+    import sys
+    return subprocess.run(
+        [sys.executable, "-m", "howdex.cli"] + args,
+        capture_output=True, text=True, timeout=30, env=env,
+    )
+
+
 def test_cli_compliance_generates_report(tmp_path):
     """`howdex compliance --framework soc2` should produce a report."""
-    import subprocess
     mem = Howdex(path=str(tmp_path / "test.db"), embedder="hashing")
     _seed_verified_procedure(mem)
     mem.close()
-    result = subprocess.run(
-        ["bash", "-c", f"source .venv/bin/activate && howdex --path {tmp_path}/test.db compliance --framework soc2 2>&1"],
-        cwd="/home/z/my-project/howdex-review/Howdex",
-        capture_output=True, text=True, timeout=30,
-    )
-    assert result.returncode == 0
+    result = _run_cli(["--path", str(tmp_path / "test.db"), "--embedder", "hashing",
+                       "compliance", "--framework", "soc2"])
+    assert result.returncode == 0, f"stderr: {result.stderr}"
     assert "Howdex Compliance Report" in result.stdout
     assert "CC7.1" in result.stdout
 
 
 def test_cli_public_registry_push_and_list(tmp_path):
     """`howdex public-registry push` + `list` round-trip."""
-    import subprocess
     mem = Howdex(path=str(tmp_path / "test.db"), embedder="hashing")
     _seed_verified_procedure(mem)
     codex_path = tmp_path / "codex"
@@ -271,18 +276,11 @@ def test_cli_public_registry_push_and_list(tmp_path):
     mem.close()
     target_registry = tmp_path / "public-registry"
     # Push
-    result = subprocess.run(
-        ["bash", "-c", f"source .venv/bin/activate && howdex public-registry push {codex_path}/procedures --to {target_registry} 2>&1"],
-        cwd="/home/z/my-project/howdex-review/Howdex",
-        capture_output=True, text=True, timeout=30,
-    )
-    assert result.returncode == 0
+    result = _run_cli(["public-registry", "push", str(codex_path / "procedures"),
+                       "--to", str(target_registry)])
+    assert result.returncode == 0, f"stderr: {result.stderr}"
     assert "pushed 1" in result.stdout
     # List
-    result = subprocess.run(
-        ["bash", "-c", f"source .venv/bin/activate && howdex public-registry list --from-dir {target_registry} 2>&1"],
-        cwd="/home/z/my-project/howdex-review/Howdex",
-        capture_output=True, text=True, timeout=30,
-    )
-    assert result.returncode == 0
+    result = _run_cli(["public-registry", "list", "--from-dir", str(target_registry)])
+    assert result.returncode == 0, f"stderr: {result.stderr}"
     assert "verified" in result.stdout
