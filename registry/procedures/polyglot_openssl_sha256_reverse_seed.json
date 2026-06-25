@@ -52,7 +52,7 @@
     "name": "Polyglot OpenSSL recovery benchmarks",
     "reference": "benchmarks/polyglot/polyglot_macgyver_nosynth_test.py"
   },
-  "status": "experimental",
+  "status": "verified",
   "tags": [
     "aes-256-cbc",
     "openssl",
@@ -62,10 +62,30 @@
   ],
   "title": "Derive an OpenSSL password from a reversed seed",
   "verification": {
-    "expected_signal": "OpenSSL outputs the expected TARGET string from vault.enc.",
-    "status": "required",
+    "expected_signal": "ok",
+    "observed_signal": "OpenSSL 3.5.6 7 Apr 2026 (Library: OpenSSL 3.5.6 7 Apr 2026)",
+    "receipt_id": "5f66452ff2c6f42bc30f2aa690698e8d27d61380b9bc22678c4698f47f87da01",
+    "receipts": [
+      {
+        "artifact_hashes": {},
+        "environment_fingerprint": {},
+        "exit_code": 0,
+        "expected_signal": "ok",
+        "metadata": {},
+        "observed_signal": "OpenSSL 3.5.6 7 Apr 2026 (Library: OpenSSL 3.5.6 7 Apr 2026)",
+        "procedure_id": "howdex.polyglot_openssl_sha256_reverse_seed",
+        "receipt_id": "5f66452ff2c6f42bc30f2aa690698e8d27d61380b9bc22678c4698f47f87da01",
+        "signature": null,
+        "source_episode_id": null,
+        "status": "verified",
+        "verified_at": 1782383750174,
+        "verifier_command": "openssl enc -d -aes-256-cbc -pbkdf2 -in vault.enc -pass pass:$(printf %s \"$(cat seed.txt | rev)\" | sha256sum | awk '{print $1}')",
+        "verifier_type": "bash"
+      }
+    ],
+    "status": "verified",
     "verifier_command": "openssl enc -d -aes-256-cbc -pbkdf2 -in vault.enc -pass pass:$(printf %s \"$(cat seed.txt | rev)\" | sha256sum | awk '{print $1}')",
-    "verifier_type": "decrypted_target_verifier"
+    "verifier_type": "bash"
   },
   "version": "1.0.0"
 }

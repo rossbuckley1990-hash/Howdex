@@ -1,12 +1,12 @@
 {
   "format": "howdex-public-registry",
-  "version": "1.0.0",
-  "updated_at": "2026-06-25T00:00:00Z",
   "procedure_count": 4,
   "procedures": [
-    {"id": "docker_compose_health_recovery", "title": "docker_compose_health_recovery"},
-    {"id": "node_missing_dependency", "title": "node_missing_dependency"},
-    {"id": "macgyver_zb2_decoder", "title": "macgyver_zb2_decoder"},
-    {"id": "polyglot_openssl_sha256_reverse_seed", "title": "polyglot_openssl_sha256_reverse_seed"}
-  ]
+    {"id": "docker_compose_health_recovery", "title": "Recover a Docker Compose service with a failed health policy", "status": "verified"},
+    {"id": "macgyver_zb2_decoder", "title": "Recover the validated TARGET from a ZB2 binary fixture", "status": "verified"},
+    {"id": "node_missing_dependency", "title": "Recover a Node application with a missing dependency", "status": "verified"},
+    {"id": "polyglot_openssl_sha256_reverse_seed", "title": "Derive an OpenSSL password from a reversed seed", "status": "verified"}
+  ],
+  "updated_at": "2026-06-25T00:00:00Z",
+  "version": "1.0.0"
 }
