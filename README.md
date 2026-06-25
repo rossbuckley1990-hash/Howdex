@@ -79,7 +79,7 @@ Minimal Python use:
 ```python
 from howdex import Howdex
 
-memory = Howdex(path=".howdex.db", embedder="st")
+memory = Howdex(path=".howdex.db", embedder="hashing")
 
 memory.start_session("fix_missing_dependency")
 memory.log_tool_call(
@@ -115,6 +115,10 @@ howdex --path /tmp/howdex.db remember "user loves python"
 howdex --path /tmp/howdex.db search "python preference"
 ```
 
+This should print a match (the hash embedder matches on shared tokens —
+`python` appears in both the stored memory and the query). If you see
+`(no memories matched)`, make sure you ran `init` first.
+
 ### First-time developer? Run the full loop in one command
 
 If you're evaluating Howdex for the first time, run:
@@ -129,15 +133,14 @@ guidance for a fresh related task → publish to a local Codex → lint it.
 Leaves you with a real, inspectable verified Codex entry in
 `./first_time_dev_codex/`.
 
-> **Note on embedders**: Howdex defaults to `sentence-transformers`
-> (all-MiniLM-L6-v2) for production-quality semantic matching. If
+> **Note on embedders**: Howdex tries `sentence-transformers`
+> (all-MiniLM-L6-v2) first for production-quality semantic matching. If
 > `sentence-transformers` is not installed, it falls back to the `hash`
-> embedder (keyword-overlap only). For CI/offline runs, set
-> `HOWDEX_EMBEDDER=hash`. To install the neural backend:
->
-> ```bash
-> python -m pip install -e ".[st]"
-> ```
+> embedder (keyword-overlap only — matches on shared tokens, not
+> semantics). All examples in this README work with either embedder.
+> To install the neural backend: `pip install sentence-transformers`
+> (or `pip install -e ".[st]"` for development). For CI/offline runs,
+> set `HOWDEX_EMBEDDER=hash`.
 
 ## MCP quickstart
 
@@ -332,7 +335,7 @@ ep = mem.end_session("success", require_receipt=True)
 # learn() will NOT consolidate this into a procedure
 
 # Global strict mode via constructor
-mem = Howdex(path="...", embedder="st", require_receipt_for_success=True)
+mem = Howdex(path="...", embedder="hashing", require_receipt_for_success=True)
 ```
 
 Even without strict mode, an `unverified_success` integrity warning is
@@ -376,7 +379,7 @@ hallucination into a permanent procedure." BootProof blocks this:
 ```python
 from howdex import Howdex, BootProof
 
-mem = Howdex(path="...", embedder="st")
+mem = Howdex(path="...", embedder="hashing")
 gate = BootProof(mem)
 
 # After the agent run, verify with a DETERMINISTIC verifier (not an LLM)
@@ -443,7 +446,7 @@ Three zero-boilerplate helpers eliminate this:
 ```python
 from howdex import Howdex, instrument, session_scope
 
-mem = Howdex(path="...", embedder="st")
+mem = Howdex(path="...", embedder="hashing")
 
 # 1. @instrument decorator — auto-logs any function as a tool call
 @instrument(mem)
