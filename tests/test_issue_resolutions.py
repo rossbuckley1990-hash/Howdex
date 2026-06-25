@@ -20,7 +20,10 @@ def test_auto_embedder_defaults_to_st_when_available():
     try:
         emb = auto_embedder()
         # It should be either ST (if installed) or hash (fallback)
-        assert emb.name in ("sentence-transformers", "hash", "hashing")
+        # ST embedder name is like "sentence-transformer:all-MiniLM-L6-v2"
+        assert "sentence-transformer" in emb.name or emb.name in ("hash", "hashing"), (
+            f"expected ST or hash embedder, got {emb.name!r}"
+        )
     finally:
         if old:
             os.environ["HOWDEX_EMBEDDER"] = old
