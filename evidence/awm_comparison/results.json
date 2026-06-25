@@ -1,0 +1,47 @@
+{
+  "no_memory": {
+    "arm": "no_memory",
+    "n": 200,
+    "success_rate": 0.335,
+    "avg_steps": 11.3,
+    "avg_attempts": 3.5,
+    "seen_success_rate": 0.367,
+    "novel_success_rate": 0.287,
+    "generalization_gap": 0.079,
+    "extraction_cost_tokens": 0,
+    "extraction_cost_usd": 0,
+    "extraction_calls": 0,
+    "auditability_score": 0.0,
+    "auditability_note": "N/A: no memory"
+  },
+  "howdex": {
+    "arm": "howdex",
+    "n": 200,
+    "success_rate": 0.645,
+    "avg_steps": 7.1,
+    "avg_attempts": 1.4,
+    "seen_success_rate": 0.725,
+    "novel_success_rate": 0.525,
+    "generalization_gap": 0.2,
+    "extraction_cost_tokens": 0,
+    "extraction_cost_usd": 0.0,
+    "extraction_calls": 10,
+    "auditability_score": 1.0,
+    "auditability_note": "Full: every procedure step traces to source episodes via provenance"
+  },
+  "awm": {
+    "arm": "awm",
+    "n": 200,
+    "success_rate": 0.54,
+    "avg_steps": 8.7,
+    "avg_attempts": 2.1,
+    "seen_success_rate": 0.708,
+    "novel_success_rate": 0.287,
+    "generalization_gap": 0.421,
+    "extraction_cost_tokens": 0,
+    "extraction_cost_usd": 0,
+    "extraction_calls": 10,
+    "auditability_score": 0.3,
+    "auditability_note": "Partial: workflow is visible but extraction reasoning is opaque (LLM black box)"
+  }
+}
