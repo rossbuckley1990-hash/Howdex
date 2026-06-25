@@ -541,6 +541,72 @@ def cmd_system_prompt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compliance(args: argparse.Namespace) -> int:
+    """Generate a compliance report mapping receipts to a framework's controls."""
+    from howdex.governance import ComplianceReport, SUPPORTED_FRAMEWORKS
+    if args.framework not in SUPPORTED_FRAMEWORKS:
+        print(f"error: framework must be one of {SUPPORTED_FRAMEWORKS}", file=sys.stderr)
+        return 1
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        report = ComplianceReport.generate(
+            mem,
+            framework=args.framework,
+            reporting_period_start=args.period_start,
+            reporting_period_end=args.period_end,
+        )
+        if args.output:
+            path = report.to_file(args.output)
+            print(f"✓ {args.framework.upper()} report written to {path}")
+            print(f"  report_hash: {report.report_hash}")
+        else:
+            print(report.to_markdown())
+        return 0
+    finally:
+        mem.close()
+
+
+def cmd_registry(args: argparse.Namespace) -> int:
+    """Pull, list, search, or push to the public Howdex procedure registry."""
+    from howdex import public_registry as registry_mod
+    if args.registry_cmd == "pull":
+        result = registry_mod.registry_pull(args.to, registry_url=args.url)
+        if result.get("error"):
+            print(f"✗ {result['error']}", file=sys.stderr)
+            return 1
+        print(f"✓ pulled {result['pulled']} procedure(s) to {result['target']}")
+        return 0
+    elif args.registry_cmd == "list":
+        entries = registry_mod.registry_list(args.from_dir)
+        if not entries:
+            print("(no procedures in registry)")
+            return 0
+        print(f"{'ID':<40} {'STATUS':<12} {'TITLE':<30}")
+        for e in entries:
+            print(f"{e['id']:<40} {e['status']:<12} {e['title'][:30]}")
+        return 0
+    elif args.registry_cmd == "search":
+        results = registry_mod.registry_search(args.query, args.from_dir)
+        if not results:
+            print("(no matches)")
+            return 0
+        print(f"{'SCORE':<6} {'STATUS':<12} {'TITLE':<30}")
+        for r in results:
+            print(f"{r['score']:<6} {r['status']:<12} {r['title'][:30]}")
+        return 0
+    elif args.registry_cmd == "push":
+        result = registry_mod.registry_push(args.source, args.to)
+        print(f"✓ pushed {result['pushed']} verified procedure(s) to {result['target']}")
+        if result["skipped_unverified"]:
+            print(f"  skipped {result['skipped_unverified']} unverified (registry requires status=verified)")
+        if result["skipped_lint"]:
+            print(f"  skipped {result['skipped_lint']} that failed governance lint (no receipt material)")
+        return 0
+    else:
+        print(f"unknown registry subcommand: {args.registry_cmd}", file=sys.stderr)
+        return 1
+
+
 def cmd_mcp(args: argparse.Namespace) -> int:
     """Start the MCP server over stdio."""
     from howdex.mcp.server import run_stdio
@@ -886,6 +952,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="the guidance char budget to advertise to the LLM",
     )
     sp.set_defaults(func=cmd_system_prompt)
+
+    # Governance / compliance subcommands (the unicorn wedge)
+    sp = sub.add_parser(
+        "compliance",
+        help="generate a compliance report (SOC 2, EU AI Act, NIST AI RMF)",
+    )
+    sp.add_argument(
+        "--framework",
+        required=True,
+        choices=["soc2", "eu-ai-act", "nist-ai-rmf"],
+        help="compliance framework to map receipts against",
+    )
+    sp.add_argument("--output", default=None, help="write report to file (default: stdout)")
+    sp.add_argument("--period-start", default=None, help="reporting period start (ISO 8601)")
+    sp.add_argument("--period-end", default=None, help="reporting period end (ISO 8601)")
+    sp.set_defaults(func=cmd_compliance)
+
+    # Public registry subcommands (the network-effect seed)
+    # Named "public-registry" to avoid conflict with the existing "registry"
+    # subparser (which implements the local Codex registry protocol).
+    reg_parser = sub.add_parser(
+        "public-registry",
+        help="pull/list/search/push the PUBLIC Howdex procedure registry",
+    )
+    reg_sub = reg_parser.add_subparsers(dest="registry_cmd", required=True)
+
+    reg_pull = reg_sub.add_parser("pull", help="pull the public registry to a local directory")
+    reg_pull.add_argument("--to", required=True, help="local target directory")
+    reg_pull.add_argument("--url", default=None, help="registry URL (default: $HOWDEX_REGISTRY_URL)")
+    reg_pull.set_defaults(func=cmd_registry)
+
+    reg_list = reg_sub.add_parser("list", help="list procedures in a local registry")
+    reg_list.add_argument("--from-dir", required=True, help="local registry directory")
+    reg_list.set_defaults(func=cmd_registry)
+
+    reg_search = reg_sub.add_parser("search", help="search procedures in a local registry")
+    reg_search.add_argument("query", help="search query")
+    reg_search.add_argument("--from-dir", required=True, help="local registry directory")
+    reg_search.set_defaults(func=cmd_registry)
+
+    reg_push = reg_sub.add_parser("push", help="push verified procedures to a registry directory")
+    reg_push.add_argument("source", help="source procedures directory (Codex procedures/)")
+    reg_push.add_argument("--to", required=True, help="target registry directory")
+    reg_push.set_defaults(func=cmd_registry)
 
     sp = sub.add_parser("export", help="export all memories to JSON")
     sp.add_argument("output")

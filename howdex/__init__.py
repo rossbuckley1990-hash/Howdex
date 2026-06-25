@@ -50,6 +50,8 @@ from howdex.ingest import IngestionPipeline, IngestionRecord
 from howdex.core.agent_guidance import render_system_prompt_snippet
 from howdex.bootproof import BootProof, require_exit_code
 from howdex.instrument import instrument, session_scope, auto_instrument_langchain
+from howdex.governance import ComplianceReport, SUPPORTED_FRAMEWORKS
+from howdex import public_registry
 
 __version__ = "0.3.0"
 __author__ = "Howdex Collective"
@@ -85,6 +87,9 @@ __all__ = [
     "instrument",
     "session_scope",
     "auto_instrument_langchain",
+    "ComplianceReport",
+    "SUPPORTED_FRAMEWORKS",
+    "public_registry",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",

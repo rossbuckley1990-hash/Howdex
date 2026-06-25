@@ -201,6 +201,59 @@ See [docs/MCP.md](docs/MCP.md) and [`examples/pilot/`](examples/pilot/) for
 full config examples and adapter code for LangChain, LangGraph, and generic
 agent loops.
 
+## Compliance and governance (the enterprise wedge)
+
+Howdex is the **audit and verification layer for AI agents**. Every
+procedure's success is backed by a cryptographically-signed receipt from
+a deterministic, non-LLM verifier. This is the artifact compliance teams
+need for SOC 2, EU AI Act, NIST AI RMF, and ISO 42001.
+
+Generate an audit-ready compliance report:
+
+```bash
+# SOC 2 (AICPA Trust Services Criteria)
+howdex --path ~/.howdex/howdex.db compliance --framework soc2 --output ./reports/soc2_q3.md
+
+# EU AI Act (Articles 9, 12, 15)
+howdex --path ~/.howdex/howdex.db compliance --framework eu-ai-act
+
+# NIST AI RMF (GOVERN, MAP, MEASURE, MANAGE)
+howdex --path ~/.howdex/howdex.db compliance --framework nist-ai-rmf
+```
+
+Each report maps Howdex receipts to the framework's control objectives,
+includes a deterministic `report_hash` for audit reproducibility, and
+documents that verification requires a non-LLM checker (the BootProof gate).
+
+See the standalone **[Howdex Verification Receipt Specification](docs/RECEIPT_SPEC.md)**
+for the framework-agnostic receipt format. This spec is designed to be
+cited by auditors and referenced in AI governance policies.
+
+## Public procedure registry (the network effect)
+
+Howdex ships with a public registry of verified procedures — the "npm
+for agent procedures" primitive. The valuable, shareable artifact is the
+*verification* (the receipt), not the procedure itself.
+
+```bash
+# Pull the public registry locally
+howdex public-registry pull --to ~/.howdex/registry
+
+# List available verified procedures
+howdex public-registry list --from-dir ~/.howdex/registry
+
+# Search for a procedure
+howdex public-registry search "fix missing node module" --from-dir ~/.howdex/registry
+
+# Contribute your verified procedures
+howdex public-registry push ./my-codex/procedures/ --to ./howdex-public-registry/
+```
+
+Only `status=verified` procedures are accepted into the registry — the
+network effect is built on proven procedures, not vibes. Set
+`$HOWDEX_REGISTRY_URL` to point to a self-hosted registry for enterprise
+air-gapped deployments.
+
 ## Production hardening (architectural review fixes)
 
 Howdex ships with five hardening features that address the friction points
