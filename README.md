@@ -1,619 +1,174 @@
+<div align="center">
+
 # Howdex
 
-## The open verification layer for agent know-how
+### Own your AI learning loop.
 
-Howdex turns execution traces into portable, receipt-backed procedures that
-agents can reuse and enterprises can audit.
+**Howdex is the open verification layer for agent know-how.** It turns the expensive, hard-won experience of your best AI agents into **verified agent procedures** that any agent can reuse, any team can audit, and any model — frontier or open — can execute.
 
-Howdex is built around verified agent procedures: reusable know-how learned
-from real runs, governed by policy/staleness metadata, and promoted from
-candidate to verified only when inspectable receipts prove a task-relevant
-verifier passed.
+[![PyPI](https://img.shields.io/pypi/v/howdex-ai)](https://pypi.org/project/howdex-ai/) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)]() [![MCP](https://img.shields.io/badge/MCP-ready-7c3aed.svg)]()
 
-Agents should not start every run cold. Howdex records what agents tried, what
-failed, what worked, and what verified the result. It turns that evidence into
-operational guidance that can move across models, frameworks, and clouds.
+*One expensive discovery. Infinite cheap executions.*
 
-Howdex is local-first, vendor-neutral, and audit-friendly. Procedures are
-guidance, not executable authority. Candidate procedures are not verified.
+</div>
 
-## 60-second explanation
+---
 
-Most agent memory systems remember facts or conversation context. Howdex
-focuses on procedural know-how: how work was actually done.
+> **Howdex turns execution traces into portable, receipt-backed procedures that agents can reuse and enterprises can audit.**
 
-A trace like this:
+Today your agents are amnesiacs. An agent solves a gnarly problem — recovers a broken service, completes a refund-and-rebooking flow, untangles a build — and the moment the session ends, that competence evaporates. Tomorrow it starts from zero: re-reading the same files, repeating the same dead-ends, burning the same tokens. You are paying frontier prices, over and over, to re-learn things you already knew.
 
-```text
-node app.js
-→ Cannot find module 'express'
+Howdex fixes that. It watches your agents succeed, distills the *repeatable procedure* behind the success, proves it works with attached receipts, and hands it back as clean operational guidance the next agent can follow — deterministically, locally, and portably across every model and framework you use.
 
-npm install express
+## The result, measured
 
-node app.js
-→ App running
-```
+We don't ask you to take this on faith. On a **real Docker Compose recovery task** — a fresh agent must read five files, infer a cross-file configuration dependency, and repair the right one to bring a service healthy:
 
-can become a reusable procedure:
+| Arm | Success rate | Avg attempts |
+| --- | --- | --- |
+| Fresh agent, no memory | **35%** (7/20) | 13.00 |
+| Same agent + Howdex | **90%** (18/20) | 8.75 |
 
-```text
-Step 1: run node <FILE_PATH_1>
-Step 2: install missing package <PKG_1>
-Step 3: rerun node <FILE_PATH_1>
-Step 4: verify the app starts
-```
+- **n = 20 per arm**, byte-identical task framing across both arms (verified by prompt hash).
+- **`source_pasted: 0/20`** — the agent *reconstructed* the fix from learned operational facts. It was never handed the answer. This is real transfer of know-how, not a leaked solution.
+- Reproduce it yourself: `make bench-docker-n20`
 
-Howdex stores the supporting evidence, failed attempts, parameter bindings,
-policy context, staleness metadata, and verification receipts so future agents
-can use the procedure without treating it as blind authority.
+A 55-point jump in success and a 33% drop in attempts, from memory alone — on a model that had never seen the task.
 
-Why not just memory? Memory stores experience. Howdex procedures carry proof,
-provenance, policy, portability, receipts, staleness metadata, and a verifier
-contract.
-
-Why not a cloud agent platform? Howdex is local-first and portable. The
-customer owns the learning loop instead of trapping procedural capital inside
-one model stack, framework, or cloud.
-
-## Quickstart
-
-Install:
+## Quickstart — five minutes to a smarter agent
 
 ```bash
-python -m pip install howdex-ai
+pip install howdex-ai
+# or, straight from source:
+pip install git+https://github.com/rossbuckley1990-hash/Howdex.git
 ```
-
-For local development:
-
-```bash
-git clone https://github.com/rossbuckley1990-hash/Howdex.git
-cd Howdex
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m pytest
-```
-
-Minimal Python use:
 
 ```python
 from howdex import Howdex
 
-memory = Howdex(path=".howdex.db", embedder="hashing")
+mem = Howdex()  # local SQLite at ~/.howdex — nothing leaves your machine
 
-memory.start_session("fix_missing_dependency")
-memory.log_tool_call(
-    "execute_bash",
-    {"cmd": "node app.js"},
-    "Error: Cannot find module 'express'",
-)
-memory.log_tool_call(
-    "execute_bash",
-    {"cmd": "npm install express"},
-    "added packages",
-)
-memory.log_tool_call(
-    "execute_bash",
-    {"cmd": "node app.js"},
-    "App running",
-)
-memory.end_session("success")
+# 1. Capture a successful run (wrap the tool calls your agent already makes)
+mem.start_session("recover broken compose service")
+mem.log_tool_call("read_file",  {"path": "compose.yml"},   observation="ok")
+mem.log_tool_call("edit_file",  {"path": "runtime.env"},   observation="set HEALTH_MODE=ready")
+mem.log_tool_call("run",        {"cmd": "docker compose up -d --build"}, observation="healthy")
+mem.end_session("success")
 
-procedures = memory.learn(min_samples=1)
-guidance = memory.guidance(
-    "Fix a Node app that cannot find module cors",
-    max_chars=4000,
-)
-print(guidance)
+# 2. Distill the reusable procedure
+mem.learn()
+
+# 3. On a new, related task, get clean, inspectable guidance
+print(mem.guidance("service /health returns 503 after deploy"))
 ```
 
-CLI smoke test:
-
-```bash
-howdex --path /tmp/howdex.db init
-howdex --path /tmp/howdex.db remember "user loves python"
-howdex --path /tmp/howdex.db search "python preference"
-```
-
-This should print a match (the hash embedder matches on shared tokens —
-`python` appears in both the stored memory and the query). If you see
-`(no memories matched)`, make sure you ran `init` first.
-
-### First-time developer? Run the full loop in one command
-
-If you're evaluating Howdex for the first time, run:
-
-```bash
-python examples/first_time_dev.py
-```
-
-This walks through the entire value proposition end-to-end with visible
-output: record a trace → learn a procedure → attach a real receipt → pull
-guidance for a fresh related task → publish to a local Codex → lint it.
-Leaves you with a real, inspectable verified Codex entry in
-`./first_time_dev_codex/`.
-
-> **Note on embedders**: Howdex tries `sentence-transformers`
-> (all-MiniLM-L6-v2) first for production-quality semantic matching. If
-> `sentence-transformers` is not installed, it falls back to the `hash`
-> embedder (keyword-overlap only — matches on shared tokens, not
-> semantics). All examples in this README work with either embedder.
-> To install the neural backend: `pip install sentence-transformers`
-> (or `pip install -e ".[st]"` for development). For CI/offline runs,
-> set `HOWDEX_EMBEDDER=hash`.
-
-## MCP quickstart
-
-Run Howdex as a local MCP server:
+**Plug it into any agent via MCP — no code at all:**
 
 ```bash
 howdex mcp --db ~/.howdex/howdex.db --codex ./codex
 ```
 
-Use this from Claude Desktop, Cursor, Windsurf, Codex-style workflows, or any
-MCP-compatible agent. The server exposes tools to remember traces, learn
-procedures, request guidance, search Codex entries, publish Codex entries, and
-attach receipts.
+Point Claude Desktop, Cursor, Windsurf, or any MCP client at it, and your agent gains `remember`, `learn`, and `guidance` as first-class tools.
 
-Howdex MCP requires no OpenAI dependency, no hosted service, and no cloud
-database. Source artifacts are excluded by default.
+---
 
-### Wire it into your agent
+## Why Howdex is different
 
-Ready-to-use config snippets are in [`examples/pilot/`](examples/pilot/):
+Most "agent memory" stores **facts** (who the user is, what they like) by asking an LLM to summarize conversations — opaque, non-deterministic, and locked to one cloud. Howdex stores **how the work was actually done** — and proves it.
 
-**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+| | Conversational / factual memory (Mem0, Zep, Letta) | **Howdex** |
+| --- | --- | --- |
+| What it stores | facts, preferences, chat history | **reusable procedures — how to do the work** |
+| How it's built | LLM summarization | **deterministic — no LLM in the loop** |
+| Inspectable & auditable | rarely | **yes — full provenance + receipts** |
+| Runs locally, no model required | varies | **yes — numpy-only core** |
+| Verifies before trusting | no | **yes — the Codex** |
+| Portable across models & clouds | varies | **yes — you own the loop** |
 
-```json
-{
-  "mcpServers": {
-    "howdex": {
-      "command": "howdex",
-      "args": ["mcp", "--db", "~/.howdex/howdex.db", "--codex", "/path/to/your/codex"],
-      "env": { "HOWDEX_EMBEDDER": "hash" }
-    }
-  }
-}
-```
+Howdex isn't a competitor to factual memory — it's the **procedural layer** that sits alongside it and does the thing none of them do: make competence *repeatable, portable, and provable*.
 
-**Cursor** — add to `~/.cursor/mcp.json`:
+---
 
-```json
-{
-  "mcpServers": {
-    "howdex": {
-      "command": "howdex",
-      "args": ["mcp", "--db", "~/.howdex/howdex.db", "--codex", "/path/to/your/codex"],
-      "env": { "HOWDEX_EMBEDDER": "hash" }
-    }
-  }
-}
-```
+## What Howdex gives you
 
-After adding the config and restarting your agent, you should see `howdex_*`
-tools available (e.g. `howdex_remember_trace`, `howdex_learn`,
-`howdex_guidance`, `howdex_codex_search`). Try asking your agent: *"remember
-this trace as a Howdex session, then learn a procedure from it"*.
+### For developers
+Drop-in capture around the tool calls you already make. A **5-minute** local setup, an MCP server, and one dependency (`numpy`). No cloud account, no vector database to operate, no API key to babysit. Your agent gets faster and cheaper on every task family you touch — and you can read exactly what it learned, because nothing is a black box.
 
-See [docs/MCP.md](docs/MCP.md) and [`examples/pilot/`](examples/pilot/) for
-full config examples and adapter code for LangChain, LangGraph, and generic
-agent loops.
+### For agent frameworks
+One integration, every stack. Howdex ships adapters for **LangChain, LangGraph, CrewAI, AutoGen, and the OpenAI Agents SDK**, plus a generic decorator for anything else and a full MCP server. Add procedural memory to your framework of choice without rewriting your agent.
 
-## Compliance and governance (the enterprise wedge)
+### For teams & enterprises
+Howdex is **local-first, vendor-neutral, and audit-friendly by design.** Procedures stay inside your perimeter. Every verified procedure carries provenance, a verifier, and a receipt — so when an agent recalls "how we do X," you can prove where that came from and that it actually worked. Built-in governance (`codex lint`, `policy-check`, signed attestations) gives the verification layer real teeth. Your operational know-how becomes a durable, owned asset — portable across models, frameworks, and clouds — instead of something you rent from a single provider and lose when you switch.
 
-Howdex is the **audit and verification layer for AI agents**. Every
-procedure's success is backed by a cryptographically-signed receipt from
-a deterministic, non-LLM verifier. This is the artifact compliance teams
-need for SOC 2, EU AI Act, NIST AI RMF, and ISO 42001.
+### For multi-agent systems — a shared, verified commons
+The **Howdex Codex** is an open, schema'd catalogue of operational procedures with CRDT-based sync. One agent learns a procedure; every other agent can pull it — *with its receipts attached*, so a consuming agent knows whether to trust it. A fleet of agents stops rediscovering the same workflows in parallel and starts compounding a shared library of proven know-how. Specialist agents publish what they're best at; generalist agents reuse it. The commons is inspectable, governed, and owned by you — not a hosted black box.
 
-Generate an audit-ready compliance report:
+---
+
+## The teacher → student economics
+
+This is where it gets unfair, in your favor.
+
+Frontier models are brilliant and expensive — and worse, what they learn evaporates and stays theirs. Howdex changes the unit economics of running agents:
+
+1. **Learn with the best.** Run a frontier model (the *teacher*) on a hard task. When it succeeds, Howdex captures the trace and distills a **deterministic, verified procedure** — with receipts proving it worked.
+2. **Publish to the registry.** That procedure goes into the Codex: portable, inspectable, model-agnostic guidance. No weights, no prompts to leak — just the operational know-how.
+3. **Execute with the cheapest.** A smaller, cheaper, open model (the *student*) pulls the verified procedure from the registry and follows it — inheriting the teacher's hard-won competence on that task at a fraction of the inference cost, with *no LLM in the memory loop at all*.
+
+**Pay frontier prices once to learn. Reuse forever on models that cost a fraction.** Because the procedure is deterministic guidance rather than model-specific weights, it travels across model families, frameworks, and clouds — and because it's receipt-backed, the student knows which procedures are safe to rely on. Cross-model portability is a core design goal of Howdex; large-scale independent transfer benchmarks across models are in progress.
+
+---
+
+## The Codex — verified agent procedures, owned by you
+
+The Codex enforces one rule: **no proof, no procedure.** A learned procedure is `candidate` until **inspectable receipts** show a task-relevant verifier passed — only then is it `verified`. Every entry carries provenance, failed-attempt memory (what to avoid), policy and staleness metadata, and source-exclusion controls.
 
 ```bash
-# SOC 2 (AICPA Trust Services Criteria)
-howdex --path ~/.howdex/howdex.db compliance --framework soc2 --output ./reports/soc2_q3.md
-
-# EU AI Act (Articles 9, 12, 15)
-howdex --path ~/.howdex/howdex.db compliance --framework eu-ai-act
-
-# NIST AI RMF (GOVERN, MAP, MEASURE, MANAGE)
-howdex --path ~/.howdex/howdex.db compliance --framework nist-ai-rmf
+howdex codex lint ./codex          # structural + receipt integrity
+howdex codex policy-check ./codex  # policy & risk gates
+howdex codex verify ./codex        # re-check verifier evidence
 ```
 
-Each report maps Howdex receipts to the framework's control objectives,
-includes a deterministic `report_hash` for audit reproducibility, and
-documents that verification requires a non-LLM checker (the BootProof gate).
+The Codex is not a prompt library and not an execution engine. **In Howdex, procedures are guidance, not executable authority** — a consuming agent verifies in its current environment before it acts. That boundary is exactly what makes Howdex safe to put in front of high-stakes work.
 
-See the standalone **[Howdex Verification Receipt Specification](docs/RECEIPT_SPEC.md)**
-for the framework-agnostic receipt format. This spec is designed to be
-cited by auditors and referenced in AI governance policies.
+---
 
-## Public procedure registry (the network effect)
+## How it works
 
-Howdex ships with a public registry of verified procedures — the "npm
-for agent procedures" primitive. The valuable, shareable artifact is the
-*verification* (the receipt), not the procedure itself.
-
-```bash
-# Pull the public registry locally
-howdex public-registry pull --to ~/.howdex/registry
-
-# List available verified procedures
-howdex public-registry list --from-dir ~/.howdex/registry
-
-# Search for a procedure
-howdex public-registry search "fix missing node module" --from-dir ~/.howdex/registry
-
-# Contribute your verified procedures
-howdex public-registry push ./my-codex/procedures/ --to ./howdex-public-registry/
+```
+successful traces ─▶ learn ─▶ canonical procedure (+ provenance, receipts)
+                                        │
+                            retrieve by task similarity
+                                        │
+                                    guidance ─▶ next agent succeeds faster, cheaper
 ```
 
-Only `status=verified` procedures are accepted into the registry — the
-network effect is built on proven procedures, not vibes. Set
-`$HOWDEX_REGISTRY_URL` to point to a self-hosted registry for enterprise
-air-gapped deployments.
+Deterministic canonicalization turns differently-worded traces into one procedure. Retrieval is budgeted and inspectable. Guidance is operational facts — never pasted source — so reuse proves competence, not copying. **Auditable abstraction: optional LLM proposals, deterministic trust.** Optional, fully auditable LLM-assisted abstraction can propose semantic equivalences, but storage, verification, and trust status always stay deterministic and reversible.
 
-## Production hardening (architectural review fixes)
+## What Howdex does *not* claim
 
-Howdex ships with five hardening features that address the friction points
-a senior engineer will scrutinize when evaluating Howdex for core
-infrastructure. All are opt-in; defaults preserve existing behavior.
+Credibility is the product, so here is the honest boundary:
 
-### 1. Telemetry validation (Observer Effect mitigation)
-
-`log_tool_call()` now validates its inputs and records integrity warnings
-(visible via `memory.integrity_warnings()`) when:
-
-- `arguments` is not a dict (sloppy orchestrators that pass a string or
-  list will not crash Howdex, but the warning surfaces the problem).
-- `name` is empty or non-string.
-- `observation` contains a failure marker (`error`, `failed`,
-  `traceback`, `no module named`, ...) — this is not itself a problem,
-  but `end_session` cross-references these warnings to catch
-  hallucinated successes (see #4 below).
-
-```python
-mem.start_session("fix_bug")
-mem.log_tool_call("execute_command", "ls -la", "ok")  # malformed args
-warnings = mem.integrity_warnings()
-# [{"code": "malformed_arguments", "message": "log_tool_call('execute_command')..."}]
-```
-
-### 2. Context window management
-
-`guidance()` now supports `max_procedures`, `min_relevance_score`, and
-`verified_only` parameters for precise budget control. When `max_chars`
-is small (≤ 2000), Howdex automatically tightens filtering to avoid
-context collapse on smaller models (e.g. gpt-4o-mini):
-
-```python
-# Tight budget for a small model
-guidance = mem.guidance(
-    "Fix the bug",
-    max_chars=1500,
-    max_procedures=2,
-    min_relevance_score=0.15,
-    verified_only=True,
-)
-
-# Inspect the budget allocation before injecting
-report = mem.guidance_budget_report("Fix the bug", max_chars=1500)
-print(report["context_pressure"])  # "low" | "medium" | "high"
-print(report["omitted"])  # which procedures were dropped and why
-```
-
-### 3. Canonicalization drift detection
-
-When an agent changes how it formats JSON arguments between runs, the
-canonicalizer may produce steps with low `canonical_confidence`. Use
-`detect_canonicalization_drift()` to surface at-risk procedures, then
-call `propose_abstraction()` to bridge the format gap with an auditable
-LLM-assisted proposal:
-
-```python
-at_risk = mem.detect_canonicalization_drift(min_confidence=0.5)
-for entry in at_risk:
-    print(f"{entry['task_signature']}: {entry['at_risk_steps']}/{entry['total_steps']} steps at risk")
-    print(f"  {entry['suggestion']}")
-# Then: proposal = propose_abstraction([proc1, proc2], llm_provider=...)
-```
-
-CLI: `howdex drift --min-confidence 0.5`
-
-### 4. Verifier requirement (strict mode)
-
-Howdex is only as good as the verifier you provide. If your agent
-hallucinates a fix and calls `end_session("success")` without an
-objective check, Howdex would normally memorize the hallucination.
-Strict mode prevents this:
-
-```python
-# Per-session strict mode
-mem.start_session("fix_bug")
-mem.log_tool_call("execute_command", {"cmd": "make build"}, "Error: build failed")
-ep = mem.end_session("success", require_receipt=True)
-# ep.outcome == "unverified" (downgraded from "success")
-# learn() will NOT consolidate this into a procedure
-
-# Global strict mode via constructor
-mem = Howdex(path="...", embedder="hashing", require_receipt_for_success=True)
-```
-
-Even without strict mode, an `unverified_success` integrity warning is
-recorded whenever `end_session("success")` is called after a
-failure-marker observation and no verified receipt is attached.
-
-CLI: `howdex --require-receipt learn` (applies to all operations in this
-CLI invocation).
-
-### 5. System prompt snippet (prompt engineering)
-
-Howdex provides the Markdown guidance, but your LLM will ignore it
-unless the system prompt instructs it to pay attention. Use
-`render_system_prompt_snippet()` to generate a ready-to-paste snippet:
-
-```python
-from howdex import render_system_prompt_snippet
-
-system_prompt = base_prompt + "\n\n" + render_system_prompt_snippet(strict=True)
-# Then inject Howdex guidance into the user message
-```
-
-CLI: `howdex system-prompt --strict` (prints the snippet to stdout).
-
-The snippet tells the LLM to: look for the `# HOWDEX OPERATIONAL MEMORY`
-section, treat it as prior operational memory (not source code), avoid
-repeating failed attempts, prefer verified procedures, and run a real
-verifier before claiming success.
-
-## Day-2 operational hardening
-
-Three features that address the brutal Day-2 operational risks a production
-deployment will face. All are opt-in.
-
-### BootProof — deterministic verifier gate (GIGO mitigation)
-
-The #1 Day-2 risk: "If your LLM hallucinates a success and you blindly
-pass that to Howdex, Howdex will mathematically crystallize a
-hallucination into a permanent procedure." BootProof blocks this:
-
-```python
-from howdex import Howdex, BootProof
-
-mem = Howdex(path="...", embedder="hashing")
-gate = BootProof(mem)
-
-# After the agent run, verify with a DETERMINISTIC verifier (not an LLM)
-gate.verify_with_exit_code(
-    procedure_id=proc.id,
-    verifier_command="pytest tests/",
-    exit_code=0,
-)
-gate.verify_with_http_status(
-    procedure_id=proc.id,
-    verifier_command="curl -sf http://localhost:8080/health",
-    status_code=200,
-)
-gate.verify_with_test_runner(
-    procedure_id=proc.id,
-    verifier_command="pytest tests/",
-    exit_code=0,
-    observed_signal="651 passed",
-)
-
-# learn() through the gate REFUSES unverified sessions
-procs = gate.learn(min_samples=1)
-# Sessions without a deterministic receipt are blocked, not consolidated.
-# gate.rejected_sessions lists what was blocked and why.
-```
-
-BootProof only accepts receipts from recognized deterministic verifier
-types (`exit_code`, `http_status`, `test_runner`, `bash`, `build`,
-`healthcheck`, `file_exists`, `sql_query`). An LLM "I think it worked"
-verdict is NOT in this set and will be rejected.
-
-### Trust calibration + needle-in-haystack risk (context window sizing)
-
-The #2 Day-2 risk: "If HNSW retrieves 10 overlapping procedures, injecting
-all of them will cause context collapse for smaller models like Llama-3."
-
-```python
-# Inspect the trust distribution across all procedures
-curve = mem.trust_calibration_curve()
-print(curve["verified_ratio"])           # 0.0–1.0
-print(curve["recommended_top_k"])        # 1 if ratio<0.3, 2 if<0.6, else 3
-print(curve["recommended_verified_only"]) # True if ratio<0.3
-
-# Assess context-collapse risk for a specific objective
-risk = mem.needle_in_haystack_risk("fix the bug", max_chars=6000)
-print(risk["risk_level"])     # "low" | "medium" | "high"
-print(risk["overlapping_count"]) # how many procedures share >50% of steps
-print(risk["recommendation"]) # human-readable mitigation
-```
-
-Use these together: if `verified_ratio < 0.3`, set `verified_only=True`
-and `top_k=1` in `guidance()` to avoid injecting unproven noise. If
-`needle_in_haystack_risk` returns "high", lower `top_k` and raise
-`min_relevance_score`.
-
-### Zero-boilerplate instrumentation (integration tax mitigation)
-
-The #3 Day-2 risk: "Howdex requires you to structure your agent as a
-rigorous CI/CD pipeline with explicit telemetry. Developers migrating
-from LangChain will complain about the boilerplate."
-
-Three zero-boilerplate helpers eliminate this:
-
-```python
-from howdex import Howdex, instrument, session_scope
-
-mem = Howdex(path="...", embedder="hashing")
-
-# 1. @instrument decorator — auto-logs any function as a tool call
-@instrument(mem)
-def search_code(query: str, glob: str = "*.py") -> str:
-    return subprocess.run(["rg", query, "--glob", glob], ...).stdout
-
-@instrument(mem, name="run_tests")
-def pytest_runner(target: str) -> str:
-    return subprocess.run(["pytest", target], ...).stdout
-
-# 2. session_scope context manager — auto-starts/ends sessions
-with session_scope(mem, "fix_bug") as m:
-    result = search_code("def load_config")
-    # ... do work ...
-# session auto-ended: success on clean exit, failure on exception
-
-# 3. auto_instrument_langchain — one-line LangChain adapter
-from howdex.instrument import auto_instrument_langchain
-auto_instrument_langchain(mem, [tool1, tool2, tool3])
-# Now every tool.run() call is logged — no agent code changes needed
-```
-
-The decorator handles exceptions (logs them as failure observations and
-re-raises), is safe outside a session (no-op), and uses the function
-signature to build the arguments dict automatically.
-
-## Codex and receipt quickstart
-
-The Howdex Codex is a machine-readable catalogue of operational memory. It is
-not a prompt library and not executable authority.
-
-Lint the bundled Codex:
-
-```bash
-howdex codex lint codex
-howdex codex policy-check codex
-howdex codex verify codex
-```
-
-Publish learned procedures to a local Codex folder:
-
-```bash
-howdex --path ~/.howdex/howdex.db codex publish ./.howdex/codex
-```
-
-Unverified procedures publish as `candidate`. A procedure should be marked
-`verified` only when it has inspectable receipt evidence. Signed attestations
-are supported for stronger tamper resistance, but they are optional.
-
-See [codex/README.md](codex/README.md), [docs/CODEX_GOVERNANCE.md](docs/CODEX_GOVERNANCE.md),
-[docs/CI.md](docs/CI.md), and [docs/ATTESTATIONS.md](docs/ATTESTATIONS.md).
-
-## What a verified procedure is
-
-A verified procedure is operational memory plus evidence:
-
-- learned from one or more execution traces;
-- normalized into reusable, parameterized steps;
-- linked to source episodes and provenance;
-- governed by policy and staleness metadata;
-- backed by an inspectable verifier such as a test, build, health check, or
-  domain-specific verifier;
-- supported by a receipt recording expected signal, observed signal, exit
-  code, timestamp, environment fingerprint, and artifact hashes where safe.
-
-Candidate procedures are useful memory, but they are not verified. LLM-assisted
-abstraction proposals are also not verified. They can propose equivalence, but
-they cannot mark procedures verified, attach receipts, or publish verified
-Codex entries without inspectable proof.
-
-Auditable abstraction: optional LLM proposals, deterministic trust.
-
-See [docs/STANDARD.md](docs/STANDARD.md),
-[docs/PROTOCOL.md](docs/PROTOCOL.md), and
-[docs/AUDITABLE_ABSTRACTION.md](docs/AUDITABLE_ABSTRACTION.md).
-
-## Evidence summary
-
-The committed Docker A/B n20 log at
-`evidence/docker_n20/docker_hard_ab_n20_20260623_172737.txt` records one verified
-Docker recovery procedure transferring to fresh agents under identical A/B
-framing.
-
-| Metric | Control | Treatment |
-|---|---:|---:|
-| n per arm | 20 | 20 |
-| successes | 7 | 18 |
-| success rate | 0.35 | 0.90 |
-| avg attempts | 13.00 | 8.75 |
-| memory used | 0/20 | 20/20 |
-| source pasted | 0/20 | 0/20 |
-
-Reproduce:
-
-```bash
-make bench-docker-n20
-```
-
-This result demonstrates one verified procedure transferring to fresh agents.
-It does not prove broad compounding over many accumulated traces.
-
-More benchmark details, including MacGyver, polyglot, trust calibration, and
-AWM-style harness notes, live in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
-
-## What is not proven yet
-
-Howdex does not claim:
-
-- production-safe autonomous execution;
-- universal memory across every task family;
-- that every Codex entry is verified;
-- that candidate procedures are verified;
-- that LLM abstraction proposals are verified;
-- live cross-model transfer;
-- that dry-run AWM-style harness results are live performance;
-- that Howdex has beaten the AWM paper or public WebArena/Mind2Web baselines;
-- that compounding over many independent traces or teams has been proven;
-- external users, adoption, traction, or market validation unless tracked in
-  the pilot evidence files.
-
-Procedures are guidance, not executable authority. Current policy, sandboxing,
-approval, environment checks, and verification still govern execution.
-
-## Pilot instructions
-
-If you want to try Howdex with a real agent:
-
-1. Install Howdex.
-2. Start the MCP server or use a framework adapter.
-3. Run an agent task and record the trace.
-4. Learn a procedure.
-5. Ask for guidance on a fresh related task.
-6. Attach a receipt if a real verifier passed.
-7. Publish a candidate or verified Codex entry.
-8. Share feedback or a procedure submission using the GitHub issue templates.
-
-Do not share secrets, proprietary source, customer data, private logs, or
-production credentials. External pilot users should not be claimed unless they
-are recorded in the tracking file.
-
-See [docs/PILOT.md](docs/PILOT.md) and [docs/TUTORIAL.md](docs/TUTORIAL.md).
+- Howdex does not, by itself, make autonomous execution production-safe; it supplies guidance and verification metadata, and the consuming agent remains responsible for verifying before it acts.
+- The Docker benchmark above proves **single-procedure transfer to fresh agents**, not compounding across many independent traces or teams at scale.
+- Cross-model portability is a design property; we do not claim independently proven live transfer across models.
+- Our AWM-style comparison harness currently runs in dry-run mode; we do not claim that dry-run AWM-style harness results are live performance, and we make no claim of beating AWM, WebArena, or Mind2Web. We do not claim that Howdex has beaten the AWM paper.
+- `candidate` Codex entries and unaccepted abstraction proposals are not verified.
 
 ## Dogfooding Howdex
 
-Howdex development work can be run through the dogfood loop, which records
-traces, command logs, receipts, learned procedures, candidate Codex entries,
-and sanitized internal summaries.
+Howdex is increasingly built through its own procedural-memory loop: as we develop it, Howdex captures the build traces, learns procedures, and attaches receipts from passing test runs. These dogfood metrics are **internal evidence only** — they are **not external users, adoption, traction, market validation**. They show only that the loop runs on a real workload (our own). The reproducible benchmark above, not these internal metrics, is the external evidence.
 
-Dogfood metrics are internal evidence only. They are not external users, adoption, traction, market validation, or proof of broad generalization.
+---
 
-See [docs/DOGFOODING.md](docs/DOGFOODING.md).
+## Install & docs
 
-## Detailed docs
+```bash
+pip install howdex-ai           # or: pip install git+https://github.com/rossbuckley1990-hash/Howdex.git
+```
 
-- [Procedure standard](docs/STANDARD.md)
-- [Protocol](docs/PROTOCOL.md)
-- [MCP server](docs/MCP.md)
-- [Adapters](docs/ADAPTERS.md)
-- [Codex governance](docs/CODEX_GOVERNANCE.md)
-- [CI](docs/CI.md)
-- [Observability](docs/OBSERVABILITY.md)
-- [Benchmarks](docs/BENCHMARKS.md)
-- [Trust calibration](docs/TRUST_CALIBRATION.md)
-- [Dogfooding](docs/DOGFOODING.md)
-- [Pilot guide](docs/PILOT.md)
-- [Repository structure](docs/REPO_STRUCTURE.md)
+Deep dives live in [`docs/`](docs/): architecture, the Codex standard and protocol, MCP, framework adapters, governance, observability, and the [benchmark methodology](docs/benchmarks.md).
 
 ## License
 
-See [LICENSE](LICENSE).
+Apache-2.0. Own your loop.
