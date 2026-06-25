@@ -1,0 +1,71 @@
+{
+  "avoid": [
+    "Do not claim success because a container merely started.",
+    "Do not skip the real HTTP health verifier.",
+    "Do not pull unapproved images, mount host paths, or run privileged containers.",
+    "Do not modify application source when the observed failure is a runtime policy mismatch."
+  ],
+  "category": "container_runtime_recovery",
+  "id": "howdex.docker_compose_health_recovery",
+  "learned_facts": [
+    "Inspect docker-compose.yml, Dockerfile, app.py, runtime.env, and health-policy.conf before changing state.",
+    "Start the Compose service and inspect service status, logs, and the real health response.",
+    "Distinguish a port binding failure from an application health-policy failure.",
+    "Match APP_PORT to the container port exposed by the Compose mapping.",
+    "Set HEALTH_MODE to the required health mode declared by health-policy.conf.",
+    "Recreate the Docker Compose service after changing runtime.env.",
+    "Verify that the localhost health endpoint returns HTTP 200 with a healthy body."
+  ],
+  "policy": {
+    "allowed": [
+      "Operate inside an isolated disposable Compose project.",
+      "Inspect only the declared sandbox files, service status, and service logs.",
+      "Update the sandbox runtime.env file and recreate the service.",
+      "Call only the assigned localhost health endpoint."
+    ],
+    "forbidden": [
+      "External network access or image pulls.",
+      "Host path mounts outside the sandbox.",
+      "Privileged containers, host service changes, or destructive host commands.",
+      "Using container startup as a substitute for HTTP verification."
+    ],
+    "requires_human_review": true,
+    "source_artifacts": "excluded"
+  },
+  "provenance": {
+    "evidence": [
+      "The real Docker recovery A/B harness requires an independent HTTP 200 and healthy-body verifier.",
+      "The benchmark command gate restricts execution to isolated Compose recovery operations."
+    ],
+    "learned_from": [
+      "benchmarks/docker_recovery/real_docker_recovery_ab_test.py"
+    ],
+    "limitations": [
+      "The benchmark skips when Docker, Compose, or the pinned local image is unavailable.",
+      "The entry is not a production Docker safety claim.",
+      "Real deployments may require additional networking, secret, rollout, and approval policy."
+    ]
+  },
+  "risk_level": "high",
+  "source": {
+    "kind": "benchmark-derived",
+    "name": "Real Docker recovery A/B benchmark",
+    "reference": "benchmarks/docker_recovery/real_docker_recovery_ab_test.py"
+  },
+  "status": "candidate",
+  "tags": [
+    "docker",
+    "docker-compose",
+    "health-check",
+    "http",
+    "runtime-configuration"
+  ],
+  "title": "Recover a Docker Compose service with a failed health policy",
+  "verification": {
+    "expected_signal": "The assigned localhost health endpoint returns HTTP 200 with body healthy.",
+    "status": "required",
+    "verifier_command": "curl -sS -i http://127.0.0.1:<PORT_1>/health",
+    "verifier_type": "http_health"
+  },
+  "version": "1.0.0"
+}

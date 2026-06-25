@@ -1,0 +1,71 @@
+{
+  "avoid": [
+    "Do not hash the literal filename seed.txt or vault.enc.",
+    "Do not hash the encrypted vault bytes as the password seed.",
+    "Do not pipe reversed input into printf because printf does not read standard input.",
+    "Do not add a trailing newline to the bytes being hashed.",
+    "Do not include or reconstruct Python source in operational guidance."
+  ],
+  "category": "cross_language_crypto_recovery",
+  "id": "howdex.polyglot_openssl_sha256_reverse_seed",
+  "learned_facts": [
+    "Use the contents of seed.txt as the password seed.",
+    "Reverse the seed.txt contents before hashing.",
+    "Hash the reversed contents exactly without a trailing newline.",
+    "Use the SHA256 hexadecimal digest as the OpenSSL password.",
+    "Decrypt vault.enc with AES-256-CBC and PBKDF2.",
+    "Use command substitution when a shell command must bind the derived digest into the decrypt command.",
+    "Require the decrypted output to reveal the expected TARGET string."
+  ],
+  "policy": {
+    "allowed": [
+      "Read the owned local seed and encrypted fixture.",
+      "Use local hashing and OpenSSL commands.",
+      "Verify the decrypted output against the benchmark TARGET signal."
+    ],
+    "forbidden": [
+      "Decrypting unrelated or unauthorized data.",
+      "Pasting the teacher implementation into treatment guidance.",
+      "Treating a generated digest or zero exit code alone as proof."
+    ],
+    "requires_human_review": false,
+    "source_artifacts": "excluded"
+  },
+  "provenance": {
+    "evidence": [
+      "The polyglot benchmark transfers a Python-discovered procedure into Bash-only execution.",
+      "The no-synthesis benchmark tests native learned procedure guidance without benchmark-side fact synthesis."
+    ],
+    "learned_from": [
+      "benchmarks/polyglot/polyglot_macgyver_test.py",
+      "benchmarks/polyglot/polyglot_macgyver_nosynth_test.py"
+    ],
+    "limitations": [
+      "The procedure assumes the benchmark's AES-256-CBC, PBKDF2, and password-derivation contract.",
+      "Shell hash command names vary by operating system.",
+      "This entry does not authorize decryption outside an owned test environment."
+    ]
+  },
+  "risk_level": "medium",
+  "source": {
+    "kind": "benchmark-derived",
+    "name": "Polyglot OpenSSL recovery benchmarks",
+    "reference": "benchmarks/polyglot/polyglot_macgyver_nosynth_test.py"
+  },
+  "status": "experimental",
+  "tags": [
+    "aes-256-cbc",
+    "openssl",
+    "pbkdf2",
+    "polyglot",
+    "sha256"
+  ],
+  "title": "Derive an OpenSSL password from a reversed seed",
+  "verification": {
+    "expected_signal": "OpenSSL outputs the expected TARGET string from vault.enc.",
+    "status": "required",
+    "verifier_command": "openssl enc -d -aes-256-cbc -pbkdf2 -in vault.enc -pass pass:$(printf %s \"$(cat seed.txt | rev)\" | sha256sum | awk '{print $1}')",
+    "verifier_type": "decrypted_target_verifier"
+  },
+  "version": "1.0.0"
+}

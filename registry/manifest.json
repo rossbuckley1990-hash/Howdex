@@ -1,0 +1,12 @@
+{
+  "format": "howdex-public-registry",
+  "version": "1.0.0",
+  "updated_at": "2026-06-25T00:00:00Z",
+  "procedure_count": 4,
+  "procedures": [
+    {"id": "docker_compose_health_recovery", "title": "docker_compose_health_recovery"},
+    {"id": "node_missing_dependency", "title": "node_missing_dependency"},
+    {"id": "macgyver_zb2_decoder", "title": "macgyver_zb2_decoder"},
+    {"id": "polyglot_openssl_sha256_reverse_seed", "title": "polyglot_openssl_sha256_reverse_seed"}
+  ]
+}

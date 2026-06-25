@@ -69,7 +69,12 @@ def registry_pull(
     except Exception as exc:
         return {
             "pulled": 0,
-            "error": f"failed to fetch manifest from {manifest_url}: {exc}",
+            "error": (
+                f"failed to fetch manifest from {manifest_url}: {exc}. "
+                f"The public registry may not exist yet or may be empty. "
+                f"To contribute, run: howdex public-registry push ./your-codex/procedures/ "
+                f"--to ./your-registry/  then point --url at your registry."
+            ),
         }
     (target / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
