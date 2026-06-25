@@ -233,6 +233,14 @@ def _canonicalize_learning_step(
             command,
             _observation_value(step),
         )
+        # If the prose canonicalizer didn't recognize the command (returned
+        # unknown_action), fall back to the stored canonical from
+        # tool_call_from_step. This prevents arbitrary commands like
+        # "python -c 'import broken_pkg'" from being classified as
+        # unknown_action when log_tool_call already produced a valid
+        # canonical like "run_bash" or "execute_file".
+        if legacy.canonical_name == "unknown_action" and stored is not None:
+            return stored
         evidence = dict(legacy.evidence)
         evidence.update(
             {
