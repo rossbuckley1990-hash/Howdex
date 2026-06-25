@@ -57,13 +57,13 @@ one model stack, framework, or cloud.
 
 ## Quickstart
 
-Install:
+Install (from source — PyPI publish is pending; track [#28](https://github.com/rossbuckley1990-hash/Howdex/issues/28)):
 
 ```bash
-python -m pip install howdex-ai
+python -m pip install git+https://github.com/rossbuckley1990-hash/Howdex.git
 ```
 
-For local development:
+Or for local development:
 
 ```bash
 git clone https://github.com/rossbuckley1990-hash/Howdex.git

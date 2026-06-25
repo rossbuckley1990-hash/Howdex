@@ -53,7 +53,7 @@ from howdex.instrument import instrument, session_scope, auto_instrument_langcha
 from howdex.governance import ComplianceReport, SUPPORTED_FRAMEWORKS
 from howdex import public_registry
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Howdex Collective"
 __license__ = "Apache-2.0"
 

@@ -578,7 +578,17 @@ def procedure_relevant_to_objective(
 
 
 def _trace_text(procedure: Any) -> str:
-    """Flatten inspectable procedure evidence in deterministic key order."""
+    """Flatten inspectable procedure evidence in deterministic key order.
+
+    Strips ``args:sha256:...`` fallback targets produced by the parameterizer
+    when no salient argument can be extracted. Without this stripping, the
+    fact extractor's pattern matcher sees the literal string "sha256" in
+    the fallback target and emits a bogus "calculate the SHA256 hex digest"
+    fact for procedures that have nothing to do with cryptography. This was
+    the root cause of the SHA256 contaminant in guidance for unrelated
+    (e.g. Node.js) tasks.
+    """
+    import re
     values = [
         get_value(procedure, "task_signature"),
         get_value(procedure, "steps"),
@@ -587,7 +597,11 @@ def _trace_text(procedure: Any) -> str:
         get_value(procedure, "metadata"),
         raw_examples(procedure),
     ]
-    return "\n".join(_flatten_text(value) for value in values if value)
+    text = "\n".join(_flatten_text(value) for value in values if value)
+    # Strip parameterizer fallback targets like "args:sha256:abc123" —
+    # these are hash-labels, not real crypto operations.
+    text = re.sub(r"args:sha256:[a-f0-9]+", "args:<fallback>", text, flags=re.IGNORECASE)
+    return text
 
 
 def _procedure_context_text(procedure: Any) -> str:
