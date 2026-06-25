@@ -643,13 +643,56 @@ class Howdex:
         that haven't been consolidated yet. Uses a cursor in schema_meta.
         Subsequent calls with ``incremental=True`` skip already-processed
         episodes, reducing the O(N³) cost on repeated calls.
+
+        When ``learn()`` returns an empty list, it means no procedures
+        could be consolidated. Common reasons:
+        - No successful episodes recorded (call ``start_session`` +
+          ``log_tool_call`` + ``end_session("success")`` first)
+        - Too few samples (set ``min_samples=1`` for testing)
+        - Steps used prose ``log_step()`` instead of structured
+          ``log_tool_call()`` — the canonicalizer needs structured
+          tool calls to recognize actions
+        - All episodes had ``outcome="failure"`` or ``outcome="partial"``
         """
-        return consolidate(
+        result = consolidate(
             self.store,
             min_samples=min_samples,
             dry_run=dry_run,
             incremental=incremental,
         )
+        if not result and not dry_run:
+            # Provide diagnostic feedback when learn() returns nothing
+            episodes = self.store.query_episodes(limit=100)
+            total = len(episodes)
+            successes = sum(
+                1 for ep in episodes
+                if str(ep.get("outcome", "") if isinstance(ep, dict)
+                      else getattr(ep, "outcome", "")).lower() == "success"
+            )
+            if total == 0:
+                import warnings
+                warnings.warn(
+                    "Howdex.learn() returned 0 procedures: no episodes found. "
+                    "Call start_session() → log_tool_call() → end_session('success') "
+                    "before calling learn().",
+                    stacklevel=2,
+                )
+            elif successes == 0:
+                import warnings
+                warnings.warn(
+                    f"Howdex.learn() returned 0 procedures: found {total} episode(s) "
+                    f"but 0 had outcome='success'. Procedures are only consolidated "
+                    f"from successful sessions.",
+                    stacklevel=2,
+                )
+            elif min_samples > successes:
+                import warnings
+                warnings.warn(
+                    f"Howdex.learn() returned 0 procedures: found {successes} successful "
+                    f"episode(s) but min_samples={min_samples}. Try learn(min_samples=1).",
+                    stacklevel=2,
+                )
+        return result
 
     # ------------------------------------------------------------------ #
     # forget
