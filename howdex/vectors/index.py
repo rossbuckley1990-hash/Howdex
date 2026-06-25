@@ -34,10 +34,22 @@ class VectorIndex:
         self._lock = threading.RLock()
         self._backend = "numpy"
         self._np: np.ndarray | None = None  # (N, dim) float32
+        # Initial allocation size — start small and grow geometrically to
+        # avoid pre-allocating 1.5 GB on the first add(). The old code
+        # allocated max_elements (1M × 384 × 4B = 1.46 GB) immediately,
+        # which OOMs on memory-constrained workers (Docker, CI, Lambda).
+        self._initial_capacity = 1024
         try:
             import hnswlib  # type: ignore
             self._hnsw = hnswlib.Index(space=metric, dim=dim)
-            self._hnsw.init_index(max_elements=max_elements, ef_construction=200, M=16)
+            # hnswlib's init_index allocates internal structures proportional
+            # to max_elements. Start with the small initial capacity and
+            # resize on demand (the add() path already calls resize_index).
+            self._hnsw.init_index(
+                max_elements=self._initial_capacity,
+                ef_construction=200,
+                M=16,
+            )
             self._hnsw.set_ef(64)
             self._backend = "hnswlib"
         except ImportError:
@@ -53,18 +65,27 @@ class VectorIndex:
             raise HowdexError(f"embedding dim mismatch: expected {self.dim}, got {vec.shape}")
         with self._lock:
             if self._backend == "hnswlib":
-                if len(self._ids) >= self.max_elements:
-                    self._hnsw.resize_index(self.max_elements * 2)
-                    self.max_elements *= 2
+                current_capacity = self._initial_capacity if self.max_elements == 1_000_000 else self.max_elements
+                if len(self._ids) >= current_capacity:
+                    new_capacity = max(current_capacity * 2, len(self._ids) + 1)
+                    self._hnsw.resize_index(new_capacity)
+                    self.max_elements = new_capacity
                 self._hnsw.add_items(vec[None, :], [len(self._ids)])
             else:
+                # Lazy-allocate the numpy matrix at the small initial
+                # capacity, then grow geometrically. Old code allocated
+                # max_elements (1.5 GB) on the first add.
                 if self._np is None:
-                    self._np = np.empty((self.max_elements, self.dim), dtype=np.float32)
+                    self._np = np.empty(
+                        (self._initial_capacity, self.dim), dtype=np.float32
+                    )
+                    self.max_elements = self._initial_capacity
                 if len(self._ids) >= self.max_elements:
-                    new = np.empty((self.max_elements * 2, self.dim), dtype=np.float32)
+                    new_capacity = self.max_elements * 2
+                    new = np.empty((new_capacity, self.dim), dtype=np.float32)
                     new[: len(self._ids)] = self._np[: len(self._ids)]
                     self._np = new
-                    self.max_elements *= 2
+                    self.max_elements = new_capacity
                 self._np[len(self._ids)] = vec
             self._id_to_pos[mem_id] = len(self._ids)
             self._ids.append(mem_id)

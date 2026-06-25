@@ -573,7 +573,11 @@ class MCPServer:
 
     def _codex_publish(self, args: dict[str, Any]) -> dict[str, Any]:
         procedure_id = str(args["procedure_id"]).strip()
-        registry_path = Path(str(args["registry_path"])).expanduser()
+        registry_path_str = str(args["registry_path"])
+        # Security: validate registry_path to prevent arbitrary filesystem
+        # writes. The old code called .expanduser() on attacker-controlled
+        # input, allowing directory creation anywhere on disk.
+        registry_path = self._validate_codex_path(registry_path_str)
         with telemetry.span(
             "howdex.codex.publish",
             {
@@ -605,6 +609,54 @@ class MCPServer:
                 else "attach an inspectable verification receipt before marking verified"
             ),
         }
+
+    def _validate_codex_path(self, path_str: str) -> Path:
+        """Validate a Codex registry path to prevent filesystem traversal.
+
+        Rejects paths containing ``..`` segments or resolving outside
+        the allowed roots ($HOWDEX_HOME, $CWD, or a path explicitly
+        configured by the operator via env var HOWDEX_CODEX_ROOTS).
+        Does NOT call expanduser() on remote-supplied input.
+        """
+        from pathlib import Path as _Path
+        import os
+        raw = _Path(path_str)
+        # Reject ~ expansion on remote input — the server's home is not
+        # what the remote caller meant.
+        if path_str.startswith("~"):
+            raise ValueError(
+                "registry_path may not start with '~'; use an absolute or "
+                "relative path"
+            )
+        # Reject path traversal
+        if ".." in raw.parts:
+            raise ValueError(
+                "registry_path may not contain '..' segments (path traversal)"
+            )
+        resolved = raw.resolve()
+        # Allowlist: $HOWDEX_HOME, $CWD, and any path under
+        # HOWDEX_CODEX_ROOTS (colon-separated env var for operators who
+        # want to expose additional roots).
+        allowed_roots: list[_Path] = []
+        howdex_home = os.environ.get("HOWDEX_HOME")
+        if howdex_home:
+            allowed_roots.append(_Path(howdex_home).resolve())
+        allowed_roots.append(_Path.cwd().resolve())
+        extra_roots = os.environ.get("HOWDEX_CODEX_ROOTS", "")
+        for root in extra_roots.split(":"):
+            if root.strip():
+                allowed_roots.append(_Path(root.strip()).resolve())
+        for root in allowed_roots:
+            try:
+                resolved.relative_to(root)
+                return resolved  # path is under an allowed root
+            except ValueError:
+                continue
+        raise ValueError(
+            f"registry_path {resolved} is outside all allowed roots: "
+            f"{[str(r) for r in allowed_roots]}. Set HOWDEX_CODEX_ROOTS "
+            f"to allow additional paths."
+        )
 
     def _attach_receipt(self, args: dict[str, Any]) -> dict[str, Any]:
         procedure_id = str(args["procedure_id"])

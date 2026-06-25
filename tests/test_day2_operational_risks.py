@@ -41,7 +41,7 @@ def test_bootproof_blocks_learn_without_receipt(tmp_path):
         assert result == []
         # The rejected session should be recorded
         assert len(gate.rejected_sessions) >= 1
-        assert gate.rejected_sessions[0]["reason"] == "unverified_source_episodes"
+        assert gate.rejected_sessions[0]["reason"] == "no_verified_deterministic_receipt"
     finally:
         mem.close()
 
