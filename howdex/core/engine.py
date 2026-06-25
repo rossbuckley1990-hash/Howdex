@@ -627,13 +627,29 @@ class Howdex:
     # ------------------------------------------------------------------ #
     # core: learn (consolidation)
     # ------------------------------------------------------------------ #
-    def learn(self, *, min_samples: int = 3, dry_run: bool = False) -> list[Procedure]:
+    def learn(
+        self,
+        *,
+        min_samples: int = 3,
+        dry_run: bool = False,
+        incremental: bool = False,
+    ) -> list[Procedure]:
         """Consolidate episodic memories into procedural knowledge.
 
         Equivalent to ``howdex learn`` on the CLI. See
         :mod:`howdex.core.consolidation` for the algorithm.
+
+        ``incremental`` (default False): when True, only processes episodes
+        that haven't been consolidated yet. Uses a cursor in schema_meta.
+        Subsequent calls with ``incremental=True`` skip already-processed
+        episodes, reducing the O(N³) cost on repeated calls.
         """
-        return consolidate(self.store, min_samples=min_samples, dry_run=dry_run)
+        return consolidate(
+            self.store,
+            min_samples=min_samples,
+            dry_run=dry_run,
+            incremental=incremental,
+        )
 
     # ------------------------------------------------------------------ #
     # forget

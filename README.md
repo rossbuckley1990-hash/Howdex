@@ -57,13 +57,13 @@ one model stack, framework, or cloud.
 
 ## Quickstart
 
-Install (from source — PyPI publish is pending; track [#28](https://github.com/rossbuckley1990-hash/Howdex/issues/28)):
+Install:
 
 ```bash
-python -m pip install git+https://github.com/rossbuckley1990-hash/Howdex.git
+python -m pip install howdex-ai
 ```
 
-Or for local development:
+For local development:
 
 ```bash
 git clone https://github.com/rossbuckley1990-hash/Howdex.git
@@ -79,7 +79,7 @@ Minimal Python use:
 ```python
 from howdex import Howdex
 
-memory = Howdex(path=".howdex.db", embedder="hashing")
+memory = Howdex(path=".howdex.db", embedder="st")
 
 memory.start_session("fix_missing_dependency")
 memory.log_tool_call(
@@ -110,9 +110,9 @@ print(guidance)
 CLI smoke test:
 
 ```bash
-HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db init
-HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db remember "user loves python"
-HOWDEX_EMBEDDER=hash howdex --path /tmp/howdex.db search "python preference"
+howdex --path /tmp/howdex.db init
+howdex --path /tmp/howdex.db remember "user loves python"
+howdex --path /tmp/howdex.db search "python preference"
 ```
 
 ### First-time developer? Run the full loop in one command
@@ -129,19 +129,14 @@ guidance for a fresh related task → publish to a local Codex → lint it.
 Leaves you with a real, inspectable verified Codex entry in
 `./first_time_dev_codex/`.
 
-> **Note on embedders**: The `hash` embedder (default for the CLI smoke
-> test) is keyword-overlap only — it matches on shared tokens, not
-> semantics. That's why the search query above uses `"python preference"`
-> (shares `python` with the stored memory) rather than `"programming
-> preference"` (no shared tokens). For semantic matching (e.g. "user
-> loves python" ↔ "programming preference"), install the optional
-> sentence-transformers backend and use `HOWDEX_EMBEDDER=st`:
+> **Note on embedders**: Howdex defaults to `sentence-transformers`
+> (all-MiniLM-L6-v2) for production-quality semantic matching. If
+> `sentence-transformers` is not installed, it falls back to the `hash`
+> embedder (keyword-overlap only). For CI/offline runs, set
+> `HOWDEX_EMBEDDER=hash`. To install the neural backend:
 >
 > ```bash
 > python -m pip install -e ".[st]"
-> HOWDEX_EMBEDDER=st howdex --path /tmp/howdex.db init
-> HOWDEX_EMBEDDER=st howdex --path /tmp/howdex.db remember "user loves python"
-> HOWDEX_EMBEDDER=st howdex --path /tmp/howdex.db search "programming preference"
 > ```
 
 ## MCP quickstart
@@ -337,7 +332,7 @@ ep = mem.end_session("success", require_receipt=True)
 # learn() will NOT consolidate this into a procedure
 
 # Global strict mode via constructor
-mem = Howdex(path="...", embedder="hashing", require_receipt_for_success=True)
+mem = Howdex(path="...", embedder="st", require_receipt_for_success=True)
 ```
 
 Even without strict mode, an `unverified_success` integrity warning is
@@ -381,7 +376,7 @@ hallucination into a permanent procedure." BootProof blocks this:
 ```python
 from howdex import Howdex, BootProof
 
-mem = Howdex(path="...", embedder="hashing")
+mem = Howdex(path="...", embedder="st")
 gate = BootProof(mem)
 
 # After the agent run, verify with a DETERMINISTIC verifier (not an LLM)
@@ -448,7 +443,7 @@ Three zero-boilerplate helpers eliminate this:
 ```python
 from howdex import Howdex, instrument, session_scope
 
-mem = Howdex(path="...", embedder="hashing")
+mem = Howdex(path="...", embedder="st")
 
 # 1. @instrument decorator — auto-logs any function as a tool call
 @instrument(mem)
@@ -491,7 +486,7 @@ howdex codex verify codex
 Publish learned procedures to a local Codex folder:
 
 ```bash
-HOWDEX_EMBEDDER=hash howdex --path ~/.howdex/howdex.db codex publish ./.howdex/codex
+howdex --path ~/.howdex/howdex.db codex publish ./.howdex/codex
 ```
 
 Unverified procedures publish as `candidate`. A procedure should be marked

@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS procedures (
     raw_examples     TEXT NOT NULL DEFAULT '[]',
     parameter_bindings TEXT NOT NULL DEFAULT '[]',
     source_episode_ids TEXT NOT NULL DEFAULT '[]',
+    metadata         TEXT NOT NULL DEFAULT '{}',
     created_at       REAL NOT NULL,
     last_used_at     REAL,
     use_count        INTEGER NOT NULL DEFAULT 0
@@ -518,6 +519,9 @@ class Store:
             failure_count = support_count - success_count
         confidence = float(p.get("confidence", p.get("success_rate", 0)))
         base_confidence = float(p.get("base_confidence", 0) or confidence)
+        metadata = p.get("metadata", {})
+        if not isinstance(metadata, str):
+            metadata = json.dumps(metadata)
         with self.transaction() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO procedures
@@ -526,9 +530,9 @@ class Store:
                     failure_count, confidence, base_confidence,
                     feedback_success_count, feedback_failure_count,
                     suggestion_count, unverified_use_count, raw_examples,
-                    parameter_bindings, source_episode_ids, created_at,
+                    parameter_bindings, source_episode_ids, metadata, created_at,
                     last_used_at, use_count)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     p["id"], p["task_signature"], json.dumps(p.get("steps", [])),
                     json.dumps(p.get("preconditions", [])), p.get("expected_outcome", ""),
@@ -542,6 +546,7 @@ class Store:
                     json.dumps(p.get("raw_supporting_examples", [])),
                     json.dumps(p.get("parameter_bindings", [])),
                     json.dumps(p.get("source_episode_ids", [])),
+                    metadata,
                     p.get("created_at", time.time()), p.get("last_used_at"),
                     p.get("use_count", 0),
                 ),
@@ -992,6 +997,15 @@ def _row_to_procedure(row: sqlite3.Row) -> dict[str, Any]:
     procedure["source_episode_ids"] = _json_list(
         procedure["source_episode_ids"]
     )
+    # Parse metadata if present
+    raw_metadata = procedure.get("metadata", "{}")
+    if isinstance(raw_metadata, str):
+        try:
+            procedure["metadata"] = json.loads(raw_metadata)
+        except (json.JSONDecodeError, TypeError):
+            procedure["metadata"] = {}
+    elif not isinstance(raw_metadata, dict):
+        procedure["metadata"] = {}
     return procedure
 
 
