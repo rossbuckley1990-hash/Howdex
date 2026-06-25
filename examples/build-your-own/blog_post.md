@@ -249,4 +249,4 @@ Clone it, point it at your agent, tell me what procedures it learns.
 - **Quickstart:** `python examples/first_time_dev.py` (60-second full loop)
 - **Issues & feedback:** [github.com/rossbuckley1990-hash/Howdex/issues](https://github.com/rossbuckley1990-hash/Howdex/issues)
 
-*Further reading: the [Agent Workflow Memory (AWM) paper](https://arxiv.org/abs/2409.07429) for the academic foundation, and the [Howdex Verification Receipt Spec](https://github.com/rossbuckley1990-hash/Howdex/blob/main/docs/RECEIPT_SPEC.md) for the production receipt standard.*
+*Further reading: the [Agent Workflow Memory (AWM) paper](https://arxiv.org/abs/2409.07429) for the academic foundation, the [Howdex Verification Receipt Spec](https://github.com/rossbuckley1990-hash/Howdex/blob/main/docs/RECEIPT_SPEC.md) for the production receipt standard, and the [Awesome Agent Memory](https://github.com/rossbuckley1990-hash/awesome-agent-memory) list for the full landscape of agent memory research and systems.*
