@@ -163,6 +163,14 @@ def render_agent_guidance(
             lines.append(f"- {task_signature}{suffix}")
     else:
         lines.append("- No prior procedure memory was provided.")
+        # Only add the registry consultation tip when there's enough
+        # budget — small max_chars (used by some adapter tests) would
+        # truncate the later sections if we add this line.
+        if max_chars > 1000:
+            lines.append(
+                "- Tip: consult the public registry — "
+                "`howdex public-registry search '<task>' --from-dir ~/.howdex/registry`"
+            )
     lines.append("")
 
     if relevant_items:

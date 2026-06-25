@@ -1216,6 +1216,7 @@ class Howdex:
         max_procedures: int | None = None,
         min_relevance_score: float = 0.0,
         verified_only: bool = False,
+        registry_dir: str | Path | None = None,
     ) -> str:
         """Retrieve relevant procedures and render agent-ready guidance.
 
@@ -1231,6 +1232,17 @@ class Howdex:
         - ``verified_only`` skips candidate (unverified) procedures —
           useful for production agents that should only act on proven
           procedures.
+
+        Registry consultation (the network effect):
+        - ``registry_dir`` — when set, Howdex also searches the local
+          public registry at this path and includes matching verified
+          procedures in the guidance. This is the "consult the registry
+          first" behavior that makes the network effect work: an agent
+          with no local memory can still get guidance from procedures
+          other teams have verified and shared.
+        - When local memory is empty AND no registry_dir is provided,
+          the guidance tells the agent to ``howdex public-registry pull``
+          before starting cold.
 
         Adaptive filtering: when ``max_chars`` is small (≤ 2000), Howdex
         automatically prefers verified procedures and raises the effective
@@ -1275,6 +1287,30 @@ class Howdex:
             include_verified_only=effective_verified_only,
             current_environment=current_environment,
         )
+        # Registry consultation: when registry_dir is provided, search the
+        # local public registry and merge matching verified procedures into
+        # the suggestions. This is the "consult the registry first" behavior
+        # that makes the network effect work.
+        if registry_dir is not None:
+            from howdex.public_registry import registry_search
+            registry_hits = registry_search(
+                objective,
+                registry_dir,
+                max_results=top_k,
+            )
+            if registry_hits:
+                # Convert registry hits to suggestion-like dicts so they
+                # flow through the same rendering pipeline
+                for hit in registry_hits:
+                    suggestions.append(type("RegHit", (), {
+                        "procedure_id": hit.get("id", ""),
+                        "task_signature": hit.get("title", ""),
+                        "confidence": 0.9,
+                        "support_count": 1,
+                        "steps": [],
+                        "score": hit.get("score", 0),
+                        "receipts": [],
+                    })())
         return render_agent_guidance(
             suggestions,
             objective=objective,

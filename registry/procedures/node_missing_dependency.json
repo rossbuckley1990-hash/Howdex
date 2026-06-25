@@ -1,0 +1,64 @@
+{
+  "avoid": [
+    "Do not install an unrelated package merely because its name resembles the missing module.",
+    "Do not use global or privileged installation when a project-local dependency is sufficient.",
+    "Do not claim recovery until the original application command succeeds."
+  ],
+  "category": "software_dependency_recovery",
+  "id": "howdex.node_missing_dependency",
+  "learned_facts": [
+    "Run the Node application once to reproduce the dependency failure.",
+    "Read the exact missing package or module name from the observed error.",
+    "Install that package in the current project under the active dependency policy.",
+    "Re-run the same application command to verify that the missing dependency failure is gone."
+  ],
+  "policy": {
+    "allowed": [
+      "Inspect local application errors and project manifests.",
+      "Install the specifically observed missing package when the configured registry and package are approved.",
+      "Re-run the original local application verifier."
+    ],
+    "forbidden": [
+      "Unapproved registries or package sources.",
+      "Global, privileged, or unrelated dependency installation.",
+      "Treating installation output alone as proof of recovery."
+    ],
+    "requires_human_review": true,
+    "source_artifacts": "excluded_by_default"
+  },
+  "provenance": {
+    "evidence": [
+      "Repeated Node missing-dependency repair episodes and deterministic procedure-rendering tests."
+    ],
+    "learned_from": [
+      "Howdex procedural extraction fixtures",
+      "Howdex learned-procedure guidance tests"
+    ],
+    "limitations": [
+      "Package installation can execute lifecycle scripts and is not automatically safe.",
+      "The procedure does not select package versions or authorize network access."
+    ]
+  },
+  "risk_level": "medium",
+  "source": {
+    "kind": "test-and-trace-derived",
+    "name": "Node missing dependency recovery",
+    "reference": "tests/test_procedure_guidance.py"
+  },
+  "status": "experimental",
+  "tags": [
+    "dependency",
+    "node",
+    "package",
+    "recovery",
+    "verification"
+  ],
+  "title": "Recover a Node application with a missing dependency",
+  "verification": {
+    "expected_signal": "The original Node application command completes without the observed missing-module error.",
+    "status": "required",
+    "verifier_command": "node <FILE_PATH_1>",
+    "verifier_type": "process_exit_and_output"
+  },
+  "version": "1.0.0"
+}
