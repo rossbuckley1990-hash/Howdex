@@ -293,9 +293,23 @@ class Howdex:
                 self.index.add(mem.id, mem.embedding)
 
     def close(self) -> None:
-        """Persist any in-flight state. Safe to call multiple times."""
+        """Persist any in-flight state and close the underlying Store.
+
+        Safe to call multiple times. Closes the SQLite connection(s)
+        opened by the Store, releasing file descriptors and WAL locks.
+        Previously this only ended the active session, leaking the
+        Store's connections until GC.
+        """
         if self._current_session and not self._current_session.finished_at:
-            self.end_session(outcome="partial")
+            try:
+                self.end_session(outcome="partial")
+            except Exception:
+                pass
+        # Close the Store's SQLite connections to prevent resource leaks.
+        try:
+            self.store.close()
+        except Exception:
+            pass
 
     def __enter__(self) -> Howdex:
         return self
@@ -700,9 +714,12 @@ class Howdex:
                             return True
             return False
         except Exception:
-            # If we can't determine receipt status, err on the side of
-            # not flagging (don't spam warnings on storage errors).
-            return True
+            # Default-safe: on storage error, assume NOT verified so the
+            # integrity check fires (unverified_success warning /
+            # require_receipt downgrade). The old code returned True here,
+            # which suppressed hallucinated-success warnings on storage
+            # errors — the opposite of safe.
+            return False
 
     def integrity_warnings(self) -> list[dict[str, Any]]:
         """Return integrity warnings recorded for the current/last session.
@@ -1440,10 +1457,15 @@ class Howdex:
                     has_verified = True
                 elif status == "failed":
                     has_failed = True
-            if has_verified:
-                verified += 1
-            elif has_failed:
+            if has_failed:
+                # A failed receipt takes precedence over a verified one,
+                # matching procedure_verification_status in receipts.py.
+                # Previously this was checked AFTER has_verified, which
+                # inflated the trust ratio and recommended unsafe
+                # verified_only=False settings.
                 failed += 1
+            elif has_verified:
+                verified += 1
             else:
                 candidate += 1
         ratio = (verified / total) if total > 0 else 0.0
@@ -1501,7 +1523,11 @@ class Howdex:
                 s_steps = s.get("steps") or []
             for step in (s_steps or []):
                 if isinstance(step, dict):
-                    cn = step.get("canonical_action") or step.get("action") or ""
+                    # Use canonical_name (the canonicalized action) not
+                    # canonical_action (which doesn't exist on stored steps).
+                    # The old code always fell back to raw 'action' text,
+                    # defeating the canonical overlap detection.
+                    cn = step.get("canonical_name") or step.get("action") or ""
                     if cn:
                         steps.add(str(cn))
             step_sets.append(steps)

@@ -205,7 +205,10 @@ def test_howdex_codex_search_respects_verified_only(tmp_path):
     assert all(match["status"] == "verified" for match in result["matches"])
 
 
-def test_howdex_codex_publish_emits_candidate_for_unverified(tmp_path):
+def test_howdex_codex_publish_emits_candidate_for_unverified(tmp_path, monkeypatch):
+    # Allow the test's tmp_path as a Codex root (the path validator
+    # rejects paths outside $HOWDEX_HOME / $CWD / $HOWDEX_CODEX_ROOTS).
+    monkeypatch.setenv("HOWDEX_CODEX_ROOTS", str(tmp_path))
     server = MCPServer(path=str(tmp_path / "howdex.db"), embedder="hashing")
     procedure_id = _seed_procedure(server)
 

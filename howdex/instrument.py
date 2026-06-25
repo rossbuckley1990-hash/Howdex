@@ -127,6 +127,12 @@ def session_scope(
     This eliminates the boilerplate of try/finally + end_session that
     LangChain migrants complain about.
 
+    Guards against the double-end_session bug: if ``end_session("success")``
+    itself raises (e.g. transient storage error), the exception handler
+    checks whether a session is still active before calling
+    ``end_session("failure")``, and swallows any error from that second
+    call so the original exception propagates cleanly.
+
     Example::
 
         with session_scope(mem, "fix_bug") as m:
@@ -138,8 +144,16 @@ def session_scope(
     try:
         yield mem
         mem.end_session("success", require_receipt=require_receipt)
-    except Exception as exc:
-        mem.end_session("failure", error=traceback.format_exc())
+    except Exception:
+        # Only call end_session("failure") if the session is still active.
+        # If end_session("success") already raised and closed the session,
+        # calling end_session again would double-write or corrupt state.
+        if mem._current_session is not None and not mem._current_session.finished_at:
+            try:
+                mem.end_session("failure", error=traceback.format_exc())
+            except Exception:
+                # Don't mask the original exception with a secondary failure.
+                pass
         raise
 
 

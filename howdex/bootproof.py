@@ -240,40 +240,33 @@ class BootProof:
         This is the core boundary layer: the LLM cannot crystallize a
         hallucination into a procedure because learn() refuses to
         consolidate without deterministic proof.
+
+        Verification is derived from persistent receipts on disk (via
+        :meth:`is_verified`), not from the ephemeral ``_verified_sessions``
+        set. This means verification survives process restarts and
+        correctly handles procedures whose source episodes were verified
+        in a prior session.
         """
-        # First, call the underlying learn() to get whatever it would produce
         all_procs = self.memory.learn(min_samples=min_samples, dry_run=dry_run)
         if dry_run:
             return all_procs
-        # Filter: only keep procedures whose source episodes are all verified
         verified_procs = []
         for proc in all_procs:
-            source_eps = set(proc.source_episode_ids or [])
-            if not source_eps:
-                # Procedure has no source episodes (shouldn't happen, but
-                # be defensive) — skip it under BootProof.
+            # Derive verification from persistent receipts, not the
+            # ephemeral _verified_sessions set. This survives restarts
+            # and correctly handles procedures verified in prior runs.
+            if self.is_verified(proc.id):
+                verified_procs.append(proc)
+            else:
                 self.rejected_sessions.append({
                     "procedure_id": proc.id,
                     "task_signature": proc.task_signature,
-                    "reason": "no_source_episodes",
-                    "message": "BootProof: procedure has no source episodes to verify",
-                })
-                continue
-            unverified = source_eps - self._verified_sessions
-            if unverified:
-                self.rejected_sessions.append({
-                    "procedure_id": proc.id,
-                    "task_signature": proc.task_signature,
-                    "reason": "unverified_source_episodes",
-                    "unverified_episode_ids": sorted(unverified),
+                    "reason": "no_verified_deterministic_receipt",
                     "message": (
-                        f"BootProof: {len(unverified)}/{len(source_eps)} source "
-                        f"episodes lack a deterministic verifier receipt; "
-                        f"procedure blocked from consolidation"
+                        "BootProof: procedure has no verified receipt from "
+                        "a deterministic verifier; blocked from consolidation"
                     ),
                 })
-                continue
-            verified_procs.append(proc)
         return verified_procs
 
     def is_verified(self, procedure_id: str) -> bool:

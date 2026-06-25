@@ -141,25 +141,45 @@ def _is_failure_marker_negated(observation: str) -> bool:
       "no failures detected"
       "exit=0 :: 0 failed, 0 errors"
 
-    Examples that ARE real failures:
+    Examples that ARE real failures (must NOT be negated):
       "ImportError: no module named foo"
       "1 failed, 5 passed"
       "fatal: database is locked"
+      "1 failed, 0 errors"   (mixed — real failure present)
+      "no failures, 1 error" (mixed — real failure present)
+
+    The fix: if ANY explicit failure count is non-zero, the observation is
+    a real failure and must NOT be negated. Only return True when ALL
+    explicit failure counts are zero (or when only negation phrases like
+    "no failures" appear with no explicit counts).
     """
     import re
 
-    negation_patterns = [
-        # "0 failed", "0 errors", "0 failures", "0 fatal"
-        r"\b0\s+(failed|failures|errors?|fatal)\b",
-        # "no failed", "no failures", "no errors"
-        r"\bno\s+(failed|failures|errors?|fatal)\b",
-        # "failed=0", "errors=0", "failures=0"
-        r"\b(failed|failures|errors?)\s*=\s*0\b",
-    ]
-    for pattern in negation_patterns:
-        if re.search(pattern, observation):
-            return True
-    return False
+    # Find all explicit failure counts: "N failed", "N errors", "failed=N", etc.
+    count_pattern = re.compile(
+        r"\b(\d+)\s+(failed|failures|errors?|fatal)\b"
+        r"|\b(failed|failures|errors?)\s*=\s*(\d+)\b",
+        re.IGNORECASE,
+    )
+    counts: list[int] = []
+    for m in count_pattern.finditer(observation):
+        # Group 1 = "N" in "N failed"; Group 4 = "N" in "failed=N"
+        n = m.group(1) or m.group(4)
+        if n is not None:
+            counts.append(int(n))
+
+    if counts:
+        # If any explicit count is non-zero, this is a real failure.
+        return all(n == 0 for n in counts)
+
+    # No explicit counts — fall back to "no X" / "0 X" negation phrases.
+    return bool(
+        re.search(
+            r"\b(?:no|0)\s+(failed|failures|errors?|fatal)\b",
+            observation,
+            re.IGNORECASE,
+        )
+    )
 
 
 def raw_examples(procedure: Any) -> list[Any]:

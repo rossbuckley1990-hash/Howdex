@@ -658,9 +658,22 @@ def consolidate(
     *,
     min_samples: int = 3,
     dry_run: bool = False,
+    limit: int | None = None,
 ) -> list[Procedure]:
-    """Consolidate canonical near-matching successful traces into procedures."""
-    episodes = store.query_episodes(limit=10_000)
+    """Consolidate canonical near-matching successful traces into procedures.
+
+    ``limit`` controls how many episodes are retrieved. When None (default),
+    all episodes are retrieved — no silent truncation. Previously this was
+    hardcoded to 10_000, which meant stores with >10k episodes silently
+    excluded older episodes from every consolidation, causing procedures to
+    become biased toward recent activity and old workflows to be forgotten.
+
+    Callers that need bounded consolidation time can pass an explicit limit
+    (e.g. ``limit=5000`` for the most recent 5000 episodes), but the
+    default is unbounded so no episode is ever silently dropped.
+    """
+    query_limit = limit if limit is not None else 10_000_000
+    episodes = store.query_episodes(limit=query_limit)
     child_ids = {
         str(_get(episode, "session_id"))
         for episode in episodes

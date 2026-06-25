@@ -154,6 +154,10 @@ class Store:
 
     One :class:`Store` per process per database file. Internally uses a
     connection-per-thread pattern with a lock for writes.
+
+    Call :meth:`close` when done to release the SQLite connection and
+    WAL file handles. :class:`Howdex` calls this automatically from its
+    own :meth:`Howdex.close`.
     """
 
     def __init__(self, path: str | Path):
@@ -161,6 +165,10 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._tls = threading.local()
+        # Track all connections opened across all threads so close() can
+        # release them. Without this, long-running servers leak one
+        # connection per worker thread until GC (non-deterministic).
+        self._all_connections: list[sqlite3.Connection] = []
         # initialize synchronously on the calling thread
         self._init_db()
 
@@ -181,7 +189,35 @@ class Store:
             conn.execute("PRAGMA foreign_keys=ON;")
             conn.execute("PRAGMA busy_timeout=30000;")
             self._tls.conn = conn
+            with self._lock:
+                self._all_connections.append(conn)
         return self._tls.conn
+
+    def close(self) -> None:
+        """Close all SQLite connections opened by this Store.
+
+        Safe to call multiple times. After close(), the Store should not
+        be used (opening a new connection will re-initialize the DB).
+        """
+        with self._lock:
+            for conn in self._all_connections:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._all_connections.clear()
+            # Clear thread-local so a subsequent _conn() call re-opens
+            if hasattr(self._tls, "conn"):
+                try:
+                    del self._tls.conn
+                except AttributeError:
+                    pass
+
+    def __enter__(self) -> "Store":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
 
     def _init_db(self) -> None:
         with self._lock:
@@ -347,7 +383,12 @@ class Store:
             conn.execute(
                 """INSERT INTO sync_log(op, memory_id, vector_clock, node_id, payload, created_at)
                    VALUES ('delete', ?, ?, ?, '{}', ?)""",
-                (mem_id, int(time.time()), self.node_id, time.time()),
+                # Use milliseconds (int(time.time() * 1000)) to match the
+                # upsert path's vector_clock unit. Previously this used
+                # seconds (int(time.time())), which made every delete's
+                # clock ~1000× smaller than every upsert's at the same
+                # instant — deletes could never propagate via CRDT sync.
+                (mem_id, int(time.time() * 1000), self.node_id, time.time()),
             )
 
     def touch(self, mem_id: str) -> None:
@@ -815,11 +856,40 @@ class Store:
 
     def apply_remote_op(self, op: dict[str, Any]) -> None:
         """Apply a CRDT op from a remote node. Idempotent + last-writer-wins
-        on (vector_clock, node_id)."""
+        on (vector_clock, node_id).
+
+        Delete ops are clock-checked: a stale delete (vector_clock lower
+        than the memory's current clock) is rejected, preventing an old
+        delete from tombstoning a newer upsert. This is the CRDT
+        correctness fix for the data-loss bug found in the senior
+        inspection.
+        """
         payload = json.loads(op["payload"]) if op["payload"] != "{}" else None
         with self.transaction() as conn:
             if op["op"] == "delete":
-                conn.execute("UPDATE memories SET deleted=1 WHERE id=?", (op["memory_id"],))
+                # Clock check: reject stale deletes that would tombstone a
+                # newer memory. Previously this was unconditional, which
+                # meant a slow node's old delete could erase a newer write.
+                existing = conn.execute(
+                    "SELECT vector_clock, deleted FROM memories WHERE id=?",
+                    (op["memory_id"],),
+                ).fetchone()
+                if existing is not None:
+                    existing_vc = existing["vector_clock"]
+                    existing_deleted = existing["deleted"]
+                    op_vc = int(op.get("vector_clock", 0))
+                    if op_vc < existing_vc:
+                        # Stale delete — the memory has a newer clock.
+                        # Reject to preserve the newer write.
+                        return
+                    if existing_deleted and op_vc <= existing_vc:
+                        # Already deleted at an equal-or-higher clock.
+                        # Idempotent no-op.
+                        return
+                conn.execute(
+                    "UPDATE memories SET deleted=1 WHERE id=?",
+                    (op["memory_id"],),
+                )
                 return
             if not payload:
                 return
