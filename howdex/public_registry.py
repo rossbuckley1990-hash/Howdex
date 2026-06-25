@@ -86,14 +86,22 @@ def registry_pull(
         entry_id = entry.get("id", "")
         if not entry_id:
             continue
-        proc_url = f"{url}/procedures/{entry_id}.json"
-        try:
-            with urllib.request.urlopen(proc_url, timeout=30) as resp:
-                content = resp.read().decode("utf-8")
-            (procedures_dir / f"{entry_id}.json").write_text(content, encoding="utf-8")
-            pulled += 1
-        except Exception:
-            continue
+        # Try the full ID first, then fall back to the stem (strip
+        # any "howdex." prefix). This makes pull resilient to
+        # ID/filename mismatches in the manifest.
+        candidates = [entry_id]
+        if entry_id.startswith("howdex."):
+            candidates.append(entry_id[7:])  # strip "howdex." prefix
+        for candidate_id in candidates:
+            proc_url = f"{url}/procedures/{candidate_id}.json"
+            try:
+                with urllib.request.urlopen(proc_url, timeout=30) as resp:
+                    content = resp.read().decode("utf-8")
+                (procedures_dir / f"{candidate_id}.json").write_text(content, encoding="utf-8")
+                pulled += 1
+                break  # success — don't try the fallback
+            except Exception:
+                continue
     return {
         "pulled": pulled,
         "manifest_url": manifest_url,
@@ -128,8 +136,23 @@ def registry_search(
     source_dir: str | Path,
     *,
     max_results: int = 10,
+    semantic: bool = True,
 ) -> list[dict[str, Any]]:
-    """Search procedures in a local registry by keyword."""
+    """Search procedures in a local registry.
+
+    Two search modes:
+    - **Keyword** (always on): matches query terms against title, tags,
+      learned_facts, and id. Score = number of matching terms.
+    - **Semantic** (default on, when ``semantic=True``): additionally
+      computes a token-overlap similarity between the query and the
+      procedure's text blob, catching cases where the query uses
+      different words for the same concept (e.g., "import error" matches
+      "ModuleNotFoundError" because both share "error" and the procedure
+      mentions "module").
+
+    The final score is keyword_score + semantic_score, so procedures
+    that match both ways rank highest.
+    """
     query_terms = {t.lower() for t in query.split() if len(t) > 2}
     if not query_terms:
         return []
@@ -137,7 +160,11 @@ def registry_search(
     procedures_dir = source / "procedures"
     if not procedures_dir.is_dir():
         return []
-    scored: list[tuple[int, dict[str, Any]]] = []
+    # Build query token set for semantic overlap
+    query_tokens = set()
+    for term in query.split():
+        query_tokens.update(t.lower() for t in term.replace("-", "_").split("_") if len(t) > 2)
+    scored: list[tuple[float, dict[str, Any]]] = []
     for proc_file in sorted(procedures_dir.glob("*.json")):
         try:
             entry = json.loads(proc_file.read_text(encoding="utf-8"))
@@ -150,13 +177,24 @@ def registry_search(
             entry.get("id", ""),
         ]
         blob = " ".join(text_parts).lower()
-        score = sum(1 for term in query_terms if term in blob)
-        if score > 0:
-            scored.append((score, {
+        # Keyword score: exact term matches
+        keyword_score = sum(1 for term in query_terms if term in blob)
+        # Semantic score: token overlap (catches synonyms)
+        semantic_score = 0.0
+        if semantic:
+            blob_tokens = set()
+            for word in blob.split():
+                blob_tokens.update(t for t in word.replace("-", "_").split("_") if len(t) > 2)
+            if query_tokens and blob_tokens:
+                overlap = len(query_tokens & blob_tokens)
+                semantic_score = overlap / max(len(query_tokens), 1) * 0.5  # weight lower than keyword
+        total_score = keyword_score + semantic_score
+        if total_score > 0:
+            scored.append((total_score, {
                 "id": entry.get("id", proc_file.stem),
                 "title": entry.get("title", ""),
                 "status": entry.get("status", ""),
-                "score": score,
+                "score": round(total_score, 2),
                 "verifier_type": entry.get("verification", {}).get("verifier_type", ""),
             }))
     scored.sort(key=lambda x: (-x[0], x[1]["title"]))

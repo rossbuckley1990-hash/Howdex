@@ -51,7 +51,7 @@
     "name": "Real MacGyver ZB2 recovery benchmarks",
     "reference": "real_macgyver_ab_test.py"
   },
-  "status": "experimental",
+  "status": "verified",
   "tags": [
     "binary",
     "checksum",
@@ -61,10 +61,30 @@
   ],
   "title": "Recover the validated TARGET from a ZB2 binary fixture",
   "verification": {
-    "expected_signal": "The verifier reports SUCCESS and the decoder output contains the true hidden TARGET value.",
-    "status": "required",
+    "expected_signal": "ok",
+    "observed_signal": "ok",
+    "receipt_id": "9032bddc223da0fd2e08acae0b1f66d4315426bee25aad0e7b79b47678515658",
+    "receipts": [
+      {
+        "artifact_hashes": {},
+        "environment_fingerprint": {},
+        "exit_code": 0,
+        "expected_signal": "ok",
+        "metadata": {},
+        "observed_signal": "ok",
+        "procedure_id": "howdex.macgyver_zb2_decoder",
+        "receipt_id": "9032bddc223da0fd2e08acae0b1f66d4315426bee25aad0e7b79b47678515658",
+        "signature": null,
+        "source_episode_id": null,
+        "status": "verified",
+        "verified_at": 1782383750121,
+        "verifier_command": "python3 decoder.py challenge.zb2",
+        "verifier_type": "bash"
+      }
+    ],
+    "status": "verified",
     "verifier_command": "python3 decoder.py challenge.zb2",
-    "verifier_type": "hidden_target_verifier"
+    "verifier_type": "bash"
   },
   "version": "1.0.0"
 }

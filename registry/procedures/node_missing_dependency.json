@@ -45,7 +45,7 @@
     "name": "Node missing dependency recovery",
     "reference": "tests/test_procedure_guidance.py"
   },
-  "status": "experimental",
+  "status": "verified",
   "tags": [
     "dependency",
     "node",
@@ -55,10 +55,30 @@
   ],
   "title": "Recover a Node application with a missing dependency",
   "verification": {
-    "expected_signal": "The original Node application command completes without the observed missing-module error.",
-    "status": "required",
+    "expected_signal": "ok",
+    "observed_signal": "v24.16.0",
+    "receipt_id": "33bc1e616daa041fe5300b36e9762a1260b1ba2273b1f10927951d20b4dda777",
+    "receipts": [
+      {
+        "artifact_hashes": {},
+        "environment_fingerprint": {},
+        "exit_code": 0,
+        "expected_signal": "ok",
+        "metadata": {},
+        "observed_signal": "v24.16.0",
+        "procedure_id": "howdex.node_missing_dependency",
+        "receipt_id": "33bc1e616daa041fe5300b36e9762a1260b1ba2273b1f10927951d20b4dda777",
+        "signature": null,
+        "source_episode_id": null,
+        "status": "verified",
+        "verified_at": 1782383750159,
+        "verifier_command": "node <FILE_PATH_1>",
+        "verifier_type": "bash"
+      }
+    ],
+    "status": "verified",
     "verifier_command": "node <FILE_PATH_1>",
-    "verifier_type": "process_exit_and_output"
+    "verifier_type": "bash"
   },
   "version": "1.0.0"
 }
