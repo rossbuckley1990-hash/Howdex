@@ -6,7 +6,7 @@
 
 **Howdex is the open verification layer for agent know-how.** It turns the expensive, hard-won experience of your best AI agents into **verified agent procedures** that any agent can reuse, any team can audit, and any model — frontier or open — can execute.
 
-[![PyPI](https://img.shields.io/pypi/v/howdex-ai)](https://pypi.org/project/howdex-ai/) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)]() [![MCP](https://img.shields.io/badge/MCP-ready-7c3aed.svg)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)]() [![MCP](https://img.shields.io/badge/MCP-ready-7c3aed.svg)]()
 
 *One expensive discovery. Infinite cheap executions.*
 
