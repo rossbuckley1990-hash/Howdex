@@ -77,7 +77,7 @@ def main():
     print("\n=== Guidance for a related fresh task ===")
     guidance = mem.guidance(
         "Prepare the morning briefing for the team channel",
-        max_chars=2000,
+        max_chars=4000,
     )
     print(guidance)
 

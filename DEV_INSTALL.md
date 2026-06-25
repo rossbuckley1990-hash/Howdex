@@ -79,11 +79,28 @@ You can combine extras: `pip install ".[hnsw,openai]"`.
 ## Verify the install
 
 ```bash
-howdex --version          # should print: howdex 0.3.0
+howdex --version          # should print: howdex 0.4.0
 howdex init               # creates ~/.howdex/howdex.db
 howdex remember "test"
 howdex search "test" --min-score 0.0
 ```
+
+## Test count by install type
+
+The test suite count varies by installed optional dependencies. This is
+expected — some tests are gated on optional extras (`hnswlib`,
+`sentence-transformers`, `openai`). Here's what to expect:
+
+| Install command | Test count | Notes |
+|---|---|---|
+| `pip install -e ".[dev]"` (bare) | ~650 | Core tests only; optional-dep tests skipped |
+| `pip install -e ".[full,dev]"` | ~688 | All optional-dep tests included |
+| `pip install -e ".[st,dev]"` | ~660 | sentence-transformers tests included |
+
+A bare `.[dev]` install is what a `git clone && pip install -e ".[dev]"`
+contributor sees. The ~650 count is the "stranger's first experience"
+number. The ~688 count requires `[full]` (hnswlib + sentence-transformers).
+Neither is wrong — the difference is optional-dep coverage.
 
 ## Common issues
 
