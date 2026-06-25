@@ -37,6 +37,7 @@ class ProcedureSuggestion:
     procedure_status: str
     procedure_verified: bool
     verification_receipts: list[dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict, repr=False)
     trace_evidence: list[dict[str, Any]] = field(
         default_factory=list,
         repr=False,
@@ -168,6 +169,7 @@ def suggest_procedures(
                 procedure_status=trust_status,
                 procedure_verified=trust_status == "verified",
                 verification_receipts=list(procedure.receipts),
+                metadata=getattr(procedure, "metadata", None) or {},
                 trace_evidence=list(procedure.raw_supporting_examples),
             )
         )

@@ -22,7 +22,7 @@ from howdex import Howdex
 def main():
     # 1. zero-config init — creates ~/.howdex/howdex.db
     # we override the path here just to keep the example self-contained
-    mem = Howdex(path="./quickstart.db", embedder="hashing")
+    mem = Howdex(path="./quickstart.db", embedder="st")
 
     # 2. remember some facts
     mem.remember("User prefers dark mode and minimal UI",

@@ -37,7 +37,7 @@ def main():
     print("=" * 60)
     print("1. Initialize Howdex memory")
     print("=" * 60)
-    mem = Howdex(path=str(db_path), embedder="hashing")
+    mem = Howdex(path=str(db_path), embedder="st")
     print(f"  db: {db_path}")
     print(f"  node_id: {mem.store.node_id}")
 

@@ -269,6 +269,31 @@ def render_agent_guidance(
         lines.append("- No explicit operational facts were extracted.")
     lines.append("")
 
+    # LLM-assisted diagnostics (if enriched via enrich_diagnostics)
+    diagnostics_found = False
+    for procedure in relevant_items:
+        diag = None
+        if isinstance(procedure, dict):
+            metadata = procedure.get("metadata", {})
+            if isinstance(metadata, dict):
+                diag = metadata.get("diagnostics")
+        else:
+            metadata = getattr(procedure, "metadata", None) or {}
+            if isinstance(metadata, dict):
+                diag = metadata.get("diagnostics")
+        if diag and isinstance(diag, dict):
+            if not diagnostics_found:
+                lines.append("Diagnostic context (LLM proposal — not verified):")
+                diagnostics_found = True
+            if diag.get("diagnostic_summary"):
+                lines.append(f"- Summary: {diag['diagnostic_summary']}")
+            if diag.get("fix_description"):
+                lines.append(f"- Fix: {diag['fix_description']}")
+            if diag.get("transfer_hint"):
+                lines.append(f"- Transfer hint: {diag['transfer_hint']}")
+    if diagnostics_found:
+        lines.append("")
+
     if flows:
         data_flow_steps = unique_strings([step for flow in flows for step in flow.steps])
         execution_hints = unique_strings([hint for flow in flows for hint in flow.execution_hints])

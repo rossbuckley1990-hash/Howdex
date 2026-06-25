@@ -659,21 +659,41 @@ def consolidate(
     min_samples: int = 3,
     dry_run: bool = False,
     limit: int | None = None,
+    incremental: bool = False,
 ) -> list[Procedure]:
     """Consolidate canonical near-matching successful traces into procedures.
 
     ``limit`` controls how many episodes are retrieved. When None (default),
-    all episodes are retrieved — no silent truncation. Previously this was
-    hardcoded to 10_000, which meant stores with >10k episodes silently
-    excluded older episodes from every consolidation, causing procedures to
-    become biased toward recent activity and old workflows to be forgotten.
+    all episodes are retrieved — no silent truncation.
+
+    ``incremental`` (default False): when True, only processes episodes that
+    haven't been consolidated yet. Uses a ``last_consolidated_episode_id``
+    cursor stored in ``schema_meta``. This reduces the O(N³·L²) cost on
+    repeated calls — the first call processes all episodes; subsequent calls
+    only process new ones. This is the incremental consolidation fix for
+    issue #36.
 
     Callers that need bounded consolidation time can pass an explicit limit
     (e.g. ``limit=5000`` for the most recent 5000 episodes), but the
     default is unbounded so no episode is ever silently dropped.
     """
     query_limit = limit if limit is not None else 10_000_000
-    episodes = store.query_episodes(limit=query_limit)
+
+    # Incremental consolidation: only process episodes since the last cursor
+    if incremental:
+        cursor = _get_consolidation_cursor(store)
+        episodes = store.query_episodes(limit=query_limit)
+        if cursor:
+            # Filter to only episodes newer than the cursor
+            episodes = [
+                ep for ep in episodes
+                if str(_get(ep, "session_id", "")) not in cursor
+            ]
+        if not episodes:
+            # Nothing new to consolidate
+            return []
+    else:
+        episodes = store.query_episodes(limit=query_limit)
     child_ids = {
         str(_get(episode, "session_id"))
         for episode in episodes
@@ -844,4 +864,41 @@ def consolidate(
         if not dry_run:
             _write_procedure(store, procedure)
 
+    # Update the incremental consolidation cursor
+    if incremental and not dry_run:
+        _set_consolidation_cursor(store, episodes)
+
     return procedures
+
+
+def _get_consolidation_cursor(store: Store) -> set[str]:
+    """Get the set of episode IDs that have already been consolidated."""
+    try:
+        conn = store._conn()
+        row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key=?",
+            ("consolidated_episode_ids",),
+        ).fetchone()
+        if row:
+            import json as _json
+            return set(_json.loads(row[0]))
+        return set()
+    except Exception:
+        return set()
+
+
+def _set_consolidation_cursor(store: Store, episodes: list) -> None:
+    """Record which episode IDs have been consolidated."""
+    try:
+        existing = _get_consolidation_cursor(store)
+        new_ids = {str(_get(ep, "session_id", "")) for ep in episodes}
+        all_ids = existing | new_ids
+        import json as _json
+        conn = store._conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",
+            ("consolidated_episode_ids", _json.dumps(sorted(all_ids))),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        pass

@@ -322,6 +322,7 @@ class Procedure:
     parameter_bindings: list[dict[str, Any]] = field(default_factory=list)
     source_episode_ids: list[str] = field(default_factory=list)
     receipts: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     last_used_at: float | None = None
     use_count: int = 0
