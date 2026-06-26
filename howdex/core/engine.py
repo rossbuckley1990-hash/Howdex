@@ -292,6 +292,20 @@ class Howdex:
             if mem.embedding:
                 self.index.add(mem.id, mem.embedding)
 
+    def ledger(self) -> "MemoryLedger":
+        """Return the Merkle audit ledger for this memory instance.
+
+        The ledger is an append-only, SHA-256-chained audit trail that
+        records every memory operation. It satisfies EU AI Act Article 12
+        (logging), SOC 2 CC7.1 (monitoring), and CSA ATF requirements.
+
+        The ledger is lazy-initialized on first call.
+        """
+        from howdex.ledger import MemoryLedger
+        if not hasattr(self, "_ledger") or self._ledger is None:
+            self._ledger = MemoryLedger(self)
+        return self._ledger
+
     def close(self) -> None:
         """Persist any in-flight state and close the underlying Store.
 

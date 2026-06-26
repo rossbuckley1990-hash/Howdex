@@ -541,6 +541,66 @@ def cmd_system_prompt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ledger(args: argparse.Namespace) -> int:
+    """Merkle ledger operations: verify, root, export, attest."""
+    from howdex import Howdex
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        ledger = mem.ledger()
+
+        if args.ledger_cmd == "verify":
+            valid, error = ledger.verify()
+            if valid:
+                print(f"✓ Ledger integrity verified")
+                print(f"  Blocks: {ledger.block_count()}")
+                print(f"  Chain root: {ledger.chain_root()}")
+                return 0
+            else:
+                print(f"✗ LEDGER TAMPERED: {error}", file=sys.stderr)
+                return 1
+
+        elif args.ledger_cmd == "root":
+            print(ledger.chain_root())
+
+        elif args.ledger_cmd == "export":
+            fmt = args.format
+            output = args.output or f"ledger_export.{fmt}"
+            path = ledger.export(output, fmt=fmt)
+            print(f"✓ Exported {ledger.block_count()} blocks to {path}")
+            valid, _ = ledger.verify()
+            print(f"  Chain root: {ledger.chain_root()}")
+            print(f"  Integrity: {'✅ verified' if valid else '❌ tampered'}")
+            return 0
+
+        elif args.ledger_cmd == "attest":
+            import json as _json
+            attestation = ledger.attest(hmac_key=args.hmac_key)
+            print(_json.dumps(attestation, indent=2, default=str))
+            return 0
+
+        elif args.ledger_cmd == "stats":
+            blocks = ledger.get_blocks(start=0, limit=100000)
+            event_counts: dict[str, int] = {}
+            for b in blocks:
+                et = b["event_type"]
+                event_counts[et] = event_counts.get(et, 0) + 1
+            print(f"Ledger stats:")
+            print(f"  Total blocks: {len(blocks)}")
+            print(f"  Chain root:   {ledger.chain_root()[:24]}...")
+            valid, _ = ledger.verify()
+            print(f"  Integrity:    {'✅ verified' if valid else '❌ tampered'}")
+            print(f"  Events:")
+            for et, count in sorted(event_counts.items()):
+                print(f"    {et}: {count}")
+            return 0
+
+        else:
+            print(f"unknown ledger subcommand: {args.ledger_cmd}", file=sys.stderr)
+            return 1
+    finally:
+        mem.close()
+
+
 def cmd_compliance(args: argparse.Namespace) -> int:
     """Generate a compliance report mapping receipts to a framework's controls."""
     from howdex.governance import ComplianceReport, SUPPORTED_FRAMEWORKS
@@ -952,6 +1012,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="the guidance char budget to advertise to the LLM",
     )
     sp.set_defaults(func=cmd_system_prompt)
+
+    # Merkle ledger subcommands (the cryptographic audit trail)
+    ledger_parser = sub.add_parser(
+        "ledger",
+        help="Merkle audit ledger: verify, root, export, attest, stats",
+    )
+    ledger_sub = ledger_parser.add_subparsers(dest="ledger_cmd", required=True)
+
+    ledger_sub.add_parser("verify", help="verify chain integrity (tamper detection)").set_defaults(func=cmd_ledger)
+    ledger_sub.add_parser("root", help="print the current chain root (memory fingerprint)").set_defaults(func=cmd_ledger)
+    ledger_sub.add_parser("stats", help="show ledger statistics").set_defaults(func=cmd_ledger)
+
+    ledger_export = ledger_sub.add_parser("export", help="export the ledger for external audit")
+    ledger_export.add_argument("--format", choices=["json", "soc2", "csv"], default="json")
+    ledger_export.add_argument("--output", default=None)
+    ledger_export.set_defaults(func=cmd_ledger)
+
+    ledger_attest = ledger_sub.add_parser("attest", help="create a signed attestation of the chain root")
+    ledger_attest.add_argument("--hmac-key", default=None, help="HMAC key for signing")
+    ledger_attest.set_defaults(func=cmd_ledger)
 
     # Governance / compliance subcommands (the unicorn wedge)
     sp = sub.add_parser(
