@@ -541,6 +541,33 @@ def cmd_system_prompt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compile(args: argparse.Namespace) -> int:
+    """Compile a procedure into a typed, executable Python skill."""
+    from howdex import Howdex
+    from howdex.compiler import compile_procedure
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        proc = mem._procedure_by_id(args.procedure_id)
+        if proc is None:
+            print(f"error: procedure {args.procedure_id} not found", file=sys.stderr)
+            return 1
+        skill = compile_procedure(mem, proc, output_dir=args.output)
+        print(f"✓ Compiled skill: {skill.name}")
+        print(f"  Function: {skill.function_name}")
+        print(f"  Parameters: {len(skill.parameters)}")
+        for p in skill.parameters:
+            print(f"    {p['name']}: {p['type']} (from <{p['placeholder']}>)")
+        print(f"  Preconditions: {len(skill.preconditions)}")
+        print(f"  Postconditions: {len(skill.postconditions)}")
+        print(f"  Receipt: {skill.receipt_hash or '(none — unverified)'}")
+        print(f"  Output: {args.output}/{skill.name}.py")
+        if skill.test_code:
+            print(f"  Tests: {args.output}/test_{skill.name}.py")
+        return 0
+    finally:
+        mem.close()
+
+
 def cmd_ledger(args: argparse.Namespace) -> int:
     """Merkle ledger operations: verify, root, export, attest."""
     from howdex import Howdex
@@ -1012,6 +1039,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="the guidance char budget to advertise to the LLM",
     )
     sp.set_defaults(func=cmd_system_prompt)
+
+    # Procedural compiler
+    sp = sub.add_parser(
+        "compile",
+        help="compile a procedure into a typed, executable Python skill",
+    )
+    sp.add_argument("procedure_id", help="the procedure ID to compile")
+    sp.add_argument("--output", default="./skills/", help="output directory for the skill file")
+    sp.set_defaults(func=cmd_compile)
 
     # Merkle ledger subcommands (the cryptographic audit trail)
     ledger_parser = sub.add_parser(
