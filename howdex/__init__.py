@@ -60,6 +60,16 @@ from howdex.html_renderers import (
     render_compliance_report_html,
     render_guidance_html,
     render_agent_dashboard_html,
+    render_redteam_report_html,
+)
+from howdex.redteam import (
+    AttackVector,
+    AttackResult,
+    RedTeamHarness,
+    RedTeamReport,
+    ATTACK_LIBRARY,
+    list_vectors,
+    get_vector,
 )
 
 __version__ = "0.4.0"
@@ -111,6 +121,14 @@ __all__ = [
     "render_compliance_report_html",
     "render_guidance_html",
     "render_agent_dashboard_html",
+    "render_redteam_report_html",
+    "AttackVector",
+    "AttackResult",
+    "RedTeamHarness",
+    "RedTeamReport",
+    "ATTACK_LIBRARY",
+    "list_vectors",
+    "get_vector",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",

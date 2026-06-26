@@ -11,7 +11,7 @@ DOCKER_BENCH_TRIALS ?= 5
 DOCKER_BENCH_MAX_TURNS ?= 15
 DOCKER_BENCH_BASE_IMAGE ?= python:3.12-alpine
 
-.PHONY: help install install-dev install-full test test-cov lint format typecheck build clean dist verify examples bench bench-docker bench-docker-n20
+.PHONY: help install install-dev install-full test test-cov lint format typecheck build clean dist verify examples bench bench-docker bench-docker-n20 redteam
 
 help:  ## Show this help
 	@echo "Howdex — common commands:"
@@ -84,6 +84,9 @@ verify:  ## End-to-end smoke test: install, run tests, run quickstart
 	$(PIP) install -e .
 	$(PYTHON) -m pytest
 	$(PYTHON) examples/quickstart.py
+
+redteam:  ## Run the adversarial red-team harness (exit 2 if any defense is broken)
+	$(PYTHON) -m howdex redteam run
 
 examples:  ## Run all examples (quickstart, multi-agent, mcp)
 	$(PYTHON) examples/quickstart.py

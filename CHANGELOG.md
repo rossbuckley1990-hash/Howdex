@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased — Red-Team Harness
+
+### Added
+
+- **Adversarial red-team harness** (`howdex.redteam`): 12 canonical attack
+  vectors covering the hallucinated-success surface (5 vectors), the audit
+  trail surface (2 vectors), the recall/ranking surface (3 vectors), and
+  the multi-tenant/network surface (2 vectors). Each vector runs against
+  an isolated temp-dir Howdex instance and classifies the outcome as
+  ``blocked`` / ``vulnerable`` / ``review``.
+- New CLI: `howdex redteam run|list|show` with text/markdown/json/html
+  output and CI-gating exit codes (0 = all held, 2 = defense broken).
+- New `make redteam` target.
+- HTML renderer: `render_redteam_report_html()` — single-file interactive
+  artifact with pass-rate dashboard, attack-surface coverage matrix, and
+  collapsible per-vector cards. Print-friendly CSS for PDF export.
+- Python API: `RedTeamHarness`, `RedTeamReport`, `AttackVector`,
+  `ATTACK_LIBRARY`, `list_vectors()`, `get_vector()`.
+- Operator guide: `docs/REDTEAM.md`.
+
+### Why
+
+Howdex's value proposition is auditability. If a defense silently breaks,
+the audit story collapses — and the breakage is only discovered during a
+real audit. The red-team harness converts "trust us, the defenses work"
+into "here's the proof, regenerated on every commit."
+
 ## 0.3.0 - Inspectable Procedural Extraction
 
 ### Added
