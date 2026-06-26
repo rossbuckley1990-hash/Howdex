@@ -533,3 +533,165 @@ def _build_pnl_chart(trades: list[dict]) -> str:
                     f'title="{t.get("trade_id","?")}: ${pnl:+.2f}"></span>')
 
     return f'<div style="text-align:center;height:120px">{"".join(bars)}</div>'
+
+
+# --------------------------------------------------------------------------- #
+# 4. Red-Team Report HTML Renderer
+# --------------------------------------------------------------------------- #
+# Adds a security-team-friendly visualization of the adversarial red-team
+# run: pass/fail summary at the top, attack-surface coverage matrix in the
+# middle, and one collapsible card per attack vector with the threat model,
+# expected defense, actual outcome, and remediation guidance.
+
+_REDTEAM_CSS = """
+.status-pass { color: #198754; }
+.status-fail { color: #dc3545; }
+.status-review { color: #6c757d; }
+.badge-blocked { background: #d1e7dd; color: #0f5132; }
+.badge-vulnerable { background: #f8d7da; color: #842029; }
+.badge-review { background: #e2e3e5; color: #41464b; }
+.attack-card { border-left: 4px solid #dee2e6; }
+.attack-card.blocked { border-left-color: #198754; }
+.attack-card.vulnerable { border-left-color: #dc3545; }
+.attack-card.review { border-left-color: #6c757d; }
+.threat-model { background: #fff3cd; padding: 12px; border-radius: 6px; margin: 8px 0; font-size: 0.9rem; }
+.actual-outcome { background: #f8f9fa; padding: 12px; border-radius: 6px; margin: 8px 0;
+                  font-family: 'SF Mono', Monaco, monospace; font-size: 0.85rem; }
+.remediation { background: #d1ecf1; padding: 12px; border-radius: 6px; margin: 8px 0; font-size: 0.9rem; }
+.pass-rate-bar { background: #e9ecef; border-radius: 8px; height: 24px; overflow: hidden; margin: 8px 0; }
+.pass-rate-fill { background: linear-gradient(90deg, #198754, #20c997); height: 100%; transition: width 0.3s; }
+.matrix-cell { text-align: center; padding: 6px; border-radius: 4px; font-weight: 600; }
+.matrix-cell.blocked { background: #d1e7dd; color: #0f5132; }
+.matrix-cell.vulnerable { background: #f8d7da; color: #842029; }
+.matrix-cell.review { background: #e2e3e5; color: #41464b; }
+"""
+
+
+def render_redteam_report_html(report) -> str:
+    """Render a RedTeamReport as a single-file interactive HTML artifact.
+
+    Includes:
+    - Pass-rate summary dashboard with visual progress bar
+    - Attack-surface coverage matrix (vector × status)
+    - Collapsible attack cards with threat model, expected/actual outcome,
+      and remediation guidance
+    - Print-friendly CSS for PDF export to share with security teams
+    """
+    from howdex.redteam import CLASS_BLOCKED, CLASS_VULNERABLE, CLASS_REVIEW
+
+    pass_rate_pct = report.pass_rate * 100
+    verdict_color = "#198754" if report.all_passed else "#dc3545"
+    verdict_text = "ALL DEFENSES HELD" if report.all_passed else f"{report.vulnerable_count} DEFENSE(S) BROKEN"
+
+    # Attack cards
+    cards = []
+    for r in report.results:
+        cls = r.classification
+        badge_cls = f"badge-{cls}"
+        card_cls = f"attack-card {cls}"
+        emoji = {"blocked": "PASS", "vulnerable": "FAIL", "review": "REVIEW"}.get(cls, "?")
+
+        cards.append(f"""
+        <div class="card {card_cls}" id="attack-{_escape(r.vector_id)}">
+            <div class="collapsible" onclick="this.classList.toggle('collapsed')">
+                <span class="badge {badge_cls}">{emoji}</span>
+                <strong>{_escape(r.name)}</strong>
+                <code style="margin-left:8px;color:#6c757d">{_escape(r.vector_id)}</code>
+                <span style="float:right;color:#6c757d;font-size:0.8rem">{r.duration_ms}ms</span>
+            </div>
+            <div class="collapsible-content">
+                <div class="threat-model">
+                    <strong>Threat model:</strong> {_escape(r.threat_model)}
+                </div>
+                <p><strong>Expected:</strong> {_escape(r.expected)}</p>
+                <div class="actual-outcome">
+                    <strong>Actual:</strong> {_escape(r.actual)}
+                </div>
+                <div class="remediation">
+                    <strong>Remediation:</strong> {_escape(r.remediation)}
+                </div>
+                {f'<p style="color:#dc3545"><small><strong>Harness error:</strong> <code>{_escape(r.error)}</code></small></p>' if r.error else ''}
+            </div>
+        </div>""")
+
+    # Coverage matrix
+    matrix_rows = []
+    for r in report.results:
+        cells = ""
+        for status in (CLASS_BLOCKED, CLASS_VULNERABLE, CLASS_REVIEW):
+            active = "✓" if r.classification == status else ""
+            cells += f'<td class="matrix-cell {status}">{active}</td>'
+        matrix_rows.append(
+            f'<tr><td><a href="#attack-{_escape(r.vector_id)}">{_escape(r.vector_id)}</a></td>'
+            f'<td>{_escape(r.name)}</td>{cells}</tr>'
+        )
+
+    matrix_html = f"""
+    <table>
+        <thead><tr><th>Vector ID</th><th>Name</th><th>Blocked</th><th>Vulnerable</th><th>Review</th></tr></thead>
+        <tbody>{"".join(matrix_rows)}</tbody>
+    </table>"""
+
+    nav_links = "".join(
+        f'<a href="#attack-{_escape(r.vector_id)}">{_escape(r.vector_id)}</a>'
+        for r in report.results
+    )
+
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Howdex Red-Team Report</title>
+<style>""" + _BASE_CSS + _REDTEAM_CSS + """</style>
+</head>
+<body>
+<div class="container">
+    <h1>🛡️ Howdex Red-Team Report</h1>
+    <div class="meta">
+        Started: """ + time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(report.started_at)) + """<br>
+        Duration: """ + f"{round(report.finished_at - report.started_at, 2)}s" + """<br>
+        Vectors run: """ + str(report.total) + """
+    </div>
+
+    <div class="card" style="border-left: 4px solid """ + verdict_color + """">
+        <h2>Verdict: <span style="color:""" + verdict_color + """">""" + verdict_text + """</span></h2>
+        <div class="grid" style="margin-top:12px">
+            <div class="stat">
+                <div class="stat-value status-pass">""" + str(report.blocked_count) + """</div>
+                <div class="stat-label">Blocked</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value status-fail">""" + str(report.vulnerable_count) + """</div>
+                <div class="stat-label">Vulnerable</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value status-review">""" + str(report.review_count) + """</div>
+                <div class="stat-label">Review</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">""" + f"{pass_rate_pct:.1f}%" + """</div>
+                <div class="stat-label">Pass Rate</div>
+            </div>
+        </div>
+        <div class="pass-rate-bar">
+            <div class="pass-rate-fill" style="width:""" + str(pass_rate_pct) + """%"></div>
+        </div>
+    </div>
+
+    <div class="nav">""" + nav_links + """</div>
+
+    <h2>Attack-Surface Coverage Matrix</h2>
+    """ + matrix_html + """
+
+    <h2>Findings</h2>
+    """ + "".join(cards) + """
+
+    <div class="footer">
+        Generated by Howdex Red-Team Harness —
+        <a href="https://github.com/rossbuckley1990-hash/Howdex">github.com/rossbuckley1990-hash/Howdex</a><br>
+        Every defense was attacked on purpose. The wall is still standing.
+    </div>
+</div>
+</body>
+</html>"""

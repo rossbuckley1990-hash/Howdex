@@ -72,3 +72,46 @@ jobs:
       - name: Run SWE-repeat benchmark
         run: |
           howdex eval swe-repeat
+
+  redteam:
+    name: Red-team defenses
+    runs-on: ubuntu-latest
+
+    env:
+      HOWDEX_EMBEDDER: hash
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[full]"
+
+      - name: Run adversarial red-team harness
+        # Exit code 0 = all defenses held; 2 = at least one defense broken.
+        # Both codes are surfaced as GitHub check annotations; the job
+        # fails on code 2 (release blocker) and passes on code 0.
+        run: |
+          python -m howdex redteam run --format text
+          python -m howdex redteam run --format json --output redteam-report.json
+          python -m howdex redteam run --format html --output redteam-report.html
+
+      - name: Upload red-team report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redteam-report
+          path: |
+            redteam-report.json
+            redteam-report.html
+          if-no-files-found: warn
+          retention-days: 90
+

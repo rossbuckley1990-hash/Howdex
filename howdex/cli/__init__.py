@@ -815,6 +815,81 @@ def cmd_export(args: argparse.Namespace) -> int:
         mem.close()
 
 
+def cmd_redteam(args: argparse.Namespace) -> int:
+    """Run the adversarial memory red-team harness against Howdex defenses.
+
+    Spins up an isolated Howdex instance, runs each canonical attack
+    vector, classifies the outcome (blocked / vulnerable / review), and
+    emits a structured report. Safe to run in CI on every pull request —
+    no LLM, no network, no external services.
+    """
+    from howdex.redteam import RedTeamHarness, list_vectors, get_vector
+    from howdex.html_renderers import render_redteam_report_html
+
+    if args.redteam_cmd == "list":
+        vectors = list_vectors()
+        print(f"{'ID':<30} {'NAME':<60}")
+        print("-" * 90)
+        for v in vectors:
+            print(f"{v['id']:<30} {v['name'][:60]}")
+        print(f"\n{len(vectors)} attack vectors available.")
+        return 0
+
+    if args.redteam_cmd == "show":
+        vec = get_vector(args.vector_id)
+        if vec is None:
+            print(f"error: unknown vector id: {args.vector_id}", file=sys.stderr)
+            return 1
+        print(f"ID:           {vec.id}")
+        print(f"Name:         {vec.name}")
+        print(f"Threat model: {vec.threat_model}")
+        print(f"Expected:     {vec.expected}")
+        print(f"Remediation:  {vec.remediation}")
+        return 0
+
+    if args.redteam_cmd == "run":
+        only = [v.strip() for v in args.only.split(",")] if args.only else None
+        report = RedTeamHarness.run_all_default(only=only)
+
+        fmt = args.format
+        if args.output:
+            out_path = Path(args.output)
+            if fmt is None:
+                # Infer format from extension.
+                ext = out_path.suffix.lower()
+                fmt = {
+                    ".html": "html",
+                    ".json": "json",
+                    ".md": "markdown",
+                    ".markdown": "markdown",
+                    ".txt": "text",
+                }.get(ext, "text")
+            content = _render_redteam(report, fmt)
+            out_path.write_text(content)
+            print(f"✓ Red-team report written to {out_path} ({fmt})")
+            print(f"  blocked={report.blocked_count} vulnerable={report.vulnerable_count} "
+                  f"review={report.review_count} pass_rate={report.pass_rate * 100:.1f}%")
+        else:
+            # Default to text when no --output and no --format.
+            print(_render_redteam(report, fmt or "text"))
+        # Non-zero exit if any defense is broken (useful for CI gating).
+        return 0 if report.all_passed else 2
+
+    print(f"unknown redteam subcommand: {args.redteam_cmd}", file=sys.stderr)
+    return 1
+
+
+def _render_redteam(report, fmt: str) -> str:
+    if fmt == "json":
+        return report.to_json()
+    if fmt == "markdown":
+        return report.to_markdown()
+    if fmt == "html":
+        from howdex.html_renderers import render_redteam_report_html
+        return render_redteam_report_html(report)
+    return report.to_text()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="howdex",
@@ -1255,6 +1330,41 @@ def build_parser() -> argparse.ArgumentParser:
     reg_push.add_argument("source", help="source procedures directory (Codex procedures/)")
     reg_push.add_argument("--to", required=True, help="target registry directory")
     reg_push.set_defaults(func=cmd_registry)
+
+    # Red-team harness — adversarial memory integrity verification
+    redteam_parser = sub.add_parser(
+        "redteam",
+        help="adversarial red-team harness: try to break Howdex defenses on purpose",
+    )
+    redteam_sub = redteam_parser.add_subparsers(dest="redteam_cmd", required=True)
+
+    redteam_run = redteam_sub.add_parser(
+        "run",
+        help="run all (or a subset of) attack vectors against an isolated Howdex instance",
+    )
+    redteam_run.add_argument(
+        "--format",
+        choices=["text", "markdown", "json", "html"],
+        default=None,
+        help="output format (default: text; inferred from --output extension when --output is given)",
+    )
+    redteam_run.add_argument(
+        "--output",
+        default=None,
+        help="write report to file (.txt/.md/.json/.html; format inferred from extension)",
+    )
+    redteam_run.add_argument(
+        "--only",
+        default=None,
+        help="comma-separated list of vector IDs to run (default: all)",
+    )
+    redteam_run.set_defaults(func=cmd_redteam)
+
+    redteam_sub.add_parser("list", help="list all available attack vectors").set_defaults(func=cmd_redteam)
+
+    redteam_show = redteam_sub.add_parser("show", help="show details of one attack vector")
+    redteam_show.add_argument("vector_id", help="attack vector id (see `howdex redteam list`)")
+    redteam_show.set_defaults(func=cmd_redteam)
 
     sp = sub.add_parser("export", help="export all memories to JSON")
     sp.add_argument("output")
