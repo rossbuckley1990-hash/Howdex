@@ -56,6 +56,11 @@ from howdex.diagnostics import enrich_diagnostics, get_diagnostics, DryRunLLMPro
 from howdex.ledger import MemoryLedger, LedgerBlock
 from howdex.compiler import compile_procedure, CompiledSkill
 from howdex.federation import Federation, FederationEntry
+from howdex.html_renderers import (
+    render_compliance_report_html,
+    render_guidance_html,
+    render_agent_dashboard_html,
+)
 
 __version__ = "0.4.0"
 __author__ = "Howdex Collective"
@@ -103,6 +108,9 @@ __all__ = [
     "CompiledSkill",
     "Federation",
     "FederationEntry",
+    "render_compliance_report_html",
+    "render_guidance_html",
+    "render_agent_dashboard_html",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",

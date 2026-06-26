@@ -738,6 +738,8 @@ def cmd_compliance(args: argparse.Namespace) -> int:
             path = report.to_file(args.output)
             print(f"✓ {args.framework.upper()} report written to {path}")
             print(f"  report_hash: {report.report_hash}")
+        elif args.format == "html":
+            print(report.to_html())
         else:
             print(report.to_markdown())
         return 0
@@ -1220,7 +1222,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["soc2", "eu-ai-act", "nist-ai-rmf"],
         help="compliance framework to map receipts against",
     )
-    sp.add_argument("--output", default=None, help="write report to file (default: stdout)")
+    sp.add_argument("--output", default=None, help="write report to file (.md or .html; format inferred from extension)")
+    sp.add_argument("--format", default=None, choices=["markdown", "html"], help="output format (default: markdown)")
     sp.add_argument("--period-start", default=None, help="reporting period start (ISO 8601)")
     sp.add_argument("--period-end", default=None, help="reporting period end (ISO 8601)")
     sp.set_defaults(func=cmd_compliance)

@@ -372,11 +372,23 @@ class ComplianceReport:
         ])
         return "\n".join(lines)
 
+    def to_html(self) -> str:
+        """Render the report as a single-file interactive HTML artifact.
+
+        Includes collapsible control sections, color-coded status,
+        embedded receipt details, and print-friendly CSS.
+        """
+        from howdex.html_renderers import render_compliance_report_html
+        return render_compliance_report_html(self)
+
     def to_file(self, path: str | Path) -> Path:
-        """Save the report as Markdown to ``path``."""
+        """Save the report to ``path``. Format inferred from extension (.md or .html)."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(self.to_markdown(), encoding="utf-8")
+        if p.suffix == ".html":
+            p.write_text(self.to_html(), encoding="utf-8")
+        else:
+            p.write_text(self.to_markdown(), encoding="utf-8")
         return p
 
     def to_dict(self) -> dict[str, Any]:
