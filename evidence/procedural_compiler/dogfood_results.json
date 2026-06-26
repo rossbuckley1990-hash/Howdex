@@ -1,0 +1,11 @@
+{
+  "procedure": "build_procedural_compiler",
+  "confidence": 0.9241,
+  "bootproof_status": "verified",
+  "ledger_blocks": 0,
+  "ledger_root": "0000000000000000000000000000000000000000000000000000000000000000",
+  "soc2_verified": 1,
+  "soc2_hash": "f6dc38831c70739ab31a3a413990e711c73046974633035cddc1936bf0071940",
+  "tests_passing": 737,
+  "timestamp": 1782476370.3301566
+}
