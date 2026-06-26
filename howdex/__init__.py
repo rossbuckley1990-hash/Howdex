@@ -55,6 +55,7 @@ from howdex import public_registry
 from howdex.diagnostics import enrich_diagnostics, get_diagnostics, DryRunLLMProvider
 from howdex.ledger import MemoryLedger, LedgerBlock
 from howdex.compiler import compile_procedure, CompiledSkill
+from howdex.federation import Federation, FederationEntry
 
 __version__ = "0.4.0"
 __author__ = "Howdex Collective"
@@ -100,6 +101,8 @@ __all__ = [
     "LedgerBlock",
     "compile_procedure",
     "CompiledSkill",
+    "Federation",
+    "FederationEntry",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",
