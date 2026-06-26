@@ -53,6 +53,7 @@ from howdex.instrument import instrument, session_scope, auto_instrument_langcha
 from howdex.governance import ComplianceReport, SUPPORTED_FRAMEWORKS
 from howdex import public_registry
 from howdex.diagnostics import enrich_diagnostics, get_diagnostics, DryRunLLMProvider
+from howdex.ledger import MemoryLedger, LedgerBlock
 
 __version__ = "0.4.0"
 __author__ = "Howdex Collective"
@@ -94,6 +95,8 @@ __all__ = [
     "enrich_diagnostics",
     "get_diagnostics",
     "DryRunLLMProvider",
+    "MemoryLedger",
+    "LedgerBlock",
     "HowdexError",
     "StoreError",
     "HowdexNotFoundError",
