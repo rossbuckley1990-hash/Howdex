@@ -568,6 +568,98 @@ def cmd_compile(args: argparse.Namespace) -> int:
         mem.close()
 
 
+def cmd_federation(args: argparse.Namespace) -> int:
+    """Federated procedure library: submit/review/publish/deprecate/search."""
+    from howdex import Howdex
+    from howdex.federation import Federation
+    mem = Howdex(path=args.path, embedder=args.embedder)
+    try:
+        cmd = args.federation_cmd
+        if cmd == "submit":
+            fed = Federation(mem, tenant_id=args.tenant)
+            entry = fed.submit(args.procedure_id, submitted_by=args.by)
+            print(f"✓ Submitted: {entry.procedure_id} (status={entry.status}, tenant={entry.tenant_id})")
+            if entry.receipt_hash:
+                print(f"  Receipt: {entry.receipt_hash}...")
+            else:
+                print(f"  ⚠ No verified receipt — procedure is unverified")
+            return 0
+        elif cmd == "review":
+            fed = Federation(mem, tenant_id=args.tenant)
+            approved = args.approve and not args.reject
+            entry = fed.review(args.procedure_id, reviewed_by=args.by,
+                               approved=approved, notes=args.notes)
+            if entry:
+                print(f"✓ Reviewed: {entry.procedure_id} (status={entry.status})")
+                if args.notes:
+                    print(f"  Notes: {args.notes}")
+                return 0
+            else:
+                print(f"✗ Entry not found", file=sys.stderr)
+                return 1
+        elif cmd == "publish":
+            fed = Federation(mem, tenant_id=args.tenant)
+            entry = fed.publish(args.procedure_id, published_by=args.by)
+            if entry:
+                print(f"✓ Published: {entry.procedure_id} (visible to all agents)")
+                return 0
+            else:
+                print(f"✗ Entry not found", file=sys.stderr)
+                return 1
+        elif cmd == "deprecate":
+            fed = Federation(mem, tenant_id=args.tenant)
+            entry = fed.deprecate(args.procedure_id, reason=args.reason,
+                                  deprecated_by=args.by)
+            if entry:
+                print(f"✓ Deprecated: {entry.procedure_id}")
+                print(f"  Reason: {args.reason}")
+                return 0
+            else:
+                print(f"✗ Entry not found", file=sys.stderr)
+                return 1
+        elif cmd == "list":
+            fed = Federation(mem, tenant_id=args.tenant or "default")
+            if args.status == "all":
+                entries = []
+                for st in ["proposed", "reviewed", "published", "deprecated"]:
+                    entries.extend(fed.list_by_status(st, tenant_id=args.tenant))
+            else:
+                entries = fed.list_by_status(args.status, tenant_id=args.tenant)
+            if not entries:
+                print("(no entries)")
+                return 0
+            print(f"{'PROCEDURE_ID':<36} {'TENANT':<15} {'STATUS':<12} {'TASK':<25}")
+            for e in entries:
+                print(f"{e.procedure_id[:36]:<36} {e.tenant_id[:15]:<15} {e.status:<12} {e.task_signature[:25]:<25}")
+            print(f"\n  {len(entries)} entries")
+            return 0
+        elif cmd == "search":
+            fed = Federation(mem, tenant_id=args.tenant or "default")
+            results = fed.search(args.query, tenant_id=args.tenant if args.tenant else "")
+            if not results:
+                print("(no matches)")
+                return 0
+            print(f"{'SCORE':<6} {'STATUS':<12} {'TENANT':<15} {'TASK':<30}")
+            for r in results:
+                print(f"{r['score']:<6} {r['status']:<12} {r['tenant_id'][:15]:<15} {r['task_signature'][:30]:<30}")
+            return 0
+        elif cmd == "stats":
+            fed = Federation(mem, tenant_id="default")
+            stats = fed.stats()
+            print(f"Federation stats:")
+            print(f"  Total entries: {stats['total']}")
+            print(f"  Tenants: {', '.join(stats['tenants']) or '(none)'}")
+            print(f"  By status:")
+            for st, count in stats["by_status"].items():
+                print(f"    {st}: {count}")
+            return 0
+        else:
+            print(f"unknown federation subcommand: {cmd}", file=sys.stderr)
+            return 1
+    finally:
+        mem.close()
+
+
 def cmd_ledger(args: argparse.Namespace) -> int:
     """Merkle ledger operations: verify, root, export, attest."""
     from howdex import Howdex
@@ -1048,6 +1140,54 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("procedure_id", help="the procedure ID to compile")
     sp.add_argument("--output", default="./skills/", help="output directory for the skill file")
     sp.set_defaults(func=cmd_compile)
+
+    # Federated procedure library
+    fed_parser = sub.add_parser(
+        "federation",
+        help="federated procedure library: submit/review/publish/deprecate/search",
+    )
+    fed_sub = fed_parser.add_subparsers(dest="federation_cmd", required=True)
+
+    fed_submit = fed_sub.add_parser("submit", help="submit a procedure for review")
+    fed_submit.add_argument("procedure_id")
+    fed_submit.add_argument("--tenant", default="default")
+    fed_submit.add_argument("--by", required=True, help="submitter identity")
+    fed_submit.set_defaults(func=cmd_federation)
+
+    fed_review = fed_sub.add_parser("review", help="review a submitted procedure")
+    fed_review.add_argument("procedure_id")
+    fed_review.add_argument("--approve", action="store_true", default=False)
+    fed_review.add_argument("--reject", action="store_true", default=False)
+    fed_review.add_argument("--by", required=True, help="reviewer identity")
+    fed_review.add_argument("--notes", default="")
+    fed_review.add_argument("--tenant", default="default")
+    fed_review.set_defaults(func=cmd_federation)
+
+    fed_publish = fed_sub.add_parser("publish", help="publish a reviewed procedure")
+    fed_publish.add_argument("procedure_id")
+    fed_publish.add_argument("--by", required=True)
+    fed_publish.add_argument("--tenant", default="default")
+    fed_publish.set_defaults(func=cmd_federation)
+
+    fed_deprecate = fed_sub.add_parser("deprecate", help="deprecate a published procedure")
+    fed_deprecate.add_argument("procedure_id")
+    fed_deprecate.add_argument("--reason", required=True)
+    fed_deprecate.add_argument("--by", required=True)
+    fed_deprecate.add_argument("--tenant", default="default")
+    fed_deprecate.set_defaults(func=cmd_federation)
+
+    fed_list = fed_sub.add_parser("list", help="list federation entries")
+    fed_list.add_argument("--tenant", default=None)
+    fed_list.add_argument("--status", default="published",
+                          choices=["proposed", "reviewed", "published", "deprecated", "all"])
+    fed_list.set_defaults(func=cmd_federation)
+
+    fed_search = fed_sub.add_parser("search", help="search published procedures")
+    fed_search.add_argument("query")
+    fed_search.add_argument("--tenant", default=None)
+    fed_search.set_defaults(func=cmd_federation)
+
+    fed_sub.add_parser("stats", help="show federation statistics").set_defaults(func=cmd_federation)
 
     # Merkle ledger subcommands (the cryptographic audit trail)
     ledger_parser = sub.add_parser(
